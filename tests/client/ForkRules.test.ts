@@ -69,12 +69,31 @@ describe("памятка о правилах форка", () => {
     expect(forkRules).toMatch(/if \(!ready\(\)\) return;/);
   });
 
-  it("у MIT-ссылок отдельная памятка, без галочек", () => {
-    // MIT почти ничего не требует — заставлять «принимать» условия нечего
+  it("памятка различает адресата: mit / наш репозиторий / апстрим", () => {
+    // Репорт владельца 29.08: «по контексту их и наш форк — разные галочки».
     expect(forkRules).toContain('variant === "mit"');
     expect(forkRules).toContain("MIT_CUTOFF");
-    // ссылки на коммиты (MIT-точки входа) уходят в mit-вариант
-    expect(copyrights).toMatch(/commit.*\?\s*"mit"\s*:\s*"agpl"/s);
+    // маппинг в CopyrightsPage: коммиты → mit, terron-io → ours, прочее → upstream
+    expect(copyrights).toMatch(/commit[\s\S]*"mit"[\s\S]*terron-io[\s\S]*"ours"[\s\S]*"upstream"/);
+  });
+
+  it("в НАШЕМ списке есть © TERRON.io и NOTICE.md, у апстрима MIT-подсказка", () => {
+    // наш вклад защищён §7(b) — форкнувший НАС обязан видеть наш нотис;
+    // а «путь проще через MIT» — только у апстрима: у TERRON MIT-входа нет
+    // ⚠️ ОБЕ локали порознь И с якорем по куску ПОЛЬЗОВАТЕЛЬСКОЙ строки
+    // («Team и/and © TERRON.io»): два прошлых варианта зеленели на поломке —
+    // сперва ловили английский дубль, потом МОЙ ЖЕ КОММЕНТАРИЙ в коде.
+    // Оба промаха пойманы обратным прогоном.
+    expect(forkRules).toMatch(/Team и © TERRON\.io/);
+    expect(forkRules).toMatch(/Team, and © TERRON\.io/);
+    expect(forkRules).toContain("NOTICE.md");
+    expect(forkRules).toMatch(/if \(!ours\)/);
+  });
+
+  it("подсказки «не обязательно GitHub» больше нет", () => {
+    // репорт владельца: лишняя подсказка — учит форкеров прятаться от нас же
+    expect(forkRules).not.toMatch(/выложить на GitHub/);
+    expect(forkRules).not.toMatch(/publish on GitHub/);
   });
 
   it("AGPL-памятка называет MIT как более простой путь", () => {

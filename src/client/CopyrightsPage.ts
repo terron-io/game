@@ -64,7 +64,14 @@ export class CopyrightsPage extends BaseModal {
     // MIT-точки входа апстрима (ссылки на конкретные коммиты до смены лицензии)
     // получают ДРУГУЮ памятку: там обязательств почти нет, и человеку честнее
     // сказать «делаешь своё — начинай отсюда», чем пугать копилефтом.
-    const variant: ForkVariant = /\/commit\//i.test(href) ? "mit" : "agpl";
+    // Выбор памятки по адресату: MIT-коммиты → без галочек; наш репозиторий →
+    // список с НАШИМ нотисом (© TERRON.io) и без MIT-подсказки (у TERRON
+    // MIT-входа нет); всё остальное на github — репозиторий апстрима.
+    const variant: ForkVariant = /\/commit\//i.test(href)
+      ? "mit"
+      : /terron-io\//i.test(href)
+        ? "ours"
+        : "upstream";
     return html`<a
       href=${href}
       target="_blank"
