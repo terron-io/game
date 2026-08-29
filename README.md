@@ -1,14 +1,14 @@
-# TERRON
+# TERRON.io
 
-**TERRON** is a browser-based multiplayer territorial strategy game. Expand your
+**TERRON.io** is a browser-based multiplayer territorial strategy game. Expand your
 nation, forge and break alliances, deploy ultimates, and dominate the world map.
-Play at **[terron.io](https://terron.io)**.
+Play at **[TERRON.io](https://terron.io)**.
 
 ---
 
 ## What this repository is
 
-This is the **source code of the TERRON client and game server** — the complete
+This is the **source code of the TERRON.io client and game server** — the complete
 Corresponding Source for the version running at terron.io, as required by
 **AGPL-3.0 Section 13**.
 
@@ -19,7 +19,7 @@ Territorial.io  →  WarFront.io (MIT)  →  OpenFront.io (© OpenFront LLC, AGP
    the genre        early open clone           upstream of this fork              this fork
 ```
 
-TERRON is a substantially reworked fork of
+TERRON.io is a substantially reworked fork of
 [OpenFront.io](https://github.com/openfrontio/OpenFrontIO). The following
 subsystems were written from scratch and are not part of upstream:
 
@@ -41,14 +41,14 @@ subsystems were written from scratch and are not part of upstream:
 |---|---|
 | Game code | **GNU AGPL-3.0** ([LICENSE](LICENSE)) |
 | Assets in `resources/` | **CC BY-SA 4.0** ([LICENSE-ASSETS](LICENSE-ASSETS)) |
-| TERRON's changes and original assets | © TERRON.io ([NOTICE.md](NOTICE.md)) |
+| TERRON.io's changes and original assets | © TERRON.io ([NOTICE.md](NOTICE.md)) |
 
 **Copyright notices that any fork must preserve:**
 
 - © OpenFront LLC and contributors
 - © 2024 WarFront.io Team
 - © TERRON.io — see [NOTICE.md](NOTICE.md) for the Section 7 terms covering
-  TERRON's own contributions
+  TERRON.io's own contributions
 
 They are shown in-game on the **Credits & Licenses** page (`/copyrights`) and in
 [CREDITS.md](CREDITS.md). License history: [LICENSING.md](LICENSING.md).
@@ -66,7 +66,7 @@ They are shown in-game on the **Credits & Licenses** page (`/copyrights`) and in
 
 ## How this repository is maintained
 
-TERRON is built by **one person**, without a team. That shapes what this
+TERRON.io is built by **one person**, without a team. That shapes what this
 repository is and how it behaves:
 
 - **Snapshots, not a live mirror.** Updates land here roughly **every one to two
@@ -148,8 +148,11 @@ applies it deterministically.
 
 ## Contributing
 
-This repository is a **source snapshot** published to satisfy AGPL-3.0 Section 13,
-not a collaboration venue: development happens privately and pull requests are not
-reviewed here. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Pull requests and issues are **welcome** — they are read and considered. One
+practical caveat: this repository is a snapshot of production, so an accepted
+change is applied to the internal tree and ships in a following snapshot (with
+credit) rather than being merged directly. Details and the fork rules:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-Found a bug in the game? Write to the [Telegram chat](https://t.me/terron_chat).
+Found a bug in the game? The fastest route is the
+[Telegram chat](https://t.me/terron_chat).
