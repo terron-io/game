@@ -58,7 +58,7 @@ They are shown in-game on the **Credits & Licenses** page (`/copyrights`) and in
 > your license automatically, §8), running it online obliges you to offer the
 > source to your players (§13), and changes must be marked (§5a). Separately:
 > **no license grants rights to a name or logo** — trademarks sit outside
-> copyright, and that is what most lawsuits are actually about.
+> copyright, so give your fork its own name and branding.
 >
 > Building your own game from scratch? The **MIT**-licensed ancestor is an easier
 > starting point: upstream was under MIT until 2025-09-05, and

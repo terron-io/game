@@ -103,13 +103,16 @@ function agplRules(variant: "ours" | "upstream"): Rule[] {
     n: "!",
     warn: true,
     text: ours
-      ? L(
-          "Имя и логотип лицензия НЕ даёт: «TERRON» — товарный знак, он вне копирайта. Именно на этом чаще всего и подают в суд, даже когда с кодом всё чисто.",
-          "The license does NOT grant the name or logo: “TERRON” is a trademark, outside copyright. This is the most common basis for lawsuits — even against forks that are clean on the code.",
+      ? // ⚠️ БЕЗ судебной риторики (репорт владельца 29.08 «какие-то иски») —
+        // в НАШЕМ попапе она читалась как угроза от нас самих. Суть та же:
+        // имя не входит в лицензию, форку — своё.
+        L(
+          "Имя и логотип лицензия НЕ даёт: «TERRON» — товарный знак. Форку — своё имя и свой стиль.",
+          "The license does NOT grant the name or logo: “TERRON” is a trademark. Give your fork its own name and look.",
         )
       : L(
-          "Имя и логотип лицензия НЕ даёт: «OpenFront» — их товарный знак, он вне копирайта. Именно на этом чаще всего и подают в суд, даже когда с кодом всё чисто.",
-          "The license does NOT grant the name or logo: “OpenFront” is their trademark, outside copyright. This is the most common basis for lawsuits — even against forks that are clean on the code.",
+          "Имя и логотип лицензия НЕ даёт: «OpenFront» — их товарный знак. Форку — своё имя и свой стиль.",
+          "The license does NOT grant the name or logo: “OpenFront” is their trademark. Give your fork its own name and look.",
         ),
   });
   return rules;

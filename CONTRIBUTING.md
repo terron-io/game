@@ -42,8 +42,8 @@ See [NOTICE.md](NOTICE.md) for the Section 7 additional terms covering
 TERRON.io's own contributions.
 
 > ⚠️ **On trademarks.** Neither AGPL nor MIT grants rights to a **name or logo**.
-> A license covers code; branding sits outside it. This is the most common basis
-> for legal action — including against forks that are entirely clean on the code.
+> A license covers code; branding sits outside it — a fork needs its own name
+> and look.
 
 ## An easier path
 
