@@ -53,7 +53,14 @@ export class CopyrightsPage extends BaseModal {
     // памятку об условиях форка — см. ForkRules.ts. Обычный клик перехватываем,
     // но href оставляем настоящим: правый клик, «открыть в новой вкладке» и
     // краулеры должны видеть реальный адрес.
-    const isRepo = /github\.com/i.test(href);
+    // Памятка форкнувшему — только на ВХОДАХ В РЕПОЗИТОРИИ. Документные
+    // ссылки (/blob/ — CREDITS.md и подобное) открываются напрямую: человек
+    // идёт ЧИТАТЬ атрибуцию, а не форкать, и экран согласия там неуместен.
+    // WarFront — тоже напрямую: он целиком MIT, предупреждать не о чем.
+    const isRepo =
+      /github\.com/i.test(href) &&
+      !/\/blob\//i.test(href) &&
+      !/WarFrontIO/i.test(href);
     // MIT-точки входа апстрима (ссылки на конкретные коммиты до смены лицензии)
     // получают ДРУГУЮ памятку: там обязательств почти нет, и человеку честнее
     // сказать «делаешь своё — начинай отсюда», чем пугать копилефтом.
@@ -98,7 +105,7 @@ export class CopyrightsPage extends BaseModal {
         <b>WarFront.io</b> ${L("(ранний открытый клон, MIT)", "(early open clone, MIT)")} →
         <b>OpenFront.io</b>
         ${L("(© OpenFront LLC, сейчас AGPLv3)", "(© OpenFront LLC, now AGPLv3)")} →
-        <b>TERRON.io</b> ${L("(этот форк, СНГ)", "(this fork, CIS)")}
+        <b>TERRON.io</b> ${L("(этот форк)", "(this fork)")}
       </div>
 
       ${this.section(L("Атрибуция (по лицензии)", "Attribution (per license)"))}
@@ -240,6 +247,10 @@ export class CopyrightsPage extends BaseModal {
         <li>
           ${L("MIT-точки входа:", "MIT entry points:")}
           ${this.a(MIT_COMMIT_1, "9866dbb")}, ${this.a(MIT_COMMIT_2, "9d5c108")}
+        </li>
+        <li>
+          ${L("Предок жанра (целиком MIT):", "Genre ancestor (MIT in full):")}
+          ${this.a("https://github.com/WarFrontIO", "github.com/WarFrontIO")}
         </li>
         <li>${L("Первоисточник жанра:", "Genre origin:")} ${this.a(TERRITORIAL, "territorial.io")}</li>
       </ul>
