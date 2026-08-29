@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: АЭС — градирни и знак радиации -->
+  <path d="M10 56c0-14 3-20 3-28h10c0 8 3 14 3 28H10zM12 24h12l-1-6H13l-1 6z"/>
+  <path d="M45 20a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm0 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>
+  <path d="M45 20v6M39 41l-5 3M51 41l5 3" stroke="#fff" stroke-width="3"/>
+</svg>

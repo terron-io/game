@@ -1,0 +1,1272 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Диагностика графики · TERRON</title>
+    <style>
+      :root {
+        --bg: #efe6c8;
+        --sheet: #fffdf5;
+        --ink: #2b2a24;
+        --red: #b91c1c;
+        --green: #15803d;
+        --blue: #1d4ed8;
+        --line: #d8cfa8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        line-height: 1.55;
+        font-size: 16px;
+      }
+      .wrap { max-width: 820px; margin: 0 auto; padding: 28px 18px 64px; }
+      header { border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 20px; }
+      .brand { font-weight: 800; letter-spacing: 2px; font-size: 14px; }
+      h1 { font-size: 26px; margin: 8px 0 4px; }
+      h2 { font-size: 18px; margin: 26px 0 8px; border-left: 4px solid var(--red); padding-left: 10px; }
+      .sheet { background: var(--sheet); border: 1px solid var(--line); padding: 16px 18px; margin: 14px 0; }
+      .verdict { border: 2px solid var(--ink); padding: 16px 18px; background: var(--sheet); }
+      .verdict h2 { margin-top: 0; border: 0; padding: 0; font-size: 20px; }
+      .verdict.bad { border-color: var(--red); }
+      .verdict.good { border-color: var(--green); }
+      .verdict.warn { border-color: #b45309; }
+      .warn-txt { color: #b45309; font-weight: 700; }
+      .verdict p { margin: 8px 0 0; }
+      .ok { color: var(--green); font-weight: 700; }
+      .fail { color: var(--red); font-weight: 700; }
+      pre {
+        background: #f1ead2; border: 1px solid var(--line); padding: 12px;
+        font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px;
+        white-space: pre-wrap; word-break: break-word; margin: 0;
+        max-height: 60vh; overflow: auto;
+      }
+      button {
+        font: inherit; font-weight: 700; cursor: pointer;
+        border: 1px solid var(--ink); background: var(--sheet); color: var(--ink);
+        padding: 9px 18px;
+      }
+      button.primary { background: var(--ink); color: var(--sheet); }
+      button:disabled { opacity: .5; cursor: default; }
+      .btnrow { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+      .note { font-size: 14px; opacity: .8; }
+      a { color: var(--blue); }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: .7; }
+      td.res { white-space: nowrap; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">TERRON · ШТАБ</div>
+        <h1>Диагностика графики</h1>
+        <div class="note">
+          Страница проверяет, какие шейдеры собирает видеокарта именно на вашем
+          компьютере. Ничего не устанавливает и никуда сама не отправляет.
+        </div>
+      </header>
+
+      <div id="verdict" class="verdict">
+        <h2>Идёт проверка…</h2>
+        <p class="note">Занимает от пары секунд до полуминуты — на слабых машинах дольше.</p>
+      </div>
+
+      <div class="btnrow">
+        <button id="copy" class="primary" disabled>Скопировать отчёт</button>
+        <button id="rerun" disabled>Проверить ещё раз</button>
+      </div>
+      <div class="note">
+        Пришлите отчёт нам — кнопкой «Скопировать» или скриншотом этой страницы.
+      </div>
+
+      <h2>Графика</h2>
+      <div class="sheet" style="padding: 0">
+        <table id="tests">
+          <thead>
+            <tr><th>Проверка</th><th>Что означает</th><th class="res">Итог</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="verdict2" class="verdict" style="margin-top: 26px">
+        <h2>Запуск матча — проверка идёт…</h2>
+      </div>
+
+      <h2>Запуск матча</h2>
+      <div class="sheet" style="padding: 0">
+        <table id="tests2">
+          <thead>
+            <tr><th>Проверка</th><th>Что означает</th><th class="res">Итог</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h2>Отчёт для разработчиков</h2>
+      <pre id="report">…</pre>
+
+      <div class="note" style="margin-top: 24px">
+        Если графика не запускается вовсе — есть отдельная инструкция:
+        <a href="/webgl2-not-supported">частые причины и как чинить</a>.
+      </div>
+    </div>
+
+    <script>
+      /*
+       * terron: страница-зонд /debug.
+       *
+       * Зачем: репорты «Shader compile error … (пустой лог)» на Intel/ANGLE
+       * приходят без единой полезной детали — драйвер отказывает молча. Здесь мы
+       * собираем НЕСКОЛЬКО вариантов одного и того же шейдера зданий и по тому,
+       * какие из них упали, называем причину.
+       *
+       * Страница намеренно СТАТИЧЕСКАЯ (вне бандла): она должна открываться и
+       * работать даже тогда, когда игра не поднимается вообще.
+       *
+       * ВАЖНО: GLSL ниже — СНИМОК src/client/render/gl/shaders/structure/
+       * structure.vert.glsl. Правится он там, здесь копия. Точное совпадение не
+       * критично — проверяем не пиксели, а то, переваривает ли драйвер сами
+       * КОНСТРУКЦИИ (динамическая индексация uniform-массива и его размер).
+       */
+
+      // Столько колонок атласа в игре сейчас. Растёт с каждым новым ультом:
+      // 7 (6 июля) → 12 → 14 → 15 → 16 → 18 (14 июля).
+      var LIVE_COLS = 18;
+      var OLD_COLS = 7;
+
+      // Как шейдер достаёт масштаб фигуры:
+      //   "dynamic" — как в игре: индекс приходит из атрибута (не константа);
+      //   "const"   — массивы те же, но индекс постоянный (нет динамики);
+      //   "none"    — массивов нет вовсе, всё приезжает атрибутом.
+      function structureVert(cols, lookup) {
+        var decl =
+          lookup === "none"
+            ? ""
+            : "uniform float uShapeScales[" + cols + "];\n" +
+              "uniform float uIconFills[" + cols + "];\n";
+        var read;
+        if (lookup === "dynamic") {
+          read =
+            "  int shapeIdx = int(aInst1.x);\n" +
+            "  float shapeScale = uShapeScales[shapeIdx];\n" +
+            "  float iconFill = uIconFills[shapeIdx];\n";
+        } else if (lookup === "const") {
+          read =
+            "  int shapeIdx = int(aInst1.x);\n" +
+            "  float shapeScale = uShapeScales[0];\n" +
+            "  float iconFill = uIconFills[0];\n";
+        } else {
+          read =
+            "  int shapeIdx = int(aInst1.x);\n" +
+            "  float shapeScale = aInst1.z;\n" +
+            "  float iconFill = 1.0;\n";
+        }
+        return (
+          "#version 300 es\n" +
+          "precision highp float;\n" +
+          "layout(location = 0) in vec2 aPos;\n" +
+          "layout(location = 1) in vec4 aInst0;\n" +
+          "layout(location = 2) in vec3 aInst1;\n" +
+          "uniform mat3  uCamera;\n" +
+          "uniform float uZoom;\n" +
+          "uniform float uIconSize;\n" +
+          "uniform float uDotsThreshold;\n" +
+          "uniform float uDotScale;\n" +
+          "uniform float uScaleFactor;\n" +
+          "uniform float uIconGrowZoom;\n" +
+          decl +
+          "uniform float uFortIdx;\n" +
+          "out vec2  vLocalPos;\n" +
+          "out vec2  vAtlasUV;\n" +
+          "flat out float vOwnerID;\n" +
+          "flat out float vUnderConstruction;\n" +
+          "flat out float vMarkedForDeletion;\n" +
+          "flat out float vZoom;\n" +
+          "flat out float vAtlasIdx;\n" +
+          "flat out float vShapeScale;\n" +
+          "void main() {\n" +
+          "  float worldX = aInst0.x;\n" +
+          "  float worldY = aInst0.y;\n" +
+          "  vOwnerID = aInst0.z;\n" +
+          "  vUnderConstruction = aInst0.w;\n" +
+          "  vMarkedForDeletion = aInst1.y;\n" +
+          "  vZoom = uZoom;\n" +
+          "  vAtlasIdx = aInst1.x;\n" +
+          "  float iconScale;\n" +
+          "  if (uZoom <= uDotsThreshold) {\n" +
+          "    iconScale = uDotScale;\n" +
+          "  } else if (uZoom >= uIconGrowZoom) {\n" +
+          "    iconScale = uZoom / uIconGrowZoom;\n" +
+          "  } else {\n" +
+          "    iconScale = min(1.0, uZoom / uScaleFactor);\n" +
+          "  }\n" +
+          read +
+          "  vShapeScale = shapeScale;\n" +
+          "  float levelMult = 1.0;\n" +
+          "  if (shapeIdx == int(uFortIdx)) {\n" +
+          "    levelMult = 1.0 + 0.25 * max(0.0, aInst1.z - 1.0);\n" +
+          "  }\n" +
+          "  float halfSize = uIconSize * iconScale * 0.5 / uZoom * shapeScale * levelMult;\n" +
+          "  vec2 center = vec2(worldX + 0.5, worldY + 0.5);\n" +
+          "  vec2 worldPos = center + (aPos - 0.5) * halfSize * 2.0;\n" +
+          "  vec3 clip = uCamera * vec3(worldPos, 1.0);\n" +
+          "  gl_Position = vec4(clip.xy, 0.0, 1.0);\n" +
+          "  vLocalPos = aPos - 0.5;\n" +
+          "  float uvExpand = shapeScale / iconFill;\n" +
+          "  float scaledX = 0.5 + (aPos.x - 0.5) * uvExpand;\n" +
+          "  float scaledY = 0.5 + (aPos.y - 0.5) * uvExpand;\n" +
+          "  float colU = (aInst1.x + scaledX) / float(" + cols + ");\n" +
+          "  vAtlasUV = vec2(colU, scaledY);\n" +
+          "}\n"
+        );
+      }
+
+      // Минимальный фрагментный шейдер — он нужен только чтобы программа
+      // слинковалась. Часть отказов вылезает именно на линковке, поэтому каждый
+      // вариант доводим до конца, а не только компилируем.
+      var TRIVIAL_FRAG =
+        "#version 300 es\n" +
+        "precision mediump float;\n" +
+        "in vec2 vLocalPos;\n" +
+        "in vec2 vAtlasUV;\n" +
+        "flat in float vOwnerID;\n" +
+        "flat in float vUnderConstruction;\n" +
+        "flat in float vMarkedForDeletion;\n" +
+        "flat in float vZoom;\n" +
+        "flat in float vAtlasIdx;\n" +
+        "flat in float vShapeScale;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "  fragColor = vec4(vAtlasUV, vLocalPos.x + vOwnerID + vUnderConstruction +\n" +
+        "    vMarkedForDeletion + vZoom + vAtlasIdx + vShapeScale, 1.0);\n" +
+        "}\n";
+
+      var STRESS_FRAG =
+        "#version 300 es\nprecision mediump float;\nuniform float uK;\n" +
+        "out vec4 fragColor;\nvoid main() { fragColor = vec4(uK, 0.0, 0.0, 1.0); }\n";
+
+      function stressVert(k) {
+        return (
+          "#version 300 es\nprecision highp float;\nlayout(location = 0) in vec2 aPos;\n" +
+          "void main() { gl_Position = vec4(aPos * " +
+          (1.0 + k * 0.001).toFixed(4) +
+          ", 0.0, 1.0); }\n"
+        );
+      }
+
+      // --- сборка одной программы; возвращает {ok, stage, log, ms} ------------
+
+      function buildProgram(gl, vertSrc, fragSrc) {
+        var t0 = performance.now();
+        var vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, vertSrc);
+        gl.compileShader(vs);
+        if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+          var vlog = gl.getShaderInfoLog(vs) || "";
+          gl.deleteShader(vs);
+          return { ok: false, stage: "компиляция", log: vlog, ms: Math.round(performance.now() - t0) };
+        }
+        var fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, fragSrc);
+        gl.compileShader(fs);
+        if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+          var flog = gl.getShaderInfoLog(fs) || "";
+          gl.deleteShader(vs);
+          gl.deleteShader(fs);
+          return { ok: false, stage: "компиляция(фрагм.)", log: flog, ms: Math.round(performance.now() - t0) };
+        }
+        var prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        var linked = gl.getProgramParameter(prog, gl.LINK_STATUS);
+        var plog = linked ? "" : gl.getProgramInfoLog(prog) || "";
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!linked) {
+          gl.deleteProgram(prog);
+          return { ok: false, stage: "линковка", log: plog, ms: Math.round(performance.now() - t0) };
+        }
+        return { ok: true, stage: "", log: "", ms: Math.round(performance.now() - t0), program: prog };
+      }
+
+      // --- сбор сведений о машине -------------------------------------------
+
+      function deviceInfo(gl) {
+        var lines = [];
+        lines.push("UA: " + navigator.userAgent);
+        lines.push("Платформа: " + (navigator.platform || "?") + ", язык: " + (navigator.language || "?"));
+        lines.push(
+          "Ядра: " + (navigator.hardwareConcurrency || "?") +
+          ", ОЗУ ~" + (navigator.deviceMemory ? navigator.deviceMemory + " ГБ" : "?")
+        );
+        lines.push(
+          "Экран: " + screen.width + "x" + screen.height +
+          " @" + (window.devicePixelRatio || 1)
+        );
+        if (!gl) {
+          lines.push("WebGL2: НЕДОСТУПЕН");
+          return lines;
+        }
+        var dbg = gl.getExtension("WEBGL_debug_renderer_info");
+        lines.push(
+          "GPU: " +
+            (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "скрыт") +
+            " — " +
+            (dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : "скрыт")
+        );
+        lines.push("WebGL: " + gl.getParameter(gl.VERSION));
+        lines.push("GLSL: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+        // terron 21.07 (взято из TroubleshootingModal OpenFront): программный
+        // рендер = НЕТ GPU-ускорения (SwiftShader/llvmpipe/Basic Render). Игра
+        // на нём еле ползёт и часто выглядит как «сломалась» — это самостоятельная
+        // и частая причина, наши шейдер-пробы её не ловят (софт всё компилит).
+        lines.push(
+          "Аппаратное ускорение: " +
+            (softwareRender(gl) ? "НЕТ — программный рендер (" + rendererStr(gl) + ")" : "есть")
+        );
+        // highp во фрагментах: часть дешёвых мобилок его не тянет — рендер сыпется.
+        var hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+        lines.push(
+          "Точные (highp) шейдеры: " + (hp && hp.precision > 0 ? "есть" : "НЕТ")
+        );
+        lines.push(
+          "Лимиты: vertUnif=" + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) +
+          " fragUnif=" + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) +
+          " varying=" + gl.getParameter(gl.MAX_VARYING_VECTORS) +
+          " attribs=" + gl.getParameter(gl.MAX_VERTEX_ATTRIBS) +
+          " texSize=" + gl.getParameter(gl.MAX_TEXTURE_SIZE)
+        );
+        lines.push(
+          "Параллельная компиляция: " +
+            (gl.getExtension("KHR_parallel_shader_compile") ? "есть" : "нет")
+        );
+        // terron 21.07: слабое интегрированное Intel (UHD/HD Graphics/Iris)
+        // теряет D3D11-контекст под НАГРУЗКОЙ, хотя транзиентные пробы проходит.
+        // Показываем и класс железа, и в каком режиме игра теперь его рисует.
+        var low = gfxLowActive(gl);
+        var eff = effectiveGameDpr(gl);
+        lines.push(
+          "Класс видеокарты: " +
+            (weakIntelGpu(gl) ? "интегрированная Intel (риск сброса под нагрузкой)" : "ок")
+        );
+        lines.push(
+          "Режим рендера игры: " +
+            (low
+              ? "ОБЛЕГЧЁННЫЙ — рендер ×" + eff.toFixed(2) + " (защита от сброса контекста)"
+              : "полный — рендер ×" + eff.toFixed(2))
+        );
+        return lines;
+      }
+
+      // UNMASKED_RENDERER строкой (для сообщений).
+      function rendererStr(gl) {
+        try {
+          var dbg = gl && gl.getExtension("WEBGL_debug_renderer_info");
+          return dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "") : "";
+        } catch (e) {
+          return "";
+        }
+      }
+      // Программный рендер = нет GPU-ускорения. Регэксп из OpenFront Diagnostic
+      // + Microsoft Basic Render Driver (частый на Windows без драйвера GPU).
+      function softwareRender(gl) {
+        var r = rendererStr(gl);
+        return /swiftshader|llvmpipe|software|basic render|microsoft basic/i.test(r);
+      }
+
+      // Точная копия логики GPURenderer.effectiveDpr/gfxLow — чтобы страница
+      // показывала РОВНО тот режим, в котором игра запустится на этой машине.
+      function weakIntelGpu(gl) {
+        try {
+          if (!gl) return false;
+          var dbg = gl.getExtension("WEBGL_debug_renderer_info");
+          var r = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "") : "";
+          return /intel/i.test(r) && /(uhd|hd graphics|iris)/i.test(r);
+        } catch (e) {
+          return false;
+        }
+      }
+      function gfxLowActive(gl) {
+        try {
+          if (localStorage.getItem("terron_gfx_low") === "1") return true;
+        } catch (e) {}
+        var dm = navigator.deviceMemory;
+        if (typeof dm === "number" && dm <= 3) return true;
+        return weakIntelGpu(gl);
+      }
+      function effectiveGameDpr(gl) {
+        var dpr = window.devicePixelRatio || 1;
+        var coarse =
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(pointer: coarse)").matches;
+        var low = gfxLowActive(gl);
+        if (coarse) return Math.min(dpr, low ? 1.5 : 2);
+        if (low) return Math.min(dpr, 0.75);
+        return dpr;
+      }
+
+      // Нагрузочная проба: воспроизводит то, что упускают шейдер-пробы выше.
+      // Компиляция+удаление одной программы транзиентна — слабый Intel её
+      // проходит. Бой же держит игровой бэкбуфер + цепочку полноэкранных FBO
+      // (жар/туман/блум) МИНУТАМИ и на этом теряет D3D-контекст. Здесь мы
+      // на СВЕЖЕМ контексте держим тот же вес ~2.2с и следим за
+      // webglcontextlost / нехваткой видеопамяти. Контекст в конце явно
+      // отпускаем (WEBGL_lose_context) — чтобы не течь слотами (см. игру).
+      function probeGpuLoad() {
+        return new Promise(function (resolve) {
+          var dpr = window.devicePixelRatio || 1;
+          var W = Math.min(Math.round(screen.width * dpr), 4096);
+          var H = Math.min(Math.round(screen.height * dpr), 4096);
+          if (W < 2 || H < 2) { W = 1280; H = 720; }
+          var cv = document.createElement("canvas");
+          cv.width = W;
+          cv.height = H;
+          var lost = false;
+          cv.addEventListener(
+            "webglcontextlost",
+            function (e) { e.preventDefault(); lost = true; },
+            false
+          );
+          var gl = null;
+          try {
+            gl = cv.getContext("webgl2", {
+              antialias: false,
+              powerPreference: "high-performance",
+              failIfMajorPerformanceCaveat: false,
+            });
+          } catch (e) { gl = null; }
+          if (!gl) {
+            resolve({ ok: false, note: "второй контекст не создался", detail: "нагрузочная проба: контекст WebGL2 не выдан (лимит контекстов уже исчерпан?)" });
+            return;
+          }
+          var loseExt = gl.getExtension("WEBGL_lose_context");
+
+          var vs = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(
+            vs,
+            "#version 300 es\nprecision highp float;\nconst vec2 P[3]=vec2[3](vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.));\nout vec2 vUV;\nvoid main(){vec2 p=P[gl_VertexID];vUV=p*0.5+0.5;gl_Position=vec4(p,0.,1.);}\n"
+          );
+          gl.compileShader(vs);
+          var fs = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(
+            fs,
+            "#version 300 es\nprecision highp float;\nuniform sampler2D uTex;\nuniform float uK;\nin vec2 vUV;\nout vec4 o;\nvoid main(){vec4 s=texture(uTex,vUV);float a=0.;for(int i=0;i<24;i++){a+=sin(vUV.x*float(i)+uK)*0.02;}o=vec4(s.rgb+a,1.);}\n"
+          );
+          gl.compileShader(fs);
+          var prog = gl.createProgram();
+          gl.attachShader(prog, vs);
+          gl.attachShader(prog, fs);
+          gl.linkProgram(prog);
+          gl.useProgram(prog);
+          var uK = gl.getUniformLocation(prog, "uK");
+          var vao = gl.createVertexArray();
+          gl.bindVertexArray(vao);
+
+          var OOM = gl.OUT_OF_MEMORY;
+          var oom = false;
+          var fbos = [];
+          function makeLayer(internal, format, type) {
+            var tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texImage2D(gl.TEXTURE_2D, 0, internal, W, H, 0, format, type, null);
+            if (gl.getError() === OOM) oom = true;
+            var fb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            fbos.push({ fb: fb, tex: tex });
+          }
+          // Игровая цепочка: несколько RGBA8-слоёв + пара половинной точности
+          // (жар/туман/блум держат именно такие). Останавливаемся при OOM.
+          var hf = gl.getExtension("EXT_color_buffer_half_float") || gl.getExtension("EXT_color_buffer_float");
+          for (var i = 0; i < 6 && !oom; i++) makeLayer(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE);
+          if (hf) for (var j = 0; j < 2 && !oom; j++) makeLayer(gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT);
+
+          var t0 = performance.now();
+          var frames = 0;
+          var settled = false;
+
+          function cleanup() {
+            try {
+              for (var i = 0; i < fbos.length; i++) {
+                gl.deleteFramebuffer(fbos[i].fb);
+                gl.deleteTexture(fbos[i].tex);
+              }
+              gl.deleteProgram(prog);
+              gl.deleteVertexArray(vao);
+              if (loseExt) loseExt.loseContext();
+            } catch (e) {}
+          }
+          // Ровно одно завершение: и цикл, и предохранитель зовут done().
+          function done(res) {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(res);
+          }
+          // Предохранитель: если кадры не идут (вкладка в фоне тротлит таймеры),
+          // проба не должна ВЕЧНО держать вердикт — через 6с отдаём «пропущено».
+          setTimeout(function () {
+            done({
+              ok: true,
+              note: "проба пропущена (вкладка не на переднем плане)",
+              detail: "нагрузочная проба: не выполнена — вкладка была в фоне/свёрнута, кадры не шли",
+            });
+          }, 6000);
+
+          function tick() {
+            if (settled) return;
+            if (lost || gl.isContextLost()) {
+              var ms = Math.round(performance.now() - t0);
+              done({
+                ok: false,
+                note: "КОНТЕКСТ ПОТЕРЯН под нагрузкой (" + ms + " мс)",
+                detail: "нагрузочная проба: webglcontextlost сработал через " + ms + " мс, " + frames + " кадров — это и есть причина «WebGL2 not supported» в бою",
+                contextLost: true,
+              });
+              return;
+            }
+            // Прогоняем всю цепочку слоёв как в кадре игры: каждый пишет,
+            // читая предыдущий, потом — на экран.
+            for (var i = 0; i < fbos.length; i++) {
+              gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[i].fb);
+              gl.viewport(0, 0, W, H);
+              gl.bindTexture(gl.TEXTURE_2D, fbos[(i + 1) % fbos.length].tex);
+              gl.uniform1f(uK, frames * 0.05 + i);
+              gl.drawArrays(gl.TRIANGLES, 0, 3);
+            }
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, W, H);
+            if (fbos.length) gl.bindTexture(gl.TEXTURE_2D, fbos[0].tex);
+            gl.uniform1f(uK, frames * 0.05);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            gl.flush();
+            frames++;
+            if (gl.getError() === OOM) oom = true;
+
+            if (performance.now() - t0 < 2200 && !oom) {
+              // setTimeout, а не rAF: продвигается даже в фоновой вкладке, где
+              // rAF замирает. Для нагрузочной пробы вертикальная синхро не нужна.
+              setTimeout(tick, 16);
+            } else {
+              var ms = Math.round(performance.now() - t0);
+              if (oom) {
+                done({
+                  ok: false,
+                  note: "нехватка видеопамяти",
+                  detail: "нагрузочная проба: видеокарта сообщила OUT_OF_MEMORY на игровом бэкбуфере " + W + "×" + H + " — в бою это ведёт к сбросу контекста",
+                });
+              } else {
+                done({
+                  ok: true,
+                  note: "выдержала " + frames + " кадров за " + ms + " мс (" + W + "×" + H + ", " + fbos.length + " слоёв)",
+                  detail: "нагрузочная проба: " + frames + " кадров за " + ms + " мс на " + W + "×" + H + ", " + fbos.length + " слоёв — контекст жив",
+                });
+              }
+            }
+          }
+          setTimeout(tick, 0);
+        });
+      }
+
+      // --- прогон ------------------------------------------------------------
+
+      var rows = [];
+      var rows2 = [];
+
+      function addRow(name, meaning, result) {
+        rows.push({ name: name, meaning: meaning, result: result });
+      }
+
+      function addRow2(name, meaning, result) {
+        rows2.push({ name: name, meaning: meaning, result: result });
+        renderRowsInto("#tests2 tbody", rows2);
+      }
+
+      function renderRows() {
+        renderRowsInto("#tests tbody", rows);
+      }
+
+      function renderRowsInto(sel, rows) {
+        var tbody = document.querySelector(sel);
+        tbody.innerHTML = "";
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          var tr = document.createElement("tr");
+          var td1 = document.createElement("td");
+          td1.textContent = r.name;
+          var td2 = document.createElement("td");
+          td2.textContent = r.meaning;
+          var td3 = document.createElement("td");
+          td3.className = "res " + (r.result.ok ? "ok" : "fail");
+          td3.textContent = r.result.ok
+            ? r.result.label || "собрался (" + r.result.ms + " мс)"
+            : "ОТКАЗ — " + r.result.stage;
+          tr.appendChild(td1);
+          tr.appendChild(td2);
+          tr.appendChild(td3);
+          tbody.appendChild(tr);
+        }
+      }
+
+      function run() {
+        rows = [];
+        var report = [];
+        var canvas = document.createElement("canvas");
+        canvas.width = 32;
+        canvas.height = 32;
+        // Один контекст на все пробы: каждый новый контекст расходует лимит
+        // браузера (~16 штук), а нам нужно проверить шейдеры, а не выесть его.
+        var gl = null;
+        try {
+          gl = canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: false });
+        } catch (e) {
+          gl = null;
+        }
+
+        report.push("TERRON — диагностика графики");
+        report.push("Время: " + new Date().toISOString());
+        report.push("");
+        report.push("--- машина ---");
+        report = report.concat(deviceInfo(gl));
+        report.push("");
+
+        if (!gl) {
+          setVerdict(
+            "bad",
+            "WebGL2 не запускается вообще",
+            "Браузер не отдал контекст WebGL2 — до шейдеров дело не доходит. " +
+              "Это отдельная поломка, инструкция по ней ниже на странице."
+          );
+          // Графики нет — но вторую половину (воркер, сеть, карта) всё равно
+          // прогоняем: она отвечает на другой вопрос и может добавить причин.
+          runStart(report);
+          return;
+        }
+
+        var results = {};
+
+        // Основная четвёрка: один и тот же шейдер, разные конструкции.
+        results.live = buildProgram(gl, structureVert(LIVE_COLS, "dynamic"), TRIVIAL_FRAG);
+        addRow(
+          "Шейдер зданий, как в игре сейчас (" + LIVE_COLS + " колонок)",
+          "Именно он падает в репортах",
+          results.live
+        );
+
+        results.old = buildProgram(gl, structureVert(OLD_COLS, "dynamic"), TRIVIAL_FRAG);
+        addRow(
+          "Он же, но с " + OLD_COLS + " колонками (версия начала июля)",
+          "Проверяет, виноват ли РАЗМЕР",
+          results.old
+        );
+
+        results.constIdx = buildProgram(gl, structureVert(LIVE_COLS, "const"), TRIVIAL_FRAG);
+        addRow(
+          "Он же, без динамического индекса",
+          "Проверяет, виновата ли ИНДЕКСАЦИЯ",
+          results.constIdx
+        );
+
+        results.noArr = buildProgram(gl, structureVert(LIVE_COLS, "none"), TRIVIAL_FRAG);
+        addRow(
+          "Он же, вообще без uniform-массивов",
+          "Проверяет, виноваты ли МАССИВЫ",
+          results.noArr
+        );
+
+        // Свип: ищем порог размера, если он есть.
+        var sweep = [4, 7, 8, 12, 16, 18, 20, 24, 32, 48, 64];
+        var lastOk = null;
+        var firstFail = null;
+        var sweepLines = [];
+        for (var i = 0; i < sweep.length; i++) {
+          var n = sweep[i];
+          var r = buildProgram(gl, structureVert(n, "dynamic"), TRIVIAL_FRAG);
+          sweepLines.push("  колонок " + n + ": " + (r.ok ? "ок (" + r.ms + " мс)" : "ОТКАЗ — " + r.stage));
+          if (r.ok) {
+            if (firstFail === null) lastOk = n;
+          } else if (firstFail === null) {
+            firstFail = n;
+          }
+          if (r.program) gl.deleteProgram(r.program);
+        }
+
+        // Стресс: сколько ПРОГРАММ подряд драйвер вообще осилит.
+        var STRESS_MAX = 60;
+        var stressBuilt = 0;
+        var stressFail = null;
+        var stressProgs = [];
+        for (var k = 0; k < STRESS_MAX; k++) {
+          var sr = buildProgram(gl, stressVert(k), STRESS_FRAG);
+          if (!sr.ok) {
+            stressFail = { at: k + 1, stage: sr.stage, log: sr.log };
+            break;
+          }
+          stressBuilt++;
+          stressProgs.push(sr.program);
+        }
+        for (var p = 0; p < stressProgs.length; p++) gl.deleteProgram(stressProgs[p]);
+        addRow(
+          "Сборка " + STRESS_MAX + " простых программ подряд",
+          "Проверяет, кончаются ли ресурсы драйвера",
+          stressFail
+            ? { ok: false, stage: "сломалось на " + stressFail.at + "-й", ms: 0 }
+            : { ok: true, ms: 0, stage: "", label: "все " + STRESS_MAX + " собрались" }
+        );
+
+        // Нагрузочная проба — строка-плейсхолдер, пока идёт (≈2.2с).
+        var weak = weakIntelGpu(gl);
+        var soft = softwareRender(gl);
+        addRow(
+          "Нагрузка на видеокарту",
+          "Полноэкранный рендер в несколько слоёв, как в бою",
+          { ok: true, label: "идёт ~2 с…" }
+        );
+        renderRows();
+
+        probeGpuLoad().then(function (load) {
+          // Заменяем плейсхолдер результатом пробы.
+          rows[rows.length - 1].result = load.ok
+            ? { ok: true, label: load.note }
+            : { ok: false, stage: load.note };
+          renderRows();
+
+          // --- вердикт -------------------------------------------------------
+
+          var v = verdictFor(results, lastOk, firstFail, stressFail, STRESS_MAX, load, weak, soft);
+          setVerdict(v.tone, v.title, v.text);
+
+          // --- отчёт ---------------------------------------------------------
+
+          report.push("--- вердикт ---");
+          report.push(v.title);
+          report.push(v.text);
+          report.push("");
+          report.push("--- пробы шейдера зданий ---");
+          report.push(fmt("как в игре сейчас (" + LIVE_COLS + " колонок)", results.live));
+          report.push(fmt("как было в начале июля (" + OLD_COLS + " колонок)", results.old));
+          report.push(fmt("без динамического индекса", results.constIdx));
+          report.push(fmt("без uniform-массивов", results.noArr));
+          report.push("");
+          report.push("--- свип размера массива ---");
+          report = report.concat(sweepLines);
+          report.push(
+            "  итог: последний рабочий = " + (lastOk === null ? "нет" : lastOk) +
+            ", первый упавший = " + (firstFail === null ? "нет" : firstFail)
+          );
+          report.push("");
+          report.push("--- стресс по числу программ ---");
+          report.push(
+            stressFail
+              ? "  собрано " + stressBuilt + ", отказ на " + stressFail.at +
+                "-й (" + stressFail.stage + "); лог: " +
+                (stressFail.log.trim() === "" ? "ПУСТОЙ" : stressFail.log.trim())
+              : "  все " + STRESS_MAX + " собрались"
+          );
+          report.push("");
+          report.push("--- нагрузочная проба ---");
+          report.push("  " + (load.detail || load.note));
+          report.push("");
+          report.push("contextLost=" + gl.isContextLost() + ", glError=" + gl.getError());
+
+          runStart(report);
+        });
+      }
+
+      /*
+       * Вторая половина: почему матч может не начаться.
+       *
+       * Симптом, ради которого это писалось: телефон висит на «Ждём начала
+       * матча…», а мир не тикает. Симуляция живёт в веб-воркере и кормится по
+       * вебсокету — если что-то из этого блокирует браузер/расширение/VPN,
+       * игра выглядит как зависшая, хотя графика в порядке.
+       */
+      function runStart(report) {
+        var t = [];
+        report.push("");
+        report.push("--- запуск матча ---");
+
+        // 1. Веб-воркер. В игре симуляция крутится в inline-blob-воркере — тот
+        // же способ создания проверяем и здесь.
+        t.push(
+          probeWorker().then(function (r) {
+            addRow2(
+              "Веб-воркер",
+              "В нём считается вся игра",
+              r.ok ? { ok: true, label: r.note } : { ok: false, stage: r.note }
+            );
+            report.push("  веб-воркер: " + (r.ok ? "ок — " + r.note : "ОТКАЗ — " + r.note));
+            return { key: "worker", ok: r.ok };
+          })
+        );
+
+        // 2. Лобби-сокет. Тот же адрес, что у витрины лобби; игру не создаёт,
+        // только слушает. Если он не открывается — матч и не начнётся.
+        t.push(
+          probeSocket().then(function (r) {
+            addRow2(
+              "Соединение с игровым сервером",
+              "По нему приходят ходы матча",
+              r.ok ? { ok: true, label: r.note } : { ok: false, stage: r.note }
+            );
+            report.push("  вебсокет: " + (r.ok ? "ок — " + r.note : "ОТКАЗ — " + r.note));
+            return { key: "socket", ok: r.ok };
+          })
+        );
+
+        // 3. Скачивание карты — самый частый тормоз старта (видно по трассировке
+        // загрузки): опоздавшая карта = игрок приезжает к шапочному разбору.
+        t.push(
+          probeMapDownload().then(function (r) {
+            addRow2(
+              "Скачивание карты",
+              "Медленная закачка = опоздание к старту",
+              r.ok ? { ok: true, label: r.note } : { ok: false, stage: r.note }
+            );
+            report.push("  карта: " + (r.ok ? "ок — " + r.note : "ОТКАЗ — " + r.note));
+            return { key: "map", ok: r.ok };
+          })
+        );
+
+        // 4. Хранилище. Строгие режимы приватности его режут, а на нём висят
+        // настройки и кэш карт.
+        var st = probeStorage();
+        addRow2(
+          "Хранилище браузера",
+          "Настройки и кэш карт",
+          st.ok ? { ok: true, label: st.note } : { ok: false, stage: st.note }
+        );
+        report.push("  хранилище: " + (st.ok ? "ок — " + st.note : "ОТКАЗ — " + st.note));
+
+        // 5. Часы. Отсчёт старта лобби считается от серверного времени; сильно
+        // убежавшие часы телефона путают клиент.
+        t.push(
+          probeClock().then(function (r) {
+            addRow2(
+              "Часы устройства",
+              "По ним считается отсчёт старта",
+              r.ok ? { ok: true, label: r.note } : { ok: false, stage: r.note }
+            );
+            report.push("  часы: " + (r.ok ? "ок — " + r.note : "РАСХОЖДЕНИЕ — " + r.note));
+            return { key: "clock", ok: r.ok };
+          })
+        );
+
+        Promise.all(t).then(function (list) {
+          var bad = list.filter(function (x) { return !x.ok; });
+          if (!st.ok) bad.push({ key: "storage" });
+          var v = startVerdict(bad);
+          setVerdictIn("verdict2", v.tone, v.title, v.text);
+          report.push("  вердикт: " + v.title);
+          finish(report.join("\n"));
+        });
+      }
+
+      function startVerdict(bad) {
+        if (bad.length === 0) {
+          return {
+            tone: "good",
+            title: "Запуск матча: помех не найдено",
+            text:
+              "Воркер, соединение, скачивание карты и хранилище работают. " +
+              "Если матч всё равно не начинается — пришлите отчёт, причина глубже.",
+          };
+        }
+        var keys = bad.map(function (b) { return b.key; });
+        if (keys.indexOf("worker") >= 0) {
+          return {
+            tone: "bad",
+            title: "Не запускается веб-воркер",
+            text:
+              "В нём считается вся игра, поэтому матч будет вечно «ждать начала». " +
+              "Обычно это блокировщик, строгий режим приватности или расширение — " +
+              "попробуйте отключить их для нашего сайта.",
+          };
+        }
+        if (keys.indexOf("socket") >= 0) {
+          return {
+            tone: "bad",
+            title: "Не открывается соединение с сервером",
+            text:
+              "Ходы матча приходят по этому соединению. Чаще всего мешает VPN, " +
+              "корпоративная сеть или блокировщик. Попробуйте без VPN.",
+          };
+        }
+        if (keys.indexOf("map") >= 0) {
+          return {
+            tone: "bad",
+            title: "Карта не скачивается",
+            text:
+              "Без карты матч не стартует. Похоже на обрыв связи или блокировку " +
+              "загрузок — проверьте интернет и отключите VPN.",
+          };
+        }
+        if (keys.indexOf("clock") >= 0) {
+          return {
+            tone: "bad",
+            title: "Часы устройства сильно расходятся",
+            text:
+              "Отсчёт до старта считается по времени, поэтому лобби может вести " +
+              "себя странно. Включите автоматическую установку времени.",
+          };
+        }
+        return {
+          tone: "bad",
+          title: "Браузер запрещает хранилище",
+          text:
+            "Настройки и кэш карт сохранить некуда — в строгом режиме приватности " +
+            "игра может вести себя непредсказуемо.",
+        };
+      }
+
+      function withTimeout(promise, ms, note) {
+        return new Promise(function (resolve) {
+          var done = false;
+          var timer = setTimeout(function () {
+            if (!done) { done = true; resolve({ ok: false, note: note }); }
+          }, ms);
+          promise.then(
+            function (v) { if (!done) { done = true; clearTimeout(timer); resolve(v); } },
+            function (e) {
+              if (!done) {
+                done = true;
+                clearTimeout(timer);
+                resolve({ ok: false, note: String((e && e.message) || e) });
+              }
+            }
+          );
+        });
+      }
+
+      function probeWorker() {
+        return withTimeout(
+          new Promise(function (resolve) {
+            var src =
+              "self.onmessage = function (e) { self.postMessage(e.data * 2); };";
+            var url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+            var w = new Worker(url);
+            var t0 = performance.now();
+            w.onmessage = function (e) {
+              var ms = Math.round(performance.now() - t0);
+              w.terminate();
+              URL.revokeObjectURL(url);
+              resolve(
+                e.data === 42
+                  ? { ok: true, note: "ответил за " + ms + " мс" }
+                  : { ok: false, note: "ответил неверно" }
+              );
+            };
+            w.onerror = function (e) {
+              w.terminate();
+              URL.revokeObjectURL(url);
+              resolve({ ok: false, note: "ошибка: " + ((e && e.message) || "неизвестно") });
+            };
+            w.postMessage(21);
+          }),
+          8000,
+          "не ответил за 8 секунд"
+        );
+      }
+
+      function probeSocket() {
+        return withTimeout(
+          new Promise(function (resolve, reject) {
+            var proto = location.protocol === "https:" ? "wss:" : "ws:";
+            var url = proto + "//" + location.host + "/w0/lobbies";
+            var t0 = performance.now();
+            var ws;
+            try {
+              ws = new WebSocket(url);
+            } catch (e) {
+              reject(e);
+              return;
+            }
+            var opened = 0;
+            ws.onopen = function () {
+              opened = Math.round(performance.now() - t0);
+            };
+            ws.onmessage = function () {
+              ws.close();
+              resolve({
+                ok: true,
+                note: "открылось за " + opened + " мс, данные идут",
+              });
+            };
+            ws.onerror = function () {
+              resolve({ ok: false, note: "соединение отклонено" });
+            };
+            ws.onclose = function (e) {
+              if (opened === 0) {
+                resolve({ ok: false, note: "закрылось сразу (код " + e.code + ")" });
+              }
+            };
+          }),
+          10000,
+          "молчит 10 секунд"
+        );
+      }
+
+      function probeMapDownload() {
+        return withTimeout(
+          fetch("/asset-manifest.json", { cache: "no-store" })
+            .then(function (r) {
+              if (!r.ok) throw new Error("манифест не отдался (" + r.status + ")");
+              return r.json();
+            })
+            .then(function (manifest) {
+              // Берём первый попавшийся бинарник карты — он же качается в игре.
+              var key = Object.keys(manifest).filter(function (k) {
+                return /^maps\/.*\.bin$/.test(k);
+              })[0];
+              if (!key) throw new Error("в манифесте нет карт");
+              var t0 = performance.now();
+              return fetch(manifest[key], { cache: "no-store" })
+                .then(function (r) {
+                  if (!r.ok) throw new Error("карта не отдалась (" + r.status + ")");
+                  return r.arrayBuffer();
+                })
+                .then(function (buf) {
+                  var ms = Math.round(performance.now() - t0);
+                  var kb = Math.round(buf.byteLength / 1024);
+                  var speed = ms > 0 ? Math.round((kb / ms) * 1000) : 0;
+                  return {
+                    ok: true,
+                    note: kb + " КБ за " + ms + " мс (~" + speed + " КБ/с)",
+                  };
+                });
+            }),
+          25000,
+          "не скачалась за 25 секунд"
+        );
+      }
+
+      function probeStorage() {
+        try {
+          localStorage.setItem("terron_debug_probe", "1");
+          localStorage.removeItem("terron_debug_probe");
+        } catch (e) {
+          return { ok: false, note: "localStorage запрещён" };
+        }
+        if (!window.indexedDB) return { ok: false, note: "IndexedDB недоступна" };
+        return { ok: true, note: "доступно" };
+      }
+
+      function probeClock() {
+        return withTimeout(
+          fetch("/asset-manifest.json", { method: "HEAD", cache: "no-store" }).then(
+            function (r) {
+              var serverDate = r.headers.get("date");
+              if (!serverDate) return { ok: true, note: "сервер не сообщил время" };
+              var skew = Math.round((Date.now() - new Date(serverDate).getTime()) / 1000);
+              // Заголовок Date округлён до секунды, плюс сетевая задержка —
+              // поэтому придираемся только к заметному расхождению.
+              return Math.abs(skew) <= 60
+                ? { ok: true, note: "расхождение " + skew + " с" }
+                : { ok: false, note: "часы врут на " + skew + " с" };
+            }
+          ),
+          10000,
+          "сервер не ответил"
+        );
+      }
+
+      function fmt(label, r) {
+        if (r.ok) return "  " + label + ": ок (" + r.ms + " мс)";
+        return (
+          "  " + label + ": ОТКАЗ на этапе «" + r.stage + "», лог: " +
+          (r.log.trim() === "" ? "ПУСТОЙ" : r.log.trim().replace(/\s+/g, " "))
+        );
+      }
+
+      // Дерево вердиктов. Порядок важен: сначала самые узкие причины.
+      function verdictFor(res, lastOk, firstFail, stressFail, stressMax, load, weak, soft) {
+        // Программный рендер объясняет всё сразу (нет GPU) — проверяем ПЕРВЫМ:
+        // шейдеры на нём собираются, поэтому обычные ветки его не поймают.
+        if (soft) {
+          return {
+            tone: "bad",
+            title: "Нет аппаратного ускорения (программный рендер)",
+            text:
+              "Игру рисует программный рендер (SwiftShader / Basic Render), без " +
+              "видеокарты. Отсюда тормоза, чёрная карта и сбросы. Включите " +
+              "«Использовать аппаратное ускорение» в настройках браузера, " +
+              "обновите драйвер видеокарты и перезапустите браузер.",
+          };
+        }
+        if (res.live.ok) {
+          if (stressFail) {
+            return {
+              tone: "bad",
+              title: "Шейдер в порядке, но у драйвера кончаются ресурсы",
+              text:
+                "Проблемный шейдер на вашей машине собирается, зато драйвер " +
+                "сдался на " + stressFail.at + "-й программе подряд из " + stressMax +
+                ". Игре нужно больше трёх десятков — отсюда и сбои.",
+            };
+          }
+          // Главная находка для этого класса: транзиентные шейдер-пробы прошли,
+          // а под НАГРУЗКОЙ контекст сбросился / кончилась видеопамять.
+          if (load && load.contextLost) {
+            return {
+              tone: "bad",
+              title: "Видеокарта теряет контекст под нагрузкой",
+              text:
+                "Шейдеры у вас собираются, но под игровой нагрузкой (полноэкранный " +
+                "рендер в несколько слоёв) драйвер сбросил графический контекст. " +
+                "Именно это и даёт «WebGL2 not supported» в бою, хотя быстрые проверки " +
+                "проходят. Мы уже включили облегчённый режим — игра рисует в пониженном " +
+                "разрешении, чтобы не доводить до сброса. Сильно помогает обновление " +
+                "драйвера видеокарты, перезапуск браузера и режим «Высокая " +
+                "производительность» для браузера в Параметрах Windows → Система → " +
+                "Дисплей → Настройки графики (не душите слабую карту энергосбережением).",
+            };
+          }
+          if (load && !load.ok) {
+            return {
+              tone: "bad",
+              title: "Под нагрузкой не хватает видеопамяти",
+              text:
+                "Быстрые проверки проходят, но игровой полноэкранный рендер " +
+                "ваша видеокарта не тянет (" + load.note + "). В бою это оборачивается " +
+                "сбросом контекста. Включён облегчённый режим (пониженное разрешение); " +
+                "обновите драйвер видеокарты.",
+            };
+          }
+          if (weak) {
+            return {
+              tone: "warn",
+              title: "Слабая интегрированная видеокарта — риск сброса под нагрузкой",
+              text:
+                "Короткие проверки ваша Intel проходит, но в бою она держит нагрузку " +
+                "минутами и может сбросить контекст (симптом «WebGL2 not supported»). " +
+                "Мы автоматически включили облегчённый режим — рендер в пониженном " +
+                "разрешении. Если сбои всё же повторятся: обновите драйвер видеокарты, " +
+                "перезапустите браузер и поставьте браузеру «Высокая производительность» " +
+                "в Параметрах Windows → Система → Дисплей → Настройки графики.",
+            };
+          }
+          return {
+            tone: "good",
+            title: "Всё собирается",
+            text:
+              "Все проверки прошли: подозрительных шейдеров на вашей машине нет. " +
+              "Если игра всё же падает — пришлите отчёт, причина в другом месте.",
+          };
+        }
+
+        if (!res.noArr.ok) {
+          return {
+            tone: "bad",
+            title: "Не собирается даже упрощённый шейдер",
+            text:
+              "Отказывает даже вариант без массивов и без индексации — значит дело " +
+              "не в конкретной конструкции, а в самом драйвере видеокарты. " +
+              "Первое, что стоит попробовать, — обновить драйвер и перезапустить браузер.",
+          };
+        }
+
+        if (!res.constIdx.ok) {
+          return {
+            tone: "bad",
+            title: "Драйвер не переваривает uniform-массивы",
+            text:
+              "Вариант с массивами падает даже без динамического индекса, а без " +
+              "массивов — собирается. Это известная слабость связки ANGLE + Direct3D " +
+              "на старых драйверах Intel. Чиним на нашей стороне: массивы из шейдера уберём.",
+          };
+        }
+
+        if (res.old.ok) {
+          return {
+            tone: "bad",
+            title: "Виноват размер массива",
+            text:
+              "Шейдер с " + OLD_COLS + " колонками собирается, с " + LIVE_COLS +
+              " — нет. Порог у вас между " + (lastOk === null ? "?" : lastOk) +
+              " и " + (firstFail === null ? "?" : firstFail) +
+              " колонками. Каждый новый ультимейт добавляет колонку — вы упёрлись в потолок драйвера.",
+          };
+        }
+
+        return {
+          tone: "bad",
+          title: "Виновата динамическая индексация",
+          text:
+            "Падает любой размер массива, но вариант без динамического индекса " +
+            "собирается. Драйвер не умеет читать uniform-массив по индексу, " +
+            "вычисленному на лету. Чиним на нашей стороне: индекс из шейдера уберём.",
+        };
+      }
+
+      function setVerdict(tone, title, text) {
+        setVerdictIn("verdict", tone, title, text);
+      }
+
+      function setVerdictIn(id, tone, title, text) {
+        var box = document.getElementById(id);
+        box.className = "verdict " + tone;
+        box.innerHTML = "";
+        var h = document.createElement("h2");
+        h.textContent = title;
+        var p = document.createElement("p");
+        p.textContent = text;
+        box.appendChild(h);
+        box.appendChild(p);
+      }
+
+      function finish(text) {
+        document.getElementById("report").textContent = text;
+        var copy = document.getElementById("copy");
+        var rerun = document.getElementById("rerun");
+        copy.disabled = false;
+        rerun.disabled = false;
+        copy.onclick = function () {
+          var done = function () {
+            copy.textContent = "Скопировано!";
+            setTimeout(function () {
+              copy.textContent = "Скопировать отчёт";
+            }, 2000);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, selectFallback);
+          } else {
+            selectFallback();
+          }
+        };
+        rerun.onclick = function () {
+          copy.disabled = true;
+          rerun.disabled = true;
+          setVerdict("", "Идёт проверка…", "Занимает от пары секунд до полуминуты — на слабых машинах дольше.");
+          setVerdictIn("verdict2", "", "Запуск матча — проверка идёт…", "");
+          rows2 = [];
+          renderRowsInto("#tests2 tbody", rows2);
+          setTimeout(run, 50);
+        };
+      }
+
+      function selectFallback() {
+        var pre = document.getElementById("report");
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      // Компиляция блокирует поток на секунды — сначала дадим странице отрисоваться.
+      setTimeout(run, 60);
+    </script>
+  </body>
+</html>

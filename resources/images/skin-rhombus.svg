@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- ромбы-сетка: центральный ромб + половинки по краям → бесшовный тайл -->
+  <g fill="none" stroke="#1c2a3a" stroke-width="46" stroke-opacity="0.9" stroke-linejoin="round">
+    <path d="M512 232 L792 512 L512 792 L232 512 Z"/>
+    <path d="M0 -280 L280 0 L0 280 L-280 0 Z"/>
+    <path d="M1024 -280 L1304 0 L1024 280 L744 0 Z"/>
+    <path d="M0 744 L280 1024 L0 1304 L-280 1024 Z"/>
+    <path d="M1024 744 L1304 1024 L1024 1304 L744 1024 Z"/>
+  </g>
+</svg>

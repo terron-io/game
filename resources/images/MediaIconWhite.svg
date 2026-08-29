@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: МЕДИА — рупор/мегафон (пропаганда). Плейсхолдер, тот же силуэт,
+       что колонка 16 icon-atlas. new-units/ULTIMATES.md -->
+  <!-- раструб (открыт вправо) -->
+  <polygon points="30,22 50,12 50,52 30,42"/>
+  <!-- горловина/мундштук -->
+  <rect x="18" y="27" width="13" height="10"/>
+  <!-- звуковые волны -->
+  <path d="M53 26 a8 8 0 0 1 0 12" fill="none" stroke="#fff" stroke-width="3"/>
+  <path d="M57 21 a14 14 0 0 1 0 22" fill="none" stroke="#fff" stroke-width="3"/>
+</svg>

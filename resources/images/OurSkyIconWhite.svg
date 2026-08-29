@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Небо наше — спутник: корпус-ромб + 2 солнечные панели по
+       диагонали + тарелка. Тот же силуэт, что колонка 15 icon-atlas
+       (new-units/gen-ult-assets.py draw_satellite). -->
+  <!-- корпус (ромб) -->
+  <polygon points="32,19 45,32 32,45 19,32"/>
+  <!-- перемычка + панель лево-верх -->
+  <rect x="14.5" y="17.5" width="10" height="4" transform="rotate(45 19.5 19.5)"/>
+  <polygon points="14,4 25,15 15,25 4,14"/>
+  <!-- перемычка + панель право-низ -->
+  <rect x="39.5" y="42.5" width="10" height="4" transform="rotate(45 44.5 44.5)"/>
+  <polygon points="50,40 60,50 50,60 39,49"/>
+  <!-- штанга + тарелка -->
+  <rect x="38.5" y="20.5" width="10" height="3" transform="rotate(-45 43.5 22.5)"/>
+  <circle cx="51" cy="15" r="7" fill="none" stroke="#fff" stroke-width="3"/>
+  <circle cx="51" cy="15" r="2.2"/>
+</svg>

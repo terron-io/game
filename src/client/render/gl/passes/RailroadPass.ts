@@ -1,0 +1,380 @@
+/**
+ * RailroadPass — GPU railroad overlay rendering.
+ *
+ * Renders railroad tracks as a fullscreen quad pass, reading rail orientation
+ * from an R8UI texture. Two LOD modes: detailed 3×3 sub-grid sprites at high
+ * zoom, screen-space anti-aliased lines at medium zoom. Hidden below minimum
+ * zoom threshold.
+ *
+ * Also renders ghost railroad paths (semi-transparent) for build-mode preview.
+ *
+ * Data flow:
+ *   Uint8Array railroadState → R8UI texture (rail type per tile, 0=none, 1-6=type)
+ *   GhostPreviewData         → R8UI ghost texture (ghost rail paths)
+ *   R8UI terrainTex           → water detection for bridge rendering (shader neighbor lookup)
+ *   R16UI tileTex (shared)   → owner lookup for rail color
+ *   RGBA32F paletteTex        → player color lookup
+ */
+
+import type { GhostPreviewData } from "../../types";
+import type { RenderSettings } from "../RenderSettings";
+import overlayVertSrc from "../shaders/map-overlay/overlay.vert.glsl?raw";
+import railroadFragSrc from "../shaders/railroad/railroad.frag.glsl?raw";
+import { getPaletteSize } from "../utils/ColorUtils";
+import {
+  createMapQuad,
+  createProgram,
+  createTexture2D,
+  shaderSrc,
+} from "../utils/GlUtils";
+import { TILE_DEFINES } from "../utils/TileCodec";
+
+// ---------------------------------------------------------------------------
+// Rail orientation (0-5) → texture value (1-6, 0=none)
+// ---------------------------------------------------------------------------
+
+const VERTICAL = 0;
+const HORIZONTAL = 1;
+const TOP_LEFT = 2;
+const TOP_RIGHT = 3;
+const BOTTOM_LEFT = 4;
+const BOTTOM_RIGHT = 5;
+
+function railExtremity(tile: number, next: number, w: number): number {
+  const dx = (next % w) - (tile % w);
+  const dy = (next - (next % w)) / w - (tile - (tile % w)) / w;
+  if (dx === 0) return VERTICAL;
+  if (dy === 0) return HORIZONTAL;
+  return VERTICAL;
+}
+
+function railDirection(
+  prev: number,
+  cur: number,
+  next: number,
+  w: number,
+): number {
+  const x1 = prev % w,
+    y1 = (prev - x1) / w;
+  const x2 = cur % w,
+    y2 = (cur - x2) / w;
+  const x3 = next % w,
+    y3 = (next - x3) / w;
+  const dx1 = x2 - x1,
+    dy1 = y2 - y1;
+  const dx2 = x3 - x2,
+    dy2 = y3 - y2;
+  if (dx1 === dx2 && dy1 === dy2) {
+    return dx1 !== 0 ? HORIZONTAL : VERTICAL;
+  }
+  if ((dx1 === 0 && dx2 !== 0) || (dx1 !== 0 && dx2 === 0)) {
+    if (dx1 === 0 && dx2 === 1 && dy1 === -1) return BOTTOM_RIGHT;
+    if (dx1 === 0 && dx2 === -1 && dy1 === -1) return BOTTOM_LEFT;
+    if (dx1 === 0 && dx2 === 1 && dy1 === 1) return TOP_RIGHT;
+    if (dx1 === 0 && dx2 === -1 && dy1 === 1) return TOP_LEFT;
+    if (dx1 === 1 && dx2 === 0 && dy2 === -1) return TOP_LEFT;
+    if (dx1 === -1 && dx2 === 0 && dy2 === -1) return TOP_RIGHT;
+    if (dx1 === 1 && dx2 === 0 && dy2 === 1) return BOTTOM_LEFT;
+    if (dx1 === -1 && dx2 === 0 && dy2 === 1) return BOTTOM_RIGHT;
+  }
+  return VERTICAL;
+}
+
+// ---------------------------------------------------------------------------
+// RailroadPass
+// ---------------------------------------------------------------------------
+
+export class RailroadPass {
+  private program: WebGLProgram;
+  private railroadTex: WebGLTexture;
+  private ghostRailTex: WebGLTexture;
+  private tileTex: WebGLTexture;
+  private paletteTex: WebGLTexture;
+  private terrainTex: WebGLTexture;
+  private vao: WebGLVertexArrayObject;
+
+  private uCamera: WebGLUniformLocation;
+  private uMapSize: WebGLUniformLocation;
+  private uZoom: WebGLUniformLocation;
+  private uRailDetailZoom: WebGLUniformLocation;
+  private uRailAlpha: WebGLUniformLocation;
+  private uRailFade: WebGLUniformLocation;
+  private uGhostOwnerID: WebGLUniformLocation;
+
+  private mapW: number;
+  private mapH: number;
+  private settings: RenderSettings;
+
+  private cpuRailroadState: Uint8Array;
+  private railroadDirty = false;
+
+  private cpuGhostRailState: Uint8Array;
+  private ghostRailDirty = false;
+  private ghostOwnerID = 0;
+
+  constructor(
+    private gl: WebGL2RenderingContext,
+    mapW: number,
+    mapH: number,
+    tileTex: WebGLTexture,
+    paletteTex: WebGLTexture,
+    terrainTex: WebGLTexture,
+    settings: RenderSettings,
+  ) {
+    this.mapW = mapW;
+    this.mapH = mapH;
+    this.tileTex = tileTex;
+    this.paletteTex = paletteTex;
+    this.settings = settings;
+    // terron ПЕРФ (память, 12.07): террейн для мостов — ОБЩАЯ R8UI-текстура
+    // (GPUResources), своя полнокарточная копия выпилена. CPU-буферы и 2 жд-
+    // текстуры — ЛЕНИВО в ensureFullSize() при первой ж/д или жд-госте.
+    this.terrainTex = terrainTex;
+    this.cpuRailroadState = new Uint8Array(0);
+    this.cpuGhostRailState = new Uint8Array(0);
+
+    this.program = createProgram(
+      gl,
+      overlayVertSrc,
+      shaderSrc(railroadFragSrc, {
+        PALETTE_SIZE: getPaletteSize(),
+        ...TILE_DEFINES,
+      }),
+    );
+
+    this.uCamera = gl.getUniformLocation(this.program, "uCamera")!;
+    this.uMapSize = gl.getUniformLocation(this.program, "uMapSize")!;
+    this.uZoom = gl.getUniformLocation(this.program, "uZoom")!;
+    this.uRailDetailZoom = gl.getUniformLocation(
+      this.program,
+      "uRailDetailZoom",
+    )!;
+    this.uRailAlpha = gl.getUniformLocation(this.program, "uRailAlpha")!;
+    this.uRailFade = gl.getUniformLocation(this.program, "uRailFade")!;
+    this.uGhostOwnerID = gl.getUniformLocation(this.program, "uGhostOwnerID")!;
+
+    // Texture unit bindings + ghost defaults
+    gl.useProgram(this.program);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uRailroadTex"), 0);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uTileTex"), 1);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uPalette"), 2);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uTerrainTex"), 3);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uGhostRailTex"), 4);
+    gl.uniform1f(this.uGhostOwnerID, 0);
+
+    // 1×1-заглушки; полный размер + данные — в ensureFullSize().
+    const stub = () =>
+      createTexture2D(gl, {
+        width: 1,
+        height: 1,
+        internalFormat: gl.R8UI,
+        format: gl.RED_INTEGER,
+        type: gl.UNSIGNED_BYTE,
+        data: null,
+        filter: gl.NEAREST,
+      });
+    this.railroadTex = stub();
+    this.ghostRailTex = stub();
+
+    this.vao = createMapQuad(gl, mapW, mapH);
+  }
+
+  // terron ПЕРФ (память): всё жд-хозяйство развёрнуто?
+  private fullSize = false;
+
+  /** Развернуть жд-текстуры и CPU-буферы (идемпотентно; первая ж/д или гост). */
+  private ensureFullSize(): void {
+    if (this.fullSize) return;
+    this.fullSize = true;
+    const gl = this.gl;
+    this.cpuRailroadState = new Uint8Array(this.mapW * this.mapH);
+    this.cpuGhostRailState = new Uint8Array(this.mapW * this.mapH);
+    const resize = (tex: WebGLTexture, data: Uint8Array | null) => {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.R8UI,
+        this.mapW,
+        this.mapH,
+        0,
+        gl.RED_INTEGER,
+        gl.UNSIGNED_BYTE,
+        data,
+      );
+    };
+    resize(this.railroadTex, this.cpuRailroadState);
+    resize(this.ghostRailTex, this.cpuGhostRailState);
+  }
+
+  uploadRailroadState(railroadState: Uint8Array): void {
+    // Зовётся только при изменениях ж/д (railroadDirty в Upload) —
+    // первое изменение = первая ж/д на карте → разворачиваемся.
+    this.ensureFullSize();
+    this.cpuRailroadState.set(railroadState);
+    this.railroadDirty = true;
+  }
+
+  // Water-nuke дельты terrain теперь пишет TerrainPass.applyTerrainDelta в
+  // ОБЩУЮ R8UI-текстуру — этот пасс видит их автоматически (мосты/вода).
+
+  updateGhostPreview(data: GhostPreviewData | null): void {
+    if (!this.fullSize) {
+      // Гост без жд-контента (город/порт и т.п.) — рисовать нечего, спим.
+      const hasRail =
+        data !== null &&
+        (data.ghostRailPaths.some((p) => p.length > 0) ||
+          data.overlappingRailroads.length > 0);
+      if (!hasRail) return;
+      this.ensureFullSize();
+    }
+    this.cpuGhostRailState.fill(0);
+
+    if (data) {
+      const maxRef = this.mapW * this.mapH;
+
+      // Ghost rail paths (1-6 = orientation)
+      for (const path of data.ghostRailPaths) {
+        if (path.length === 0) continue;
+        const tiles = this.computePathOrientations(path);
+        for (const t of tiles) {
+          if (t.ref >= 0 && t.ref < maxRef) {
+            this.cpuGhostRailState[t.ref] = t.type + 1;
+          }
+        }
+      }
+
+      // Overlapping railroad highlights (7 = green highlight marker)
+      // overlappingRailroads contains resolved tile refs (not rail IDs)
+      for (const ref of data.overlappingRailroads) {
+        if (ref >= 0 && ref < maxRef) {
+          this.cpuGhostRailState[ref] = 7;
+        }
+      }
+
+      this.ghostOwnerID = data.ownerID;
+    } else {
+      this.ghostOwnerID = 0;
+    }
+
+    this.ghostRailDirty = true;
+  }
+
+  /** Draw the railroad overlay. Must be called with alpha blending enabled. */
+  draw(cameraMatrix: Float32Array, zoom: number): void {
+    if (!this.fullSize) return; // ж/д ещё не появлялись
+    const gl = this.gl;
+    const rs = this.settings.railroad;
+
+    // Fade out as zoom drops below railMinZoom; fully invisible at railMinZoom - railFadeRange
+    const fadeRange = Math.max(rs.railFadeRange, 0);
+    const fadeStart = rs.railMinZoom - fadeRange;
+    const fade =
+      fadeRange <= 0
+        ? zoom >= rs.railMinZoom
+          ? 1
+          : 0
+        : Math.min(1, Math.max(0, (zoom - fadeStart) / fadeRange));
+    if (fade <= 0) return;
+
+    // Flush CPU railroad state → GPU
+    if (this.railroadDirty) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.railroadTex);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        this.mapW,
+        this.mapH,
+        gl.RED_INTEGER,
+        gl.UNSIGNED_BYTE,
+        this.cpuRailroadState,
+      );
+      this.railroadDirty = false;
+    }
+
+    // Flush ghost railroad state → GPU
+    if (this.ghostRailDirty) {
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.ghostRailTex);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        this.mapW,
+        this.mapH,
+        gl.RED_INTEGER,
+        gl.UNSIGNED_BYTE,
+        this.cpuGhostRailState,
+      );
+      this.ghostRailDirty = false;
+    }
+
+    gl.useProgram(this.program);
+    gl.uniformMatrix3fv(this.uCamera, false, cameraMatrix);
+    gl.uniform2f(this.uMapSize, this.mapW, this.mapH);
+    gl.uniform1f(this.uZoom, zoom);
+    gl.uniform1f(this.uRailDetailZoom, rs.railDetailZoom);
+    gl.uniform1f(this.uRailAlpha, rs.railAlpha);
+    gl.uniform1f(this.uRailFade, fade);
+    gl.uniform1f(this.uGhostOwnerID, this.ghostOwnerID);
+
+    // Bind textures: 0=railroad, 1=tile, 2=palette, 3=terrain, 4=ghostRail
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.railroadTex);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.tileTex);
+
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.paletteTex);
+
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.terrainTex);
+
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.ghostRailTex);
+
+    gl.bindVertexArray(this.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  // ---- Rail orientation computation ----
+
+  private computePathOrientations(
+    tileRefs: number[],
+  ): Array<{ ref: number; type: number }> {
+    if (tileRefs.length === 0) return [];
+    if (tileRefs.length === 1) return [{ ref: tileRefs[0], type: VERTICAL }];
+    const w = this.mapW;
+    const result: Array<{ ref: number; type: number }> = [];
+    result.push({
+      ref: tileRefs[0],
+      type: railExtremity(tileRefs[0], tileRefs[1], w),
+    });
+    for (let i = 1; i < tileRefs.length - 1; i++) {
+      result.push({
+        ref: tileRefs[i],
+        type: railDirection(tileRefs[i - 1], tileRefs[i], tileRefs[i + 1], w),
+      });
+    }
+    const last = tileRefs.length - 1;
+    result.push({
+      ref: tileRefs[last],
+      type: railExtremity(tileRefs[last], tileRefs[last - 1], w),
+    });
+    return result;
+  }
+
+  dispose(): void {
+    const gl = this.gl;
+    gl.deleteProgram(this.program);
+    gl.deleteTexture(this.railroadTex);
+    gl.deleteTexture(this.ghostRailTex);
+    // Don't delete tileTex/paletteTex/terrainTex — shared with other passes
+  }
+}

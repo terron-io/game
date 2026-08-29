@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Мирное небо — зонт-купол над горизонтом -->
+  <path d="M32 6C18 6 6 16 4 30h56C58 16 46 6 32 6z"/>
+  <path d="M30 30h4v22a6 6 0 0 1-12 0h4a2 2 0 0 0 4 0V30z"/>
+  <path d="M10 40h6v4h-6zM48 40h6v4h-6zM4 52h14v4H4zM46 52h14v4H46z"/>
+</svg>

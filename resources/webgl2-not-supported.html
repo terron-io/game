@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index,follow" />
+    <title>WebGL2 не поддерживается — как исправить · TERRON</title>
+    <style>
+      :root {
+        --bg: #efe6c8;
+        --sheet: #fffdf5;
+        --ink: #2b2a24;
+        --red: #b91c1c;
+        --blue: #1d4ed8;
+        --line: #d8cfa8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        line-height: 1.55;
+        font-size: 16px;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 64px; }
+      header { border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 20px; }
+      .brand { font-weight: 800; letter-spacing: 2px; font-size: 14px; }
+      h1 { font-size: 26px; margin: 8px 0 4px; }
+      h2 { font-size: 20px; margin: 28px 0 8px; border-left: 4px solid var(--red); padding-left: 10px; }
+      .sheet { background: var(--sheet); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; margin: 14px 0; }
+      code {
+        background: #f1ead2; border: 1px solid var(--line); border-radius: 3px;
+        padding: 1px 6px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 14px;
+        word-break: break-word;
+      }
+      a { color: var(--blue); }
+      ol, ul { padding-left: 22px; }
+      li { margin: 6px 0; }
+      .langbar { display: flex; gap: 8px; margin-bottom: 18px; }
+      .langbar button {
+        font: inherit; font-weight: 700; cursor: pointer;
+        border: 1px solid var(--ink); background: var(--sheet); color: var(--ink);
+        padding: 6px 14px; border-radius: 3px;
+      }
+      .langbar button.active { background: var(--ink); color: var(--sheet); }
+      .help { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .btnrow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+      .btnrow a {
+        display: inline-block; text-decoration: none; font-weight: 700;
+        border: 1px solid var(--ink); border-radius: 3px; padding: 8px 16px;
+        background: var(--sheet); color: var(--ink);
+      }
+      .note { font-size: 14px; opacity: .8; }
+      /* Language toggle: JS hides the inactive one; without JS both show. */
+      .js .lang-en { display: none; }
+      .js.show-en .lang-ru { display: none; }
+      .js.show-en .lang-en { display: block; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">TERRON</div>
+        <div class="langbar">
+          <button type="button" data-lang="ru" class="active">Русский</button>
+          <button type="button" data-lang="en">English</button>
+        </div>
+      </header>
+
+      <!-- ============ РУССКИЙ ============ -->
+      <section class="lang-ru">
+        <h1>Ошибка «WebGL2 not supported»</h1>
+        <p>
+          TERRON рисует карту через <strong>WebGL2</strong> — современную графику в браузере.
+          Эта ошибка значит, что ваш браузер не смог её включить. Обычно дело в
+          <strong>старом драйвере видеокарты</strong>, выключенном аппаратном ускорении
+          или отключённом WebGL. Ниже — как это починить (5 минут).
+        </p>
+
+        <div class="sheet">
+          <p style="margin:0"><strong>Проверка за 10 секунд.</strong> Откройте в
+            ТОМ ЖЕ браузере <code>https://webglreport.com/?v=2</code>. Если и там
+            «WebGL 2 is not supported» — дело не в игре, а в браузере/драйвере:
+            дальше по инструкции. Если там всё работает, а игра ругается —
+            напишите нам, это баг на нашей стороне.</p>
+        </div>
+
+        <h2>Firefox</h2>
+        <div class="sheet">
+          <ol>
+            <li><strong>Закройте Firefox ПОЛНОСТЬЮ</strong> (все окна, не просто
+              вкладку) и откройте заново. WebGL у Firefox работает в отдельном
+              GPU-процессе: если тот аварийно завершался несколько раз подряд,
+              браузер перестаёт выдавать WebGL до полного перезапуска — F5 и новая
+              вкладка тут не помогают. Признак ровно этот: «раньше играл, сегодня
+              перестало, а другие сайты работают».</li>
+            <li>
+              Откройте новую вкладку, введите <code>about:config</code>, нажмите
+              «Принять риск». В строке поиска по очереди найдите и выставьте:
+              <ul>
+                <li><code>webgl.disabled</code> → <strong>false</strong></li>
+                <li><code>webgl.force-enabled</code> → <strong>true</strong></li>
+                <li><code>webgl.enable-webgl2</code> → <strong>true</strong></li>
+                <li><code>webgl.disable-fail-if-major-performance-caveat</code> → <strong>true</strong></li>
+              </ul>
+            </li>
+            <li>Меню ≡ → <strong>Настройки</strong> → «Основные» → «Производительность»:
+              снимите «Использовать рекомендуемые», включите
+              <strong>«Использовать аппаратное ускорение, если доступно»</strong>.</li>
+            <li><strong>Перезапустите Firefox</strong> полностью и снова откройте игру.</li>
+            <li>Если не помогло — откройте <code>about:support</code>, раздел
+              «Графика»: строка <em>«WebGL 2 Driver Renderer»</em> и «Failure Log»
+              подскажут причину (чаще всего — драйвер в чёрном списке, см. ниже).</li>
+          </ol>
+        </div>
+
+        <h2>Chrome / Edge / Яндекс</h2>
+        <div class="sheet">
+          <ol>
+            <li><strong>Закройте браузер ПОЛНОСТЬЮ</strong> (все окна, а не
+              вкладку) и откройте заново. Если GPU-процесс браузера аварийно
+              завершался несколько раз подряд, браузер отключает ускорение до
+              полного перезапуска — обновление вкладки тут не помогает.</li>
+            <li>Настройки → «Система» → включите
+              <strong>«Использовать аппаратное ускорение (при наличии)»</strong>,
+              перезапустите браузер.</li>
+            <li>Откройте <code>chrome://gpu</code> — сверху в списке найдите
+              <em>«WebGL2»</em>. Если «Hardware accelerated» — WebGL2 в порядке;
+              если «Software only» или «Disabled» — причина в драйвере/железе.</li>
+            <li>Проверьте <code>chrome://flags</code> → поиск «WebGL»: ничего
+              не должно стоять в «Disabled».</li>
+          </ol>
+        </div>
+
+        <h2>Windows: не душите видеокарту энергосбережением</h2>
+        <div class="sheet">
+          <p>Если карта слабая (встроенная Intel, старый ноут), Windows может
+            гонять браузер в режиме экономии — а её и без того едва хватает. Из-за
+            этого игра рвётся в бою («WebGL2 not supported» на середине матча).
+            Разрешите браузеру полную производительность:</p>
+          <ol>
+            <li><strong>Настройки графики.</strong> «Параметры» → «Система» →
+              «Дисплей» → <strong>«Настройки графики»</strong> (в Windows 11:
+              «Дисплей» → «Графика»). Выберите «Классическое приложение» →
+              «Обзор» → укажите <code>chrome.exe</code> (обычно
+              <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code>) →
+              «Параметры» → <strong>«Высокая производительность»</strong>. Для
+              Edge/Яндекс — тот же путь, только свой <code>.exe</code>.</li>
+            <li><strong>Режим питания.</strong> «Параметры» → «Система» →
+              «Питание» (на ноутбуке — и от батареи, и от сети) → поставьте
+              <strong>«Максимальная производительность»</strong>, не «Экономия
+              заряда». Во время игры ноутбук держите на зарядке.</li>
+            <li>Перезапустите браузер (а лучше ПК) и снова откройте игру.</li>
+          </ol>
+          <p class="note">«Планирование графического процессора с аппаратным
+            ускорением» можно оставить как есть — на старых Intel оно погоды не
+            делает.</p>
+        </div>
+
+        <h2>Если всё равно не работает</h2>
+        <div class="sheet">
+          <ul>
+            <li><strong>Обновите драйвер видеокарты</strong> — самый частый случай
+              на Windows 7. Скачайте свежий с сайта NVIDIA / AMD / Intel и
+              перезагрузите ПК.</li>
+            <li><strong>Обновите браузер</strong> до последней версии (на Windows 7
+              последний Firefox — 115 ESR).</li>
+            <li>Очень старая видеокарта (до 2012 г.) может физически не уметь
+              WebGL2 — попробуйте другой компьютер или ноутбук.</li>
+            <li>Попробуйте <strong>другой браузер</strong> (Firefox ⇄ Chrome) —
+              иногда одному драйвер подходит, другому нет.</li>
+          </ul>
+        </div>
+
+        <div class="help">
+          <p>Не получилось? Напишите нам — поможем:</p>
+          <div class="btnrow">
+            <a href="https://t.me/terron_chat" target="_blank" rel="noopener noreferrer">Telegram · @terron_chat</a>
+            <a href="https://discord.gg/XUyw6EtcHX" target="_blank" rel="noopener noreferrer">Discord</a>
+          </div>
+          <p class="note" style="margin-top:14px">
+            <a href="/">← Вернуться на terron.io</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ ENGLISH ============ -->
+      <section class="lang-en">
+        <h1>“WebGL2 not supported” error</h1>
+        <p>
+          TERRON renders its map with <strong>WebGL2</strong> — modern in-browser
+          graphics. This error means your browser couldn't turn it on. It's almost
+          always an <strong>outdated graphics driver</strong>, hardware acceleration
+          switched off, or WebGL disabled. Here's how to fix it (about 5 minutes).
+        </p>
+
+        <div class="sheet">
+          <p style="margin:0"><strong>A 10-second check.</strong> In the SAME
+            browser open <code>https://webglreport.com/?v=2</code>. If it also says
+            “WebGL 2 is not supported”, the problem is your browser/driver — follow
+            the steps below. If that page works but the game still fails, tell us:
+            that one is our bug.</p>
+        </div>
+
+        <h2>Firefox</h2>
+        <div class="sheet">
+          <ol>
+            <li><strong>Quit Firefox completely</strong> (every window, not just the
+              tab) and start it again. Firefox runs WebGL in a separate GPU process:
+              once that process has crashed a few times, the browser stops handing
+              out WebGL until a full restart — reloading or opening a new tab won't
+              help. The tell-tale sign is exactly “it worked yesterday, today it
+              doesn't, and other sites are fine”.</li>
+            <li>
+              Open a new tab, type <code>about:config</code>, click “Accept the Risk”.
+              Search for and set each of these:
+              <ul>
+                <li><code>webgl.disabled</code> → <strong>false</strong></li>
+                <li><code>webgl.force-enabled</code> → <strong>true</strong></li>
+                <li><code>webgl.enable-webgl2</code> → <strong>true</strong></li>
+                <li><code>webgl.disable-fail-if-major-performance-caveat</code> → <strong>true</strong></li>
+              </ul>
+            </li>
+            <li>Menu ≡ → <strong>Settings</strong> → General → Performance: uncheck
+              “Use recommended…”, enable
+              <strong>“Use hardware acceleration when available”</strong>.</li>
+            <li><strong>Fully restart Firefox</strong> and open the game again.</li>
+            <li>Still failing? Open <code>about:support</code> → “Graphics”. The
+              <em>“WebGL 2 Driver Renderer”</em> and “Failure Log” lines show the
+              reason (usually a blocklisted driver — see below).</li>
+          </ol>
+        </div>
+
+        <h2>Chrome / Edge</h2>
+        <div class="sheet">
+          <ol>
+            <li><strong>Fully quit the browser</strong> (all windows, not just
+              the tab) and reopen it. After several GPU-process crashes the
+              browser disables acceleration until a full restart — reloading the
+              tab does not help.</li>
+            <li>Settings → “System” → enable
+              <strong>“Use hardware acceleration when available”</strong>, then
+              restart the browser.</li>
+            <li>Open <code>chrome://gpu</code> and find <em>“WebGL2”</em> near the
+              top. “Hardware accelerated” = good; “Software only” or “Disabled”
+              points to a driver/hardware issue.</li>
+            <li>Check <code>chrome://flags</code> → search “WebGL”: nothing should
+              be set to “Disabled”.</li>
+          </ol>
+        </div>
+
+        <h2>Windows: don't starve the GPU with power saving</h2>
+        <div class="sheet">
+          <p>On a weak GPU (integrated Intel, old laptop) Windows may run the
+            browser in power-saving mode — and it barely copes as it is. That's
+            what makes the game break mid-match (“WebGL2 not supported” after you
+            start playing). Let the browser run at full performance:</p>
+          <ol>
+            <li><strong>Graphics settings.</strong> Settings → System → Display →
+              <strong>“Graphics settings”</strong> (Windows 11: Display →
+              Graphics). Pick “Desktop app” → “Browse” → select
+              <code>chrome.exe</code> (usually
+              <code>C:\Program Files\Google\Chrome\Application\chrome.exe</code>) →
+              “Options” → <strong>“High performance”</strong>. For Edge use its
+              own <code>.exe</code>.</li>
+            <li><strong>Power mode.</strong> Settings → System → Power (on a
+              laptop, both on battery and plugged in) → set
+              <strong>“Best performance”</strong>, not “Battery saver”. Keep the
+              laptop plugged in while playing.</li>
+            <li>Restart the browser (ideally the whole PC) and open the game
+              again.</li>
+          </ol>
+          <p class="note">“Hardware-accelerated GPU scheduling” can be left as-is
+            — it makes little difference on old Intel.</p>
+        </div>
+
+        <h2>If it still doesn't work</h2>
+        <div class="sheet">
+          <ul>
+            <li><strong>Update your graphics driver</strong> — the most common fix,
+              especially on Windows 7. Get the latest from NVIDIA / AMD / Intel and
+              reboot.</li>
+            <li><strong>Update your browser</strong> to the latest version (on
+              Windows 7 the last Firefox is 115 ESR).</li>
+            <li>Very old GPUs (pre‑2012) may physically lack WebGL2 — try another
+              computer.</li>
+            <li>Try a <strong>different browser</strong> (Firefox ⇄ Chrome) — a
+              driver that fails in one sometimes works in the other.</li>
+          </ul>
+        </div>
+
+        <div class="help">
+          <p>Stuck? Reach out and we'll help:</p>
+          <div class="btnrow">
+            <a href="https://discord.gg/XUyw6EtcHX" target="_blank" rel="noopener noreferrer">Discord</a>
+            <a href="https://t.me/terron_chat" target="_blank" rel="noopener noreferrer">Telegram · @terron_chat</a>
+          </div>
+          <p class="note" style="margin-top:14px">
+            <a href="/">← Back to terron.io</a>
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (function () {
+        // .js живёт на <body> — селекторы .js.show-en тоже на body (иначе классы
+        // оказываются на разных элементах и переключение не срабатывает).
+        document.body.className += " js";
+        var btns = document.querySelectorAll(".langbar button");
+        // Default to browser language if it's English; otherwise Russian.
+        var wantEn = (navigator.language || "").slice(0, 2).toLowerCase() === "en";
+        function set(lang) {
+          if (lang === "en") { document.body.classList.add("show-en"); }
+          else { document.body.classList.remove("show-en"); }
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].className = btns[i].getAttribute("data-lang") === lang ? "active" : "";
+          }
+          document.documentElement.lang = lang;
+        }
+        for (var i = 0; i < btns.length; i++) {
+          btns[i].addEventListener("click", function () {
+            set(this.getAttribute("data-lang"));
+          });
+        }
+        set(wantEn ? "en" : "ru");
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff">
+  <!-- terron: ультимейты — Реваншизм: статуя-монумент, фигура с поднятой рукой. -->
+  <circle cx="10" cy="4" r="2"/>
+  <rect x="8.2" y="6" width="3.6" height="8.5" rx="1.2"/>
+  <rect x="8.2" y="14.5" width="1.5" height="4.6"/>
+  <rect x="10.3" y="14.5" width="1.5" height="4.6"/>
+  <path d="M10 7.5 L16 2" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round"/>
+  <circle cx="16.2" cy="1.9" r="1.5"/>
+  <path d="M10 7.5 L6 13.5" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round"/>
+  <rect x="6" y="19.1" width="8" height="1.7"/>
+  <rect x="4.5" y="20.8" width="11" height="2"/>
+</svg>

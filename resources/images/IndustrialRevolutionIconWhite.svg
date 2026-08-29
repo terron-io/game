@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Индустриальная революция — шестерня и заводские трубы -->
+  <path d="M20 6h8v22h-8zM32 12h8v16h-8zM12 28h36v6H12zM8 34h44v4H8z"/>
+  <path d="M40 38a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm0 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/>
+  <path d="M38 34h4v6h-4zM38 60h4v4h-4zM26 48h6v4h-6zM48 48h6v4h-6z"/>
+</svg>

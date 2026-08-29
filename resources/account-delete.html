@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TERRON.io — Удаление аккаунта / Delete account</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Golos+Text:wght@400;500;600&display=swap");
+      body {
+        font-family: "Golos Text", Arial, sans-serif;
+        background: #ece4cf;
+        line-height: 1.6;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 24px;
+        color: #333;
+      }
+      h1 {
+        color: #2b2a24;
+        font-family: "Oswald", sans-serif;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #6a5a3a;
+        font-family: "Oswald", sans-serif;
+        margin-top: 28px;
+      }
+      ol {
+        padding-left: 22px;
+      }
+      .btn {
+        display: inline-block;
+        margin-top: 18px;
+        padding: 12px 20px;
+        background: #b23b3b;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 700;
+      }
+      .note {
+        margin-top: 24px;
+        padding: 14px;
+        background: #fff6f6;
+        border: 1px solid #f0caca;
+        border-radius: 8px;
+      }
+      .lang-switch {
+        text-align: right;
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .lang-switch a {
+        color: #6a5a3a;
+        font-family: "Oswald", sans-serif;
+        cursor: pointer;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="max-width:800px;margin:0 auto;padding:18px 20px 0;"><a href="/" style="font-family:Oswald,sans-serif;font-weight:700;letter-spacing:.18em;color:#2b2a24;text-decoration:none;font-size:18px;">← TERRON.io</a></div>
+    <div class="lang-switch">
+      <a onclick="setLang('ru')">Рус</a> · <a onclick="setLang('en')">Eng</a>
+    </div>
+
+    <!-- ===================== RU ===================== -->
+    <div data-lang="ru">
+      <h1>Удаление аккаунта</h1>
+      <p>
+        Вы можете запросить удаление аккаунта TERRON.io и связанных с ним
+        персональных данных. <strong>Удаление необратимо: прогресс, рейтинг, достижения, скины и баланс внутриигровых валют (ЛТС/ПТС) будут стёрты.</strong>
+      </p>
+
+      <h2>Как это работает</h2>
+      <ol>
+        <li>Вы отправляете запрос на удаление с почты, привязанной к аккаунту.</li>
+        <li>Мы присылаем письмо с кодом подтверждения.</li>
+        <li>
+          После подтверждения аккаунт помечается на удаление. Действует
+          <strong>льготный период 30 дней</strong> — в это время вход в аккаунт
+          отменяет удаление.
+        </li>
+        <li>
+          На 20-й день мы пришлём напоминание («аккаунт будет удалён через 10
+          дней, можно отменить»).
+        </li>
+        <li>По истечении 30 дней аккаунт и персональные данные удаляются.</li>
+      </ol>
+
+      <p>
+        Чтобы запросить удаление, напишите нам с привязанной почты или нажмите
+        кнопку ниже:
+      </p>
+      <a
+        class="btn"
+        href="mailto:support@terron.io?subject=%D0%97%D0%B0%D0%BF%D1%80%D0%BE%D1%81%20%D0%BD%D0%B0%20%D1%83%D0%B4%D0%B0%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5%20%D0%B0%D0%BA%D0%BA%D0%B0%D1%83%D0%BD%D1%82%D0%B0&body=%D0%9F%D1%80%D0%BE%D1%88%D1%83%20%D1%83%D0%B4%D0%B0%D0%BB%D0%B8%D1%82%D1%8C%20%D0%BC%D0%BE%D0%B9%20%D0%B0%D0%BA%D0%BA%D0%B0%D1%83%D0%BD%D1%82%20terron."
+        >Запросить удаление аккаунта</a
+      >
+
+      <div class="note">
+        Часть обезличенных или агрегированных данных, а также данные, которые мы
+        обязаны хранить по закону, могут сохраняться после удаления аккаунта. См.
+        <a href="/privacy">Политику конфиденциальности</a>.
+      </div>
+    </div>
+
+    <!-- ===================== EN ===================== -->
+    <div data-lang="en" hidden>
+      <h1>Delete account</h1>
+      <p>
+        You can request deletion of your TERRON.io account and the associated
+        personal data. <strong>Deletion is irreversible: progress, rating, achievements, skins and your in-game currency balance (LTS/PTS) will be wiped.</strong>
+      </p>
+
+      <h2>How it works</h2>
+      <ol>
+        <li>You send a deletion request from the email linked to your account.</li>
+        <li>We send an email with a confirmation code.</li>
+        <li>
+          After confirmation the account is marked for deletion. A
+          <strong>30-day grace period</strong> applies — signing in during it
+          cancels the deletion.
+        </li>
+        <li>
+          On day 20 we send a reminder (“the account will be deleted in 10 days,
+          you can still cancel”).
+        </li>
+        <li>After 30 days the account and personal data are removed.</li>
+      </ol>
+
+      <p>
+        To request deletion, email us from your linked address or click the button
+        below:
+      </p>
+      <a
+        class="btn"
+        href="mailto:support@terron.io?subject=Account%20deletion%20request&body=Please%20delete%20my%20terron%20account%20and%20the%20associated%20personal%20data."
+        >Request account deletion</a
+      >
+
+      <div class="note">
+        Some anonymized or aggregated data, and data we are legally required to
+        keep, may be retained after account deletion. See the
+        <a href="/privacy">Privacy Policy</a>.
+      </div>
+    </div>
+
+    <script>
+      function applyLang(l) {
+        var en = (l || "").toLowerCase().indexOf("en") === 0;
+        document.querySelector('[data-lang="ru"]').hidden = en;
+        document.querySelector('[data-lang="en"]').hidden = !en;
+        document.documentElement.lang = en ? "en" : "ru";
+      }
+      function setLang(l) {
+        try {
+          localStorage.setItem("lang", l);
+        } catch (e) {}
+        applyLang(l);
+      }
+      applyLang(
+        (function () {
+          try {
+            return localStorage.getItem("lang") || navigator.language || "ru";
+          } catch (e) {
+            return "ru";
+          }
+        })(),
+      );
+    </script>
+  </body>
+</html>

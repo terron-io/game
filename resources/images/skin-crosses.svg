@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- мелкий тайл «тетрадь в клетку»: прозрачный фон (виден цвет игрока),
+       линии сетки по верх/лев краям (тайлятся бесшовно) + крестик в центре -->
+  <g fill="none" stroke="#1c2a3a" stroke-width="34" stroke-opacity="0.9">
+    <line x1="0" y1="0" x2="1024" y2="0"/>
+    <line x1="0" y1="0" x2="0" y2="1024"/>
+  </g>
+  <g stroke="#1c2a3a" stroke-width="60" stroke-linecap="round" stroke-opacity="0.95">
+    <line x1="512" y1="392" x2="512" y2="632"/>
+    <line x1="392" y1="512" x2="632" y2="512"/>
+  </g>
+</svg>

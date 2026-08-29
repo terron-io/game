@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: выстрел Доры — снаряд с прицельным крестом -->
+  <path d="M32 2c6 8 9 16 9 24v14H23V26c0-8 3-16 9-24zM23 44h18v8H23zM26 54h4v8h-4zM34 54h4v8h-4z"/>
+  <path d="M4 30h10v4H4zM50 30h10v4H50z"/>
+</svg>

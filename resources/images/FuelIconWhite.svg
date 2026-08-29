@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Топливо — цистерна с каплей -->
+  <path d="M6 22h40v24H6zM10 46h6v6h-6zM36 46h6v6h-6z"/>
+  <path d="M46 28h6l8 8v10h-14V28zm4 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+  <path d="M26 4c-4 6-8 9-8 13a8 8 0 0 0 16 0c0-4-4-7-8-13z"/>
+</svg>

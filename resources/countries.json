@@ -1,0 +1,3327 @@
+[
+  {
+    "code": "xx",
+    "name": "None",
+    "name_ru": "Без флага"
+  },
+  {
+    "code": "Abbasid Caliphate",
+    "continent": "Asia",
+    "name": "Abbasid Caliphate",
+    "name_ru": "Аббасидский халифат"
+  },
+  {
+    "code": "Achaemenid Empire",
+    "continent": "Asia",
+    "name": "Achaemenid Empire",
+    "name_ru": "Держава Ахеменидов"
+  },
+  {
+    "code": "Aceh",
+    "continent": "Asia",
+    "name": "Aceh",
+    "name_ru": "Ачех"
+  },
+  {
+    "code": "ae",
+    "continent": "Asia",
+    "name": "United Arab Emirates",
+    "name_ru": "ОАЭ"
+  },
+  {
+    "code": "af",
+    "continent": "Asia",
+    "name": "Afghanistan",
+    "name_ru": "Афганистан"
+  },
+  {
+    "code": "African union",
+    "continent": "Africa",
+    "name": "African Union",
+    "name_ru": "Африканский союз"
+  },
+  {
+    "code": "ag",
+    "continent": "North America",
+    "name": "Antigua and Barbuda",
+    "name_ru": "Антигуа и Барбуда"
+  },
+  {
+    "code": "ai",
+    "continent": "North America",
+    "name": "Anguilla",
+    "name_ru": "Ангилья"
+  },
+  {
+    "code": "1_Airgialla",
+    "continent": "Europe",
+    "name": "Airgialla",
+    "name_ru": "Айргиалла"
+  },
+  {
+    "code": "al",
+    "continent": "Europe",
+    "name": "Albania",
+    "name_ru": "Албания"
+  },
+  {
+    "code": "Alabama",
+    "continent": "North America",
+    "name": "Alabama",
+    "name_ru": "Алабама"
+  },
+  {
+    "code": "ax",
+    "continent": "Europe",
+    "name": "Aland Islands",
+    "name_ru": "Аландские острова"
+  },
+  {
+    "code": "Alaska",
+    "continent": "North America",
+    "name": "Alaska",
+    "name_ru": "Аляска"
+  },
+  {
+    "code": "alberta",
+    "continent": "North America",
+    "name": "Alberta",
+    "name_ru": "Альберта"
+  },
+  {
+    "code": "dz",
+    "continent": "Africa",
+    "name": "Algeria",
+    "name_ru": "Алжир"
+  },
+  {
+    "code": "Amazigh flag",
+    "continent": "Africa",
+    "name": "Amazigh Flag",
+    "name_ru": "Флаг амазигов"
+  },
+  {
+    "code": "amazonas",
+    "continent": "South America",
+    "name": "Amazonas",
+    "name_ru": "Амазонас"
+  },
+  {
+    "code": "as",
+    "continent": "Oceania",
+    "name": "American Samoa",
+    "name_ru": "Американское Самоа"
+  },
+  {
+    "code": "am",
+    "continent": "Asia",
+    "name": "Armenia",
+    "name_ru": "Армения"
+  },
+  {
+    "code": "Armenian SSR",
+    "continent": "Asia",
+    "name": "Armenian SSR",
+    "name_ru": "Армянская ССР"
+  },
+  {
+    "code": "Anarchist flag",
+    "name": "Anarchist Flag",
+    "name_ru": "Флаг анархистов"
+  },
+  {
+    "code": "ad",
+    "continent": "Europe",
+    "name": "Andorra",
+    "name_ru": "Андорра"
+  },
+  {
+    "code": "ao",
+    "continent": "Africa",
+    "name": "Angola",
+    "name_ru": "Ангола"
+  },
+  {
+    "code": "aq",
+    "name": "Antarctica",
+    "name_ru": "Антарктида"
+  },
+  {
+    "code": "antipope",
+    "continent": "Europe",
+    "name": "Anti-Pope",
+    "name_ru": "Антипапа"
+  },
+  {
+    "code": "aquitaine",
+    "continent": "Europe",
+    "name": "Aquitaine",
+    "name_ru": "Аквитания"
+  },
+  {
+    "code": "ar",
+    "continent": "South America",
+    "name": "Argentina",
+    "name_ru": "Аргентина"
+  },
+  {
+    "code": "Aram Damascus",
+    "continent": "Asia",
+    "name": "Aram Damascus",
+    "name_ru": "Арам-Дамаск"
+  },
+  {
+    "code": "Arabia",
+    "continent": "Asia",
+    "name": "Arabia",
+    "name_ru": "Аравия"
+  },
+  {
+    "code": "Arizona",
+    "continent": "North America",
+    "name": "Arizona",
+    "name_ru": "Аризона"
+  },
+  {
+    "code": "Arkansas",
+    "continent": "North America",
+    "name": "Arkansas",
+    "name_ru": "Арканзас"
+  },
+  {
+    "code": "armagnac",
+    "continent": "Europe",
+    "name": "Armagnac",
+    "name_ru": "Арманьяк"
+  },
+  {
+    "code": "aw",
+    "continent": "South America",
+    "name": "Aruba",
+    "name_ru": "Аруба"
+  },
+  {
+    "code": "sh-ac",
+    "continent": "Africa",
+    "name": "Ascension Island",
+    "name_ru": "Остров Вознесения"
+  },
+  {
+    "code": "Assyria",
+    "continent": "Asia",
+    "name": "Assyria",
+    "name_ru": "Ассирия"
+  },
+  {
+    "code": "asturias",
+    "continent": "Europe",
+    "name": "Asturias",
+    "name_ru": "Астурия"
+  },
+  {
+    "code": "Athens",
+    "continent": "Europe",
+    "name": "Athens",
+    "name_ru": "Афины"
+  },
+  {
+    "code": "at",
+    "continent": "Europe",
+    "name": "Austria",
+    "name_ru": "Австрия"
+  },
+  {
+    "code": "austria-hungary",
+    "continent": "Europe",
+    "name": "Austria-Hungary",
+    "name_ru": "Австро-Венгрия"
+  },
+  {
+    "code": "au",
+    "continent": "Oceania",
+    "name": "Australia",
+    "name_ru": "Австралия"
+  },
+  {
+    "code": "Azad Kashmir",
+    "continent": "Asia",
+    "name": "Azad Kashmir",
+    "name_ru": "Азад Кашмир"
+  },
+  {
+    "code": "az",
+    "continent": "Asia",
+    "name": "Azerbaijan",
+    "name_ru": "Азербайджан"
+  },
+  {
+    "code": "Azerbaijan SSR",
+    "continent": "Asia",
+    "name": "Azerbaijan SSR",
+    "name_ru": "Азербайджанская ССР"
+  },
+  {
+    "code": "Aztec Empire",
+    "continent": "North America",
+    "name": "Aztec Empire",
+    "name_ru": "Империя ацтеков"
+  },
+  {
+    "code": "bs",
+    "continent": "North America",
+    "name": "Bahamas",
+    "name_ru": "Багамы"
+  },
+  {
+    "code": "bahia",
+    "continent": "South America",
+    "name": "Bahia",
+    "name_ru": "Баия"
+  },
+  {
+    "code": "bh",
+    "continent": "Asia",
+    "name": "Bahrain",
+    "name_ru": "Бахрейн"
+  },
+  {
+    "code": "baguette",
+    "name": "Baguette",
+    "name_ru": "Багет"
+  },
+  {
+    "code": "bd",
+    "continent": "Asia",
+    "name": "Bangladesh",
+    "name_ru": "Бангладеш"
+  },
+  {
+    "code": "bb",
+    "continent": "North America",
+    "name": "Barbados",
+    "name_ru": "Барбадос"
+  },
+  {
+    "code": "Barbuda",
+    "continent": "North America",
+    "name": "Barbuda",
+    "name_ru": "Барбуда"
+  },
+  {
+    "code": "Babylonia",
+    "continent": "Asia",
+    "name": "Babylonia",
+    "name_ru": "Вавилония"
+  },
+  {
+    "code": "es-pv",
+    "continent": "Europe",
+    "name": "Basque Country",
+    "name_ru": "Страна Басков"
+  },
+  {
+    "code": "by",
+    "continent": "Europe",
+    "name": "Belarus",
+    "name_ru": "Беларусь"
+  },
+  {
+    "code": "be",
+    "continent": "Europe",
+    "name": "Belgium",
+    "name_ru": "Бельгия"
+  },
+  {
+    "code": "bz",
+    "continent": "North America",
+    "name": "Belize",
+    "name_ru": "Белиз"
+  },
+  {
+    "code": "bj",
+    "continent": "Africa",
+    "name": "Benin",
+    "name_ru": "Бенин"
+  },
+  {
+    "code": "bm",
+    "continent": "North America",
+    "name": "Bermuda",
+    "name_ru": "Бермудские острова"
+  },
+  {
+    "code": "bt",
+    "continent": "Asia",
+    "name": "Bhutan",
+    "name_ru": "Бутан"
+  },
+  {
+    "code": "bo",
+    "continent": "South America",
+    "name": "Bolivia",
+    "name_ru": "Боливия"
+  },
+  {
+    "code": "bq",
+    "continent": "South America",
+    "name": "Bonaire, Sint Eustatius and Saba",
+    "name_ru": "Бонэйр, Синт-Эстатиус и Саба"
+  },
+  {
+    "code": "ba",
+    "continent": "Europe",
+    "name": "Bosnia and Herzegovina",
+    "name_ru": "Босния и Герцеговина"
+  },
+  {
+    "code": "bw",
+    "continent": "Africa",
+    "name": "Botswana",
+    "name_ru": "Ботсвана"
+  },
+  {
+    "code": "bv",
+    "name": "Bouvet Island",
+    "name_ru": "Остров Буве"
+  },
+  {
+    "code": "br",
+    "continent": "South America",
+    "name": "Brazil",
+    "name_ru": "Бразилия"
+  },
+  {
+    "code": "britishcolumbia",
+    "continent": "North America",
+    "name": "British Columbia",
+    "name_ru": "Британская Колумбия"
+  },
+  {
+    "code": "io",
+    "continent": "Asia",
+    "name": "British Indian Ocean Territory",
+    "name_ru": "Британская территория в Индийском океане"
+  },
+  {
+    "code": "brittany",
+    "continent": "Europe",
+    "name": "Brittany",
+    "name_ru": "Бретань"
+  },
+  {
+    "code": "bn",
+    "continent": "Asia",
+    "name": "Brunei Darussalam",
+    "name_ru": "Бруней"
+  },
+  {
+    "code": "buenos_aires",
+    "continent": "South America",
+    "name": "Buenos Aires",
+    "name_ru": "Буэнос-Айрес"
+  },
+  {
+    "code": "bg",
+    "continent": "Europe",
+    "name": "Bulgaria",
+    "name_ru": "Болгария"
+  },
+  {
+    "code": "bf",
+    "continent": "Africa",
+    "name": "Burkina Faso",
+    "name_ru": "Буркина-Фасо"
+  },
+  {
+    "code": "burgundy",
+    "continent": "Europe",
+    "name": "Burgundy",
+    "name_ru": "Бургундия"
+  },
+  {
+    "code": "Burma",
+    "continent": "Asia",
+    "name": "Burma",
+    "name_ru": "Бирма"
+  },
+  {
+    "code": "bi",
+    "continent": "Africa",
+    "name": "Burundi",
+    "name_ru": "Бурунди"
+  },
+  {
+    "code": "Byelorussian SSR",
+    "continent": "Europe",
+    "name": "Byelorussian SSR",
+    "name_ru": "Белорусская ССР"
+  },
+  {
+    "code": "Byzantine Empire",
+    "continent": "Europe",
+    "name": "Byzantine Empire",
+    "name_ru": "Византийская империя"
+  },
+  {
+    "code": "cv",
+    "continent": "Africa",
+    "name": "Cabo Verde",
+    "name_ru": "Кабо-Верде"
+  },
+  {
+    "code": "California",
+    "continent": "North America",
+    "name": "California",
+    "name_ru": "Калифорния"
+  },
+  {
+    "code": "kh",
+    "continent": "Asia",
+    "name": "Cambodia",
+    "name_ru": "Камбоджа"
+  },
+  {
+    "code": "cm",
+    "continent": "Africa",
+    "name": "Cameroon",
+    "name_ru": "Камерун"
+  },
+  {
+    "code": "ca",
+    "continent": "North America",
+    "name": "Canada",
+    "name_ru": "Канада"
+  },
+  {
+    "code": "ic",
+    "continent": "Africa",
+    "name": "Canary Islands",
+    "name_ru": "Канарские острова"
+  },
+  {
+    "code": "Capybara",
+    "name": "Capybara",
+    "name_ru": "Капибара"
+  },
+  {
+    "code": "Carthage",
+    "continent": "Africa",
+    "name": "Carthage",
+    "name_ru": "Карфаген"
+  },
+  {
+    "code": "castille",
+    "continent": "Europe",
+    "name": "Castille",
+    "name_ru": "Кастилия"
+  },
+  {
+    "code": "catamarca",
+    "continent": "South America",
+    "name": "Catamarca",
+    "name_ru": "Катамарка"
+  },
+  {
+    "code": "es-ct",
+    "continent": "Europe",
+    "name": "Catalonia",
+    "name_ru": "Каталония"
+  },
+  {
+    "code": "ky",
+    "continent": "North America",
+    "name": "Cayman Islands",
+    "name_ru": "Острова Кайман"
+  },
+  {
+    "code": "Ceara",
+    "continent": "South America",
+    "name": "Ceará",
+    "name_ru": "Сеара"
+  },
+  {
+    "code": "cf",
+    "continent": "Africa",
+    "name": "Central African Republic",
+    "name_ru": "Центрально-Африканская Республика"
+  },
+  {
+    "code": "td",
+    "continent": "Africa",
+    "name": "Chad",
+    "name_ru": "Чад"
+  },
+  {
+    "code": "Chaldea",
+    "continent": "Asia",
+    "name": "Chaldea",
+    "name_ru": "Халдея"
+  },
+  {
+    "code": "cl",
+    "continent": "South America",
+    "name": "Chile",
+    "name_ru": "Чили"
+  },
+  {
+    "code": "Chin State",
+    "continent": "Asia",
+    "name": "Chin State",
+    "name_ru": "Штат Чин"
+  },
+  {
+    "code": "cn",
+    "continent": "Asia",
+    "name": "China",
+    "name_ru": "Китай"
+  },
+  {
+    "code": "Chinook",
+    "continent": "North America",
+    "name": "Chinook",
+    "name_ru": "Чинук"
+  },
+  {
+    "code": "cx",
+    "continent": "Asia",
+    "name": "Christmas Island",
+    "name_ru": "Остров Рождества"
+  },
+  {
+    "code": "Chuvashia",
+    "continent": "Europe",
+    "name": "Chuvashia",
+    "name_ru": "Чувашия"
+  },
+  {
+    "code": "Circassia",
+    "continent": "Asia",
+    "name": "Circassia",
+    "name_ru": "Черкесия"
+  },
+  {
+    "code": "cp",
+    "name": "Clipperton Island",
+    "name_ru": "Остров Клиппертон"
+  },
+  {
+    "code": "cc",
+    "continent": "Asia",
+    "name": "Cocos (Keeling) Islands",
+    "name_ru": "Кокосовые острова"
+  },
+  {
+    "code": "Colchis",
+    "continent": "Asia",
+    "name": "Colchis",
+    "name_ru": "Колхида"
+  },
+  {
+    "code": "co",
+    "continent": "South America",
+    "name": "Colombia",
+    "name_ru": "Колумбия"
+  },
+  {
+    "code": "Colorado",
+    "continent": "North America",
+    "name": "Colorado",
+    "name_ru": "Колорадо"
+  },
+  {
+    "code": "km",
+    "continent": "Africa",
+    "name": "Comoros",
+    "name_ru": "Коморы"
+  },
+  {
+    "code": "Communist flag",
+    "name": "Communist Flag",
+    "name_ru": "Флаг коммунистов"
+  },
+  {
+    "code": "Confederate States",
+    "continent": "North America",
+    "name": "Confederate States",
+    "name_ru": "Конфедеративные Штаты",
+    "restricted": true
+  },
+  {
+    "code": "1_Connacht",
+    "continent": "Europe",
+    "name": "Connacht",
+    "name_ru": "Коннахт"
+  },
+  {
+    "code": "ck",
+    "continent": "Oceania",
+    "name": "Cook Islands",
+    "name_ru": "Острова Кука"
+  },
+  {
+    "code": "cordoba",
+    "continent": "Europe",
+    "name": "Cordoba",
+    "name_ru": "Кордова"
+  },
+  {
+    "code": "Corsica",
+    "continent": "Europe",
+    "name": "Corsica",
+    "name_ru": "Корсика"
+  },
+  {
+    "code": "cr",
+    "continent": "North America",
+    "name": "Costa Rica",
+    "name_ru": "Коста-Рика"
+  },
+  {
+    "code": "ci",
+    "continent": "Africa",
+    "name": "Côte d'Ivoire",
+    "name_ru": "Кот-д’Ивуар"
+  },
+  {
+    "code": "hr",
+    "continent": "Europe",
+    "name": "Croatia",
+    "name_ru": "Хорватия"
+  },
+  {
+    "code": "Cthulhu Republic",
+    "name": "Cthulhu Republic",
+    "name_ru": "Республика Ктулху"
+  },
+  {
+    "code": "cu",
+    "continent": "North America",
+    "name": "Cuba",
+    "name_ru": "Куба"
+  },
+  {
+    "code": "cw",
+    "continent": "South America",
+    "name": "Curaçao",
+    "name_ru": "Кюрасао"
+  },
+  {
+    "code": "cy",
+    "continent": "Europe",
+    "name": "Cyprus",
+    "name_ru": "Кипр"
+  },
+  {
+    "code": "cz",
+    "continent": "Europe",
+    "name": "Czech Republic",
+    "name_ru": "Чехия"
+  },
+  {
+    "code": "Danu",
+    "continent": "Asia",
+    "name": "Danu",
+    "name_ru": "Дану"
+  },
+  {
+    "code": "Danzig",
+    "continent": "Europe",
+    "name": "Danzig",
+    "name_ru": "Данциг"
+  },
+  {
+    "code": "1_Dalriata",
+    "continent": "Europe",
+    "name": "Dál Riata",
+    "name_ru": "Дал Риада"
+  },
+  {
+    "code": "dk",
+    "continent": "Europe",
+    "name": "Denmark",
+    "name_ru": "Дания"
+  },
+  {
+    "code": "cd",
+    "continent": "Africa",
+    "name": "Democratic Republic of the Congo",
+    "name_ru": "Конго - Киншаса"
+  },
+  {
+    "code": "dg",
+    "continent": "Asia",
+    "name": "Diego Garcia",
+    "name_ru": "Диего-Гарсия"
+  },
+  {
+    "code": "Dilmun",
+    "continent": "Asia",
+    "name": "Dilmun",
+    "name_ru": "Дильмун"
+  },
+  {
+    "code": "dj",
+    "continent": "Africa",
+    "name": "Djibouti",
+    "name_ru": "Джибути"
+  },
+  {
+    "code": "dm",
+    "continent": "North America",
+    "name": "Dominica",
+    "name_ru": "Доминика"
+  },
+  {
+    "code": "do",
+    "continent": "North America",
+    "name": "Dominican Republic",
+    "name_ru": "Доминиканская Республика"
+  },
+  {
+    "code": "1_Dumnonia",
+    "continent": "Europe",
+    "name": "Dumnonia",
+    "name_ru": "Думнония"
+  },
+  {
+    "code": "Dutch East India Company",
+    "name": "Dutch East India Company",
+    "name_ru": "Голландская Ост-Индская компания"
+  },
+  {
+    "code": "1_Dyfed",
+    "continent": "Europe",
+    "name": "Dyfed",
+    "name_ru": "Дивед"
+  },
+  {
+    "code": "1_East Anglia",
+    "continent": "Europe",
+    "name": "East Anglia",
+    "name_ru": "Восточная Англия"
+  },
+  {
+    "code": "east_germany",
+    "continent": "Europe",
+    "name": "East Germany",
+    "name_ru": "ГДР"
+  },
+  {
+    "code": "ec",
+    "continent": "South America",
+    "name": "Ecuador",
+    "name_ru": "Эквадор"
+  },
+  {
+    "code": "eg",
+    "continent": "Africa",
+    "name": "Egypt",
+    "name_ru": "Египет"
+  },
+  {
+    "code": "Elam",
+    "continent": "Asia",
+    "name": "Elam",
+    "name_ru": "Элам"
+  },
+  {
+    "code": "sv",
+    "continent": "North America",
+    "name": "El Salvador",
+    "name_ru": "Сальвадор"
+  },
+  {
+    "code": "Emirate of Afghanistan",
+    "continent": "Asia",
+    "name": "Emirate of Afghanistan",
+    "name_ru": "Эмират Афганистан"
+  },
+  {
+    "code": "Emirate of Asir",
+    "continent": "Asia",
+    "name": "Emirate of Asir",
+    "name_ru": "Эмират Асир"
+  },
+  {
+    "code": "granada",
+    "continent": "Europe",
+    "name": "Emirate of Granada",
+    "name_ru": "Гранадский эмират"
+  },
+  {
+    "code": "Empire of Japan",
+    "continent": "Asia",
+    "name": "Empire of Japan",
+    "name_ru": "Японская империя",
+    "restricted": true
+  },
+  {
+    "code": "Empire of Japan1",
+    "continent": "Asia",
+    "name": "Empire of Japan",
+    "name_ru": "Японская империя"
+  },
+  {
+    "code": "gb-eng",
+    "continent": "Europe",
+    "name": "England",
+    "name_ru": "Англия"
+  },
+  {
+    "code": "gq",
+    "continent": "Africa",
+    "name": "Equatorial Guinea",
+    "name_ru": "Экваториальная Гвинея"
+  },
+  {
+    "code": "er",
+    "continent": "Africa",
+    "name": "Eritrea",
+    "name_ru": "Эритрея"
+  },
+  {
+    "code": "1_Essex",
+    "continent": "Europe",
+    "name": "Essex",
+    "name_ru": "Эссекс"
+  },
+  {
+    "code": "ee",
+    "continent": "Europe",
+    "name": "Estonia",
+    "name_ru": "Эстония"
+  },
+  {
+    "code": "Estonian SSR",
+    "continent": "Europe",
+    "name": "Estonian SSR",
+    "name_ru": "Эстонская ССР"
+  },
+  {
+    "code": "sz",
+    "continent": "Africa",
+    "name": "Eswatini",
+    "name_ru": "Эсватини"
+  },
+  {
+    "code": "et",
+    "continent": "Africa",
+    "name": "Ethiopia",
+    "name_ru": "Эфиопия"
+  },
+  {
+    "code": "Ethiopian Empire",
+    "continent": "Africa",
+    "name": "Ethiopian Empire",
+    "name_ru": "Эфиопская империя"
+  },
+  {
+    "code": "eu",
+    "continent": "Europe",
+    "name": "Europe",
+    "name_ru": "Европейский союз"
+  },
+  {
+    "code": "fk",
+    "continent": "South America",
+    "name": "Falkland Islands",
+    "name_ru": "Фолклендские острова"
+  },
+  {
+    "code": "fareasternrepublic",
+    "continent": "Asia",
+    "name": "Far Eastern Republic",
+    "name_ru": "Дальневосточная республика"
+  },
+  {
+    "code": "fo",
+    "continent": "Europe",
+    "name": "Faroe Islands",
+    "name_ru": "Фарерские острова"
+  },
+  {
+    "code": "Fascist Spain",
+    "continent": "Europe",
+    "name": "Fascist Spain",
+    "name_ru": "Франкистская Испания",
+    "restricted": true
+  },
+  {
+    "code": "fm",
+    "continent": "Oceania",
+    "name": "Federated States of Micronesia",
+    "name_ru": "Федеративные Штаты Микронезии"
+  },
+  {
+    "code": "fj",
+    "continent": "Oceania",
+    "name": "Fiji",
+    "name_ru": "Фиджи"
+  },
+  {
+    "code": "fi",
+    "continent": "Europe",
+    "name": "Finland",
+    "name_ru": "Финляндия"
+  },
+  {
+    "code": "Flanders",
+    "continent": "Europe",
+    "name": "Flanders",
+    "name_ru": "Фландрия"
+  },
+  {
+    "code": "Florida",
+    "continent": "North America",
+    "name": "Florida",
+    "name_ru": "Флорида"
+  },
+  {
+    "code": "1_Fortriu",
+    "continent": "Europe",
+    "name": "Fortriu",
+    "name_ru": "Фортриу"
+  },
+  {
+    "code": "fr",
+    "continent": "Europe",
+    "name": "France",
+    "name_ru": "Франция"
+  },
+  {
+    "code": "1_Franks",
+    "continent": "Europe",
+    "name": "Franks",
+    "name_ru": "Франки"
+  },
+  {
+    "code": "French foreign legion",
+    "name": "French Foreign Legion",
+    "name_ru": "Французский иностранный легион"
+  },
+  {
+    "code": "gf",
+    "continent": "South America",
+    "name": "French Guiana",
+    "name_ru": "Французская Гвиана"
+  },
+  {
+    "code": "pf",
+    "continent": "Oceania",
+    "name": "French Polynesia",
+    "name_ru": "Французская Полинезия"
+  },
+  {
+    "code": "frost_giant",
+    "name": "Frost Giant",
+    "name_ru": "Ледяной великан"
+  },
+  {
+    "code": "tf",
+    "continent": "Africa",
+    "name": "French Southern Territories",
+    "name_ru": "Французские Южные территории"
+  },
+  {
+    "code": "ga",
+    "continent": "Africa",
+    "name": "Gabon",
+    "name_ru": "Габон"
+  },
+  {
+    "code": "galapagos",
+    "continent": "South America",
+    "name": "Galápagos",
+    "name_ru": "Галапагосы"
+  },
+  {
+    "code": "es-ga",
+    "continent": "Europe",
+    "name": "Galicia",
+    "name_ru": "Галисия"
+  },
+  {
+    "code": "gm",
+    "continent": "Africa",
+    "name": "Gambia",
+    "name_ru": "Гамбия"
+  },
+  {
+    "code": "Garamant",
+    "continent": "Africa",
+    "name": "Garamantes",
+    "name_ru": "Гараманты"
+  },
+  {
+    "code": "ge",
+    "continent": "Asia",
+    "name": "Georgia",
+    "name_ru": "Грузия"
+  },
+  {
+    "code": "Georgia_US",
+    "continent": "North America",
+    "name": "Georgia (US State)",
+    "name_ru": "Джорджия (штат США)"
+  },
+  {
+    "code": "Georgian SSR",
+    "continent": "Asia",
+    "name": "Georgian SSR",
+    "name_ru": "Грузинская ССР"
+  },
+  {
+    "code": "German Empire",
+    "continent": "Europe",
+    "name": "German Empire",
+    "name_ru": "Германская империя",
+    "restricted": true
+  },
+  {
+    "code": "de",
+    "continent": "Europe",
+    "name": "Germany",
+    "name_ru": "Германия"
+  },
+  {
+    "code": "gh",
+    "continent": "Africa",
+    "name": "Ghana",
+    "name_ru": "Гана"
+  },
+  {
+    "code": "gi",
+    "continent": "Europe",
+    "name": "Gibraltar",
+    "name_ru": "Гибралтар"
+  },
+  {
+    "code": "gr",
+    "continent": "Europe",
+    "name": "Greece",
+    "name_ru": "Греция"
+  },
+  {
+    "code": "gl",
+    "continent": "North America",
+    "name": "Greenland",
+    "name_ru": "Гренландия"
+  },
+  {
+    "code": "gd",
+    "continent": "North America",
+    "name": "Grenada",
+    "name_ru": "Гренада"
+  },
+  {
+    "code": "gp",
+    "continent": "North America",
+    "name": "Guadeloupe",
+    "name_ru": "Гваделупа"
+  },
+  {
+    "code": "gu",
+    "continent": "Oceania",
+    "name": "Guam",
+    "name_ru": "Гуам"
+  },
+  {
+    "code": "gt",
+    "continent": "North America",
+    "name": "Guatemala",
+    "name_ru": "Гватемала"
+  },
+  {
+    "code": "gg",
+    "continent": "Europe",
+    "name": "Guernsey",
+    "name_ru": "Гернси"
+  },
+  {
+    "code": "gn",
+    "continent": "Africa",
+    "name": "Guinea",
+    "name_ru": "Гвинея"
+  },
+  {
+    "code": "gw",
+    "continent": "Africa",
+    "name": "Guinea-Bissau",
+    "name_ru": "Гвинея-Бисау"
+  },
+  {
+    "code": "1_Gwent",
+    "continent": "Europe",
+    "name": "Gwent",
+    "name_ru": "Гвент"
+  },
+  {
+    "code": "1_Gwynedd",
+    "continent": "Europe",
+    "name": "Gwynedd",
+    "name_ru": "Гвинед"
+  },
+  {
+    "code": "gy",
+    "continent": "South America",
+    "name": "Guyana",
+    "name_ru": "Гайана"
+  },
+  {
+    "code": "Habsburg Austria",
+    "continent": "Europe",
+    "name": "Habsburg Austria",
+    "name_ru": "Габсбургская Австрия"
+  },
+  {
+    "code": "ht",
+    "continent": "North America",
+    "name": "Haiti",
+    "name_ru": "Гаити"
+  },
+  {
+    "code": "Hawaii",
+    "continent": "Oceania",
+    "name": "Hawaii",
+    "name_ru": "Гавайи"
+  },
+  {
+    "code": "hm",
+    "name": "Heard Island and McDonald Islands",
+    "name_ru": "Острова Херд и Макдональд"
+  },
+  {
+    "code": "va",
+    "continent": "Europe",
+    "name": "Holy See",
+    "name_ru": "Ватикан"
+  },
+  {
+    "code": "Holy Roman Empire",
+    "continent": "Europe",
+    "name": "Holy Roman Empire",
+    "name_ru": "Священная Римская империя"
+  },
+  {
+    "code": "hn",
+    "continent": "North America",
+    "name": "Honduras",
+    "name_ru": "Гондурас"
+  },
+  {
+    "code": "hk",
+    "continent": "Asia",
+    "name": "Hong Kong",
+    "name_ru": "Гонконг"
+  },
+  {
+    "code": "hu",
+    "continent": "Europe",
+    "name": "Hungary",
+    "name_ru": "Венгрия"
+  },
+  {
+    "code": "Hyrcania",
+    "continent": "Asia",
+    "name": "Hyrcania",
+    "name_ru": "Гиркания"
+  },
+  {
+    "code": "is",
+    "continent": "Europe",
+    "name": "Iceland",
+    "name_ru": "Исландия"
+  },
+  {
+    "code": "Idaho",
+    "continent": "North America",
+    "name": "Idaho",
+    "name_ru": "Айдахо"
+  },
+  {
+    "code": "Illinois",
+    "continent": "North America",
+    "name": "Illinois",
+    "name_ru": "Иллинойс"
+  },
+  {
+    "code": "in",
+    "continent": "Asia",
+    "name": "India",
+    "name_ru": "Индия"
+  },
+  {
+    "code": "Indiana",
+    "continent": "North America",
+    "name": "Indiana",
+    "name_ru": "Индиана"
+  },
+  {
+    "code": "id",
+    "continent": "Asia",
+    "name": "Indonesia",
+    "name_ru": "Индонезия"
+  },
+  {
+    "code": "Iowa",
+    "continent": "North America",
+    "name": "Iowa",
+    "name_ru": "Айова"
+  },
+  {
+    "code": "iq",
+    "continent": "Asia",
+    "name": "Iraq",
+    "name_ru": "Ирак"
+  },
+  {
+    "code": "ir",
+    "continent": "Asia",
+    "name": "Iran",
+    "name_ru": "Иран"
+  },
+  {
+    "code": "Pahlavi Iran",
+    "continent": "Asia",
+    "name": "Pahlavi Iran",
+    "name_ru": "Иран Пехлеви"
+  },
+  {
+    "code": "ie",
+    "continent": "Europe",
+    "name": "Ireland",
+    "name_ru": "Ирландия"
+  },
+  {
+    "code": "im",
+    "continent": "Europe",
+    "name": "Isle of Man",
+    "name_ru": "Остров Мэн"
+  },
+  {
+    "code": "il",
+    "continent": "Asia",
+    "name": "Israel",
+    "name_ru": "Израиль"
+  },
+  {
+    "code": "it",
+    "continent": "Europe",
+    "name": "Italy",
+    "name_ru": "Италия"
+  },
+  {
+    "code": "jm",
+    "continent": "North America",
+    "name": "Jamaica",
+    "name_ru": "Ямайка"
+  },
+  {
+    "code": "Jammu and Kashmir",
+    "continent": "Asia",
+    "name": "Jammu and Kashmir",
+    "name_ru": "Джамму и Кашмир"
+  },
+  {
+    "code": "jp",
+    "continent": "Asia",
+    "name": "Japan",
+    "name_ru": "Япония"
+  },
+  {
+    "code": "je",
+    "continent": "Europe",
+    "name": "Jersey",
+    "name_ru": "Джерси"
+  },
+  {
+    "code": "Johor",
+    "continent": "Asia",
+    "name": "Johor",
+    "name_ru": "Джохор"
+  },
+  {
+    "code": "jo",
+    "continent": "Asia",
+    "name": "Jordan",
+    "name_ru": "Иордания"
+  },
+  {
+    "code": "Kachin",
+    "continent": "Asia",
+    "name": "Kachin",
+    "name_ru": "Качин"
+  },
+  {
+    "code": "Kansas",
+    "continent": "North America",
+    "name": "Kansas",
+    "name_ru": "Канзас"
+  },
+  {
+    "code": "Karelo-Finnish SSR",
+    "continent": "Europe",
+    "name": "Karelo-Finnish SSR",
+    "name_ru": "Карело-Финская ССР"
+  },
+  {
+    "code": "Kayah",
+    "continent": "Asia",
+    "name": "Kayah",
+    "name_ru": "Кая"
+  },
+  {
+    "code": "Kayin",
+    "continent": "Asia",
+    "name": "Kayin",
+    "name_ru": "Карен"
+  },
+  {
+    "code": "Kazakh SSR",
+    "continent": "Asia",
+    "name": "Kazakh SSR",
+    "name_ru": "Казахская ССР"
+  },
+  {
+    "code": "kz",
+    "continent": "Asia",
+    "name": "Kazakhstan",
+    "name_ru": "Казахстан"
+  },
+  {
+    "code": "Kedah",
+    "continent": "Asia",
+    "name": "Kedah",
+    "name_ru": "Кедах"
+  },
+  {
+    "code": "Kelantan",
+    "continent": "Asia",
+    "name": "Kelantan",
+    "name_ru": "Келантан"
+  },
+  {
+    "code": "Kemet",
+    "continent": "Africa",
+    "name": "Kemet",
+    "name_ru": "Кемет"
+  },
+  {
+    "code": "ke",
+    "continent": "Africa",
+    "name": "Kenya",
+    "name_ru": "Кения"
+  },
+  {
+    "code": "1_Kent",
+    "continent": "Europe",
+    "name": "Kent",
+    "name_ru": "Кент"
+  },
+  {
+    "code": "Kentucky",
+    "continent": "North America",
+    "name": "Kentucky",
+    "name_ru": "Кентукки"
+  },
+  {
+    "code": "Khemet",
+    "continent": "Africa",
+    "name": "Khemet",
+    "name_ru": "Хемет"
+  },
+  {
+    "code": "Kingdom of Egypt",
+    "continent": "Africa",
+    "name": "Kingdom of Egypt",
+    "name_ru": "Королевство Египет"
+  },
+  {
+    "code": "Kingdom of Iraq",
+    "continent": "Asia",
+    "name": "Kingdom of Iraq",
+    "name_ru": "Королевство Ирак"
+  },
+  {
+    "code": "italy",
+    "continent": "Europe",
+    "name": "Kingdom of Italy",
+    "name_ru": "Королевство Италия"
+  },
+  {
+    "code": "Kingdom of Jerusalem",
+    "continent": "Asia",
+    "name": "Kingdom of Jerusalem",
+    "name_ru": "Иерусалимское королевство"
+  },
+  {
+    "code": "Kingdom of Judah",
+    "continent": "Asia",
+    "name": "Kingdom of Judah",
+    "name_ru": "Иудейское царство"
+  },
+  {
+    "code": "Kingdom of Syria",
+    "continent": "Asia",
+    "name": "Kingdom of Syria",
+    "name_ru": "Королевство Сирия"
+  },
+  {
+    "code": "Kingdom of Yemen",
+    "continent": "Asia",
+    "name": "Kingdom of Yemen",
+    "name_ru": "Королевство Йемен"
+  },
+  {
+    "code": "Kirghiz SSR",
+    "continent": "Asia",
+    "name": "Kirghiz SSR",
+    "name_ru": "Киргизская ССР"
+  },
+  {
+    "code": "ki",
+    "continent": "Oceania",
+    "name": "Kiribati",
+    "name_ru": "Кирибати"
+  },
+  {
+    "code": "Kiwi",
+    "name": "Kiwi",
+    "name_ru": "Киви"
+  },
+  {
+    "code": "Kokang",
+    "continent": "Asia",
+    "name": "Kokang",
+    "name_ru": "Коканг"
+  },
+  {
+    "code": "xk",
+    "continent": "Europe",
+    "name": "Kosovo",
+    "name_ru": "Косово"
+  },
+  {
+    "code": "Kuala Lumpur",
+    "continent": "Asia",
+    "name": "Kuala Lumpur",
+    "name_ru": "Куала-Лумпур"
+  },
+  {
+    "code": "kurdistan",
+    "continent": "Asia",
+    "name": "Kurdistan",
+    "name_ru": "Курдистан"
+  },
+  {
+    "code": "Kush",
+    "continent": "Africa",
+    "name": "Kush",
+    "name_ru": "Куш"
+  },
+  {
+    "code": "kw",
+    "continent": "Asia",
+    "name": "Kuwait",
+    "name_ru": "Кувейт"
+  },
+  {
+    "code": "kg",
+    "continent": "Asia",
+    "name": "Kyrgyzstan",
+    "name_ru": "Киргизия"
+  },
+  {
+    "code": "Labuan",
+    "continent": "Asia",
+    "name": "Labuan",
+    "name_ru": "Лабуан"
+  },
+  {
+    "code": "1_Laigin",
+    "continent": "Europe",
+    "name": "Laigin",
+    "name_ru": "Лагин"
+  },
+  {
+    "code": "la",
+    "continent": "Asia",
+    "name": "Laos",
+    "name_ru": "Лаос"
+  },
+  {
+    "code": "lv",
+    "continent": "Europe",
+    "name": "Latvia",
+    "name_ru": "Латвия"
+  },
+  {
+    "code": "Latvian SSR",
+    "continent": "Europe",
+    "name": "Latvian SSR",
+    "name_ru": "Латвийская ССР"
+  },
+  {
+    "code": "League of Nations",
+    "name": "League of Nations",
+    "name_ru": "Лига Наций"
+  },
+  {
+    "code": "lb",
+    "continent": "Asia",
+    "name": "Lebanon",
+    "name_ru": "Ливан"
+  },
+  {
+    "code": "Leinster",
+    "continent": "Europe",
+    "name": "Leinster",
+    "name_ru": "Ленстер"
+  },
+  {
+    "code": "leon",
+    "continent": "Europe",
+    "name": "León",
+    "name_ru": "Леон"
+  },
+  {
+    "code": "ls",
+    "continent": "Africa",
+    "name": "Lesotho",
+    "name_ru": "Лесото"
+  },
+  {
+    "code": "lr",
+    "continent": "Africa",
+    "name": "Liberia",
+    "name_ru": "Либерия"
+  },
+  {
+    "code": "Liberalism_flag",
+    "name": "Liberalism Flag",
+    "name_ru": "Флаг либерализма"
+  },
+  {
+    "code": "Libyan Jamahiriya",
+    "continent": "Africa",
+    "name": "Libyan Jamahiriya",
+    "name_ru": "Ливийская Джамахирия"
+  },
+  {
+    "code": "ly",
+    "continent": "Africa",
+    "name": "Libya",
+    "name_ru": "Ливия"
+  },
+  {
+    "code": "li",
+    "continent": "Europe",
+    "name": "Liechtenstein",
+    "name_ru": "Лихтенштейн"
+  },
+  {
+    "code": "Listenbourg",
+    "name": "Listenbourg",
+    "name_ru": "Листенбург"
+  },
+  {
+    "code": "lt",
+    "continent": "Europe",
+    "name": "Lithuania",
+    "name_ru": "Литва"
+  },
+  {
+    "code": "Lithuanian SSR",
+    "continent": "Europe",
+    "name": "Lithuanian SSR",
+    "name_ru": "Литовская ССР"
+  },
+  {
+    "code": "Louisiana",
+    "continent": "North America",
+    "name": "Louisiana",
+    "name_ru": "Луизиана"
+  },
+  {
+    "code": "Lower Silesia",
+    "continent": "Europe",
+    "name": "Lower Silesia",
+    "name_ru": "Нижняя Силезия"
+  },
+  {
+    "code": "lu",
+    "continent": "Europe",
+    "name": "Luxembourg",
+    "name_ru": "Люксембург"
+  },
+  {
+    "code": "Lydia",
+    "continent": "Asia",
+    "name": "Lydia",
+    "name_ru": "Лидия"
+  },
+  {
+    "code": "Macedonia",
+    "continent": "Europe",
+    "name": "Macedonia",
+    "name_ru": "Македония"
+  },
+  {
+    "code": "manitoba",
+    "continent": "North America",
+    "name": "Manitoba",
+    "name_ru": "Манитоба"
+  },
+  {
+    "code": "mo",
+    "continent": "Asia",
+    "name": "Macau",
+    "name_ru": "Макао"
+  },
+  {
+    "code": "mg",
+    "continent": "Africa",
+    "name": "Madagascar",
+    "name_ru": "Мадагаскар"
+  },
+  {
+    "code": "Maine",
+    "continent": "North America",
+    "name": "Maine",
+    "name_ru": "Мэн"
+  },
+  {
+    "code": "Majapahit",
+    "continent": "Asia",
+    "name": "Majapahit",
+    "name_ru": "Маджапахит"
+  },
+  {
+    "code": "Massachusetts",
+    "continent": "North America",
+    "name": "Massachusetts",
+    "name_ru": "Массачусетс"
+  },
+  {
+    "code": "Malacca",
+    "continent": "Asia",
+    "name": "Malacca",
+    "name_ru": "Малакка"
+  },
+  {
+    "code": "mw",
+    "continent": "Africa",
+    "name": "Malawi",
+    "name_ru": "Малави"
+  },
+  {
+    "code": "my",
+    "continent": "Asia",
+    "name": "Malaysia",
+    "name_ru": "Малайзия"
+  },
+  {
+    "code": "mv",
+    "continent": "Asia",
+    "name": "Maldives",
+    "name_ru": "Мальдивы"
+  },
+  {
+    "code": "ml",
+    "continent": "Africa",
+    "name": "Mali",
+    "name_ru": "Мали"
+  },
+  {
+    "code": "mt",
+    "continent": "Europe",
+    "name": "Malta",
+    "name_ru": "Мальта"
+  },
+  {
+    "code": "Maori flag",
+    "continent": "Oceania",
+    "name": "Māori Flag",
+    "name_ru": "Флаг маори"
+  },
+  {
+    "code": "mh",
+    "continent": "Oceania",
+    "name": "Marshall Islands",
+    "name_ru": "Маршалловы острова"
+  },
+  {
+    "code": "mq",
+    "continent": "North America",
+    "name": "Martinique",
+    "name_ru": "Мартиника"
+  },
+  {
+    "code": "Maryland",
+    "continent": "North America",
+    "name": "Maryland",
+    "name_ru": "Мэриленд"
+  },
+  {
+    "code": "mr",
+    "continent": "Africa",
+    "name": "Mauritania",
+    "name_ru": "Мавритания"
+  },
+  {
+    "code": "mu",
+    "continent": "Africa",
+    "name": "Mauritius",
+    "name_ru": "Маврикий"
+  },
+  {
+    "code": "yt",
+    "continent": "Africa",
+    "name": "Mayotte",
+    "name_ru": "Майотта"
+  },
+  {
+    "code": "Median Empire",
+    "continent": "Asia",
+    "name": "Median Empire",
+    "name_ru": "Мидийское царство"
+  },
+  {
+    "code": "1_Mercia",
+    "continent": "Europe",
+    "name": "Mercia",
+    "name_ru": "Мерсия"
+  },
+  {
+    "code": "mx",
+    "continent": "North America",
+    "name": "Mexico",
+    "name_ru": "Мексика"
+  },
+  {
+    "code": "Michigan",
+    "continent": "North America",
+    "name": "Michigan",
+    "name_ru": "Мичиган"
+  },
+  {
+    "code": "minas_gerais",
+    "continent": "South America",
+    "name": "Minas Gerais",
+    "name_ru": "Минас-Жерайс"
+  },
+  {
+    "code": "Minnesota",
+    "continent": "North America",
+    "name": "Minnesota",
+    "name_ru": "Миннесота"
+  },
+  {
+    "code": "Mississippi",
+    "continent": "North America",
+    "name": "Mississippi",
+    "name_ru": "Миссисипи"
+  },
+  {
+    "code": "Missouri",
+    "continent": "North America",
+    "name": "Missouri",
+    "name_ru": "Миссури"
+  },
+  {
+    "code": "Moldavian SSR",
+    "continent": "Europe",
+    "name": "Moldavian SSR",
+    "name_ru": "Молдавская ССР"
+  },
+  {
+    "code": "md",
+    "continent": "Europe",
+    "name": "Moldova",
+    "name_ru": "Молдова"
+  },
+  {
+    "code": "Mon State",
+    "continent": "Asia",
+    "name": "Mon State",
+    "name_ru": "Штат Мон"
+  },
+  {
+    "code": "mc",
+    "continent": "Europe",
+    "name": "Monaco",
+    "name_ru": "Монако"
+  },
+  {
+    "code": "Mongol Empire",
+    "continent": "Asia",
+    "name": "Mongol Empire",
+    "name_ru": "Монгольская империя"
+  },
+  {
+    "code": "mn",
+    "continent": "Asia",
+    "name": "Mongolia",
+    "name_ru": "Монголия"
+  },
+  {
+    "code": "Montana",
+    "continent": "North America",
+    "name": "Montana",
+    "name_ru": "Монтана"
+  },
+  {
+    "code": "me",
+    "continent": "Europe",
+    "name": "Montenegro",
+    "name_ru": "Черногория"
+  },
+  {
+    "code": "ms",
+    "continent": "North America",
+    "name": "Montserrat",
+    "name_ru": "Монтсеррат"
+  },
+  {
+    "code": "ma",
+    "continent": "Africa",
+    "name": "Morocco",
+    "name_ru": "Марокко"
+  },
+  {
+    "code": "Mosquito Kingdom",
+    "continent": "North America",
+    "name": "Mosquito Kingdom",
+    "name_ru": "Королевство Москитового берега"
+  },
+  {
+    "code": "mz",
+    "continent": "Africa",
+    "name": "Mozambique",
+    "name_ru": "Мозамбик"
+  },
+  {
+    "code": "1_Munster",
+    "continent": "Europe",
+    "name": "Munster",
+    "name_ru": "Манстер"
+  },
+  {
+    "code": "mm",
+    "continent": "Asia",
+    "name": "Myanmar",
+    "name_ru": "Мьянма"
+  },
+  {
+    "code": "Naga",
+    "continent": "Asia",
+    "name": "Naga",
+    "name_ru": "Нага"
+  },
+  {
+    "code": "na",
+    "continent": "Africa",
+    "name": "Namibia",
+    "name_ru": "Намибия"
+  },
+  {
+    "code": "NATO",
+    "name": "NATO",
+    "name_ru": "НАТО"
+  },
+  {
+    "code": "nr",
+    "continent": "Oceania",
+    "name": "Nauru",
+    "name_ru": "Науру"
+  },
+  {
+    "code": "Nebraska",
+    "continent": "North America",
+    "name": "Nebraska",
+    "name_ru": "Небраска"
+  },
+  {
+    "code": "Negeri Sembilan",
+    "continent": "Asia",
+    "name": "Negeri Sembilan",
+    "name_ru": "Негери-Сембилан"
+  },
+  {
+    "code": "np",
+    "continent": "Asia",
+    "name": "Nepal",
+    "name_ru": "Непал"
+  },
+  {
+    "code": "nl",
+    "continent": "Europe",
+    "name": "Netherlands",
+    "name_ru": "Нидерланды"
+  },
+  {
+    "code": "neuragic_empire",
+    "name": "Neuragic Empire",
+    "name_ru": "Нурагическая цивилизация"
+  },
+  {
+    "code": "Nevada",
+    "continent": "North America",
+    "name": "Nevada",
+    "name_ru": "Невада"
+  },
+  {
+    "code": "Nevis",
+    "continent": "North America",
+    "name": "Nevis",
+    "name_ru": "Невис"
+  },
+  {
+    "code": "newbrunswick",
+    "continent": "North America",
+    "name": "New Brunswick",
+    "name_ru": "Нью-Брансуик"
+  },
+  {
+    "code": "nc",
+    "continent": "Oceania",
+    "name": "New Caledonia",
+    "name_ru": "Новая Каледония"
+  },
+  {
+    "code": "newfoundlandandlabrador",
+    "continent": "North America",
+    "name": "Newfoundland and Labrador",
+    "name_ru": "Ньюфаундленд и Лабрадор"
+  },
+  {
+    "code": "New_Hampshire",
+    "continent": "North America",
+    "name": "New Hampshire",
+    "name_ru": "Нью-Гэмпшир"
+  },
+  {
+    "code": "New_Jersey",
+    "continent": "North America",
+    "name": "New Jersey",
+    "name_ru": "Нью-Джерси"
+  },
+  {
+    "code": "New_Mexico",
+    "continent": "North America",
+    "name": "New Mexico",
+    "name_ru": "Нью-Мексико"
+  },
+  {
+    "code": "New_York",
+    "continent": "North America",
+    "name": "New York",
+    "name_ru": "Нью-Йорк"
+  },
+  {
+    "code": "nz",
+    "continent": "Oceania",
+    "name": "New Zealand",
+    "name_ru": "Новая Зеландия"
+  },
+  {
+    "code": "ni",
+    "continent": "North America",
+    "name": "Nicaragua",
+    "name_ru": "Никарагуа"
+  },
+  {
+    "code": "ne",
+    "continent": "Africa",
+    "name": "Niger",
+    "name_ru": "Нигер"
+  },
+  {
+    "code": "ng",
+    "continent": "Africa",
+    "name": "Nigeria",
+    "name_ru": "Нигерия"
+  },
+  {
+    "code": "nu",
+    "continent": "Oceania",
+    "name": "Niue",
+    "name_ru": "Ниуэ"
+  },
+  {
+    "code": "nf",
+    "continent": "Oceania",
+    "name": "Norfolk Island",
+    "name_ru": "Остров Норфолк"
+  },
+  {
+    "code": "normandy",
+    "continent": "Europe",
+    "name": "Normandy",
+    "name_ru": "Нормандия"
+  },
+  {
+    "code": "North karelia",
+    "continent": "Europe",
+    "name": "North Karelia",
+    "name_ru": "Северная Карелия"
+  },
+  {
+    "code": "North_Carolina",
+    "continent": "North America",
+    "name": "North Carolina",
+    "name_ru": "Северная Каролина"
+  },
+  {
+    "code": "North_Dakota",
+    "continent": "North America",
+    "name": "North Dakota",
+    "name_ru": "Северная Дакота"
+  },
+  {
+    "code": "kp",
+    "continent": "Asia",
+    "name": "North Korea",
+    "name_ru": "КНДР"
+  },
+  {
+    "code": "mk",
+    "continent": "Europe",
+    "name": "North Macedonia",
+    "name_ru": "Северная Македония"
+  },
+  {
+    "code": "northern_ireland",
+    "continent": "Europe",
+    "name": "Northern Ireland",
+    "name_ru": "Северная Ирландия"
+  },
+  {
+    "code": "mp",
+    "continent": "Oceania",
+    "name": "Northern Mariana Islands",
+    "name_ru": "Северные Марианские острова"
+  },
+  {
+    "code": "1_Northern Ui Neill",
+    "continent": "Europe",
+    "name": "Northern Uí Néill",
+    "name_ru": "Северные Уи Нейлл"
+  },
+  {
+    "code": "1_Northumbria",
+    "continent": "Europe",
+    "name": "Northumbria",
+    "name_ru": "Нортумбрия"
+  },
+  {
+    "code": "northwestterritories",
+    "continent": "North America",
+    "name": "Northwest Territories",
+    "name_ru": "Северо-Западные территории"
+  },
+  {
+    "code": "no",
+    "continent": "Europe",
+    "name": "Norway",
+    "name_ru": "Норвегия"
+  },
+  {
+    "code": "novascotia",
+    "continent": "North America",
+    "name": "Nova Scotia",
+    "name_ru": "Новая Шотландия"
+  },
+  {
+    "code": "Nunavut",
+    "continent": "North America",
+    "name": "Nunavut",
+    "name_ru": "Нунавут"
+  },
+  {
+    "code": "1_Occitania",
+    "continent": "Europe",
+    "name": "Occitania",
+    "name_ru": "Окситания"
+  },
+  {
+    "code": "Ohio",
+    "continent": "North America",
+    "name": "Ohio",
+    "name_ru": "Огайо"
+  },
+  {
+    "code": "Oklahoma",
+    "continent": "North America",
+    "name": "Oklahoma",
+    "name_ru": "Оклахома"
+  },
+  {
+    "code": "om",
+    "continent": "Asia",
+    "name": "Oman",
+    "name_ru": "Оман"
+  },
+  {
+    "code": "ontario",
+    "continent": "North America",
+    "name": "Ontario",
+    "name_ru": "Онтарио"
+  },
+  {
+    "code": "Oregon",
+    "continent": "North America",
+    "name": "Oregon",
+    "name_ru": "Орегон"
+  },
+  {
+    "code": "Ottoman Empire",
+    "continent": "Asia",
+    "name": "Ottoman Empire",
+    "name_ru": "Османская империя"
+  },
+  {
+    "code": "Pahang",
+    "continent": "Asia",
+    "name": "Pahang",
+    "name_ru": "Паханг"
+  },
+  {
+    "code": "pk",
+    "continent": "Asia",
+    "name": "Pakistan",
+    "name_ru": "Пакистан"
+  },
+  {
+    "code": "pw",
+    "continent": "Oceania",
+    "name": "Palau",
+    "name_ru": "Палау"
+  },
+  {
+    "code": "Palaung",
+    "continent": "Asia",
+    "name": "Palaung",
+    "name_ru": "Палаунг"
+  },
+  {
+    "code": "Palekh",
+    "continent": "Europe",
+    "name": "Palekh",
+    "name_ru": "Палех"
+  },
+  {
+    "code": "pa",
+    "continent": "North America",
+    "name": "Panama",
+    "name_ru": "Панама"
+  },
+  {
+    "code": "Pa-O",
+    "continent": "Asia",
+    "name": "Pa'O",
+    "name_ru": "Па-О"
+  },
+  {
+    "code": "pg",
+    "continent": "Oceania",
+    "name": "Papua New Guinea",
+    "name_ru": "Папуа — Новая Гвинея"
+  },
+  {
+    "code": "Para",
+    "continent": "South America",
+    "name": "Pará",
+    "name_ru": "Пара"
+  },
+  {
+    "code": "py",
+    "continent": "South America",
+    "name": "Paraguay",
+    "name_ru": "Парагвай"
+  },
+  {
+    "code": "paris",
+    "continent": "Europe",
+    "name": "Paris",
+    "name_ru": "Париж"
+  },
+  {
+    "code": "Pennsylvania",
+    "continent": "North America",
+    "name": "Pennsylvania",
+    "name_ru": "Пенсильвания"
+  },
+  {
+    "code": "pe",
+    "continent": "South America",
+    "name": "Peru",
+    "name_ru": "Перу"
+  },
+  {
+    "code": "Persia",
+    "continent": "Asia",
+    "name": "Persia",
+    "name_ru": "Персия"
+  },
+  {
+    "code": "Penang",
+    "continent": "Asia",
+    "name": "Penang",
+    "name_ru": "Пенанг"
+  },
+  {
+    "code": "Perak",
+    "continent": "Asia",
+    "name": "Perak",
+    "name_ru": "Перак"
+  },
+  {
+    "code": "ph",
+    "continent": "Asia",
+    "name": "Philippines",
+    "name_ru": "Филиппины"
+  },
+  {
+    "code": "Philippines (war)",
+    "continent": "Asia",
+    "name": "Philippines (war)",
+    "name_ru": "Филиппины (военный флаг)"
+  },
+  {
+    "code": "Phrygia",
+    "continent": "Asia",
+    "name": "Phrygia",
+    "name_ru": "Фригия"
+  },
+  {
+    "code": "pn",
+    "continent": "Oceania",
+    "name": "Pitcairn",
+    "name_ru": "Острова Питкэрн"
+  },
+  {
+    "code": "pl",
+    "continent": "Europe",
+    "name": "Poland",
+    "name_ru": "Польша"
+  },
+  {
+    "code": "polar_bears",
+    "name": "Polar Bears",
+    "name_ru": "Белые медведи"
+  },
+  {
+    "code": "Polish–Lithuanian Commonwealth",
+    "continent": "Europe",
+    "name": "Polish–Lithuanian Commonwealth",
+    "name_ru": "Речь Посполитая"
+  },
+  {
+    "code": "pt",
+    "continent": "Europe",
+    "name": "Portugal",
+    "name_ru": "Португалия"
+  },
+  {
+    "code": "1_Powys",
+    "continent": "Europe",
+    "name": "Powys",
+    "name_ru": "Поуис"
+  },
+  {
+    "code": "princeedwardisland",
+    "continent": "North America",
+    "name": "Prince Edward Island",
+    "name_ru": "Остров Принца Эдуарда"
+  },
+  {
+    "code": "Principality of Moldavia",
+    "continent": "Europe",
+    "name": "Principality of Moldavia",
+    "name_ru": "Молдавское княжество"
+  },
+  {
+    "code": "provence",
+    "continent": "Europe",
+    "name": "Provence",
+    "name_ru": "Прованс"
+  },
+  {
+    "code": "prussia",
+    "continent": "Europe",
+    "name": "Prussia",
+    "name_ru": "Пруссия"
+  },
+  {
+    "code": "pr",
+    "continent": "North America",
+    "name": "Puerto Rico",
+    "name_ru": "Пуэрто-Рико"
+  },
+  {
+    "code": "Putrajaya",
+    "continent": "Asia",
+    "name": "Putrajaya",
+    "name_ru": "Путраджая"
+  },
+  {
+    "code": "qa",
+    "continent": "Asia",
+    "name": "Qatar",
+    "name_ru": "Катар"
+  },
+  {
+    "code": "Qing Dynasty",
+    "continent": "Asia",
+    "name": "Qing Dynasty",
+    "name_ru": "Империя Цин"
+  },
+  {
+    "code": "Quebec",
+    "continent": "North America",
+    "name": "Quebec",
+    "name_ru": "Квебек"
+  },
+  {
+    "code": "Rakhine",
+    "continent": "Asia",
+    "name": "Rakhine",
+    "name_ru": "Ракхайн"
+  },
+  {
+    "code": "Rashidi Emirate",
+    "continent": "Asia",
+    "name": "Rashidi Emirate",
+    "name_ru": "Эмират Джебель-Шаммар"
+  },
+  {
+    "code": "Republic of China",
+    "continent": "Asia",
+    "name": "Republic of China",
+    "name_ru": "Китайская Республика"
+  },
+  {
+    "code": "cg",
+    "continent": "Africa",
+    "name": "Republic of the Congo",
+    "name_ru": "Конго - Браззавиль"
+  },
+  {
+    "code": "Republic of Egypt",
+    "continent": "Africa",
+    "name": "Republic of Egypt",
+    "name_ru": "Республика Египет"
+  },
+  {
+    "code": "Republic of Formosa",
+    "continent": "Asia",
+    "name": "Republic of Formosa",
+    "name_ru": "Республика Формоза"
+  },
+  {
+    "code": "Republic of Korea",
+    "continent": "Asia",
+    "name": "Republic of Korea",
+    "name_ru": "Республика Корея"
+  },
+  {
+    "code": "Republic of Pirates",
+    "continent": "North America",
+    "name": "Republic of Pirates",
+    "name_ru": "Пиратская республика"
+  },
+  {
+    "code": "Republika Srpska",
+    "continent": "Europe",
+    "name": "Republika Srpska",
+    "name_ru": "Республика Сербская"
+  },
+  {
+    "code": "re",
+    "continent": "Africa",
+    "name": "Réunion",
+    "name_ru": "Реюньон"
+  },
+  {
+    "code": "Rhode_Island",
+    "continent": "North America",
+    "name": "Rhode Island",
+    "name_ru": "Род-Айленд"
+  },
+  {
+    "code": "rio_de_janeiro",
+    "continent": "South America",
+    "name": "Rio de Janeiro",
+    "name_ru": "Рио-де-Жанейро"
+  },
+  {
+    "code": "SPQR",
+    "continent": "Europe",
+    "name": "Roman Empire",
+    "name_ru": "Римская империя"
+  },
+  {
+    "code": "Romanov Russia",
+    "continent": "Europe",
+    "name": "Romanov Russia",
+    "name_ru": "Россия Романовых"
+  },
+  {
+    "code": "ro",
+    "continent": "Europe",
+    "name": "Romania",
+    "name_ru": "Румыния"
+  },
+  {
+    "code": "Ror Empire",
+    "name": "Ror Empire",
+    "name_ru": "Держава Рор"
+  },
+  {
+    "code": "ru",
+    "continent": "Europe",
+    "name": "Russia",
+    "name_ru": "Россия"
+  },
+  {
+    "code": "Russian SSR",
+    "continent": "Europe",
+    "name": "Russian SSR",
+    "name_ru": "РСФСР"
+  },
+  {
+    "code": "rw",
+    "continent": "Africa",
+    "name": "Rwanda",
+    "name_ru": "Руанда"
+  },
+  {
+    "code": "Saba kingdom",
+    "continent": "Asia",
+    "name": "Saba Kingdom",
+    "name_ru": "Сабейское царство"
+  },
+  {
+    "code": "Sabah",
+    "continent": "Asia",
+    "name": "Sabah",
+    "name_ru": "Сабах"
+  },
+  {
+    "code": "bl",
+    "continent": "North America",
+    "name": "Saint Barthélemy",
+    "name_ru": "Сен-Бартелеми"
+  },
+  {
+    "code": "sh-hl",
+    "continent": "Africa",
+    "name": "Saint Helena",
+    "name_ru": "Остров Святой Елены"
+  },
+  {
+    "code": "kn",
+    "continent": "North America",
+    "name": "Saint Kitts and Nevis",
+    "name_ru": "Сент-Китс и Невис"
+  },
+  {
+    "code": "lc",
+    "continent": "North America",
+    "name": "Saint Lucia",
+    "name_ru": "Сент-Люсия"
+  },
+  {
+    "code": "mf",
+    "continent": "North America",
+    "name": "Saint Martin",
+    "name_ru": "Сен-Мартен"
+  },
+  {
+    "code": "pm",
+    "continent": "North America",
+    "name": "Saint Pierre and Miquelon",
+    "name_ru": "Сен-Пьер и Микелон"
+  },
+  {
+    "code": "vc",
+    "continent": "North America",
+    "name": "Saint Vincent and the Grenadines",
+    "name_ru": "Сент-Винсент и Гренадины"
+  },
+  {
+    "code": "Sami flag",
+    "continent": "Europe",
+    "name": "Sami Flag",
+    "name_ru": "Флаг саамов"
+  },
+  {
+    "code": "ws",
+    "continent": "Oceania",
+    "name": "Samoa",
+    "name_ru": "Самоа"
+  },
+  {
+    "code": "sm",
+    "continent": "Europe",
+    "name": "San Marino",
+    "name_ru": "Сан-Марино"
+  },
+  {
+    "code": "Santa Cruz",
+    "continent": "South America",
+    "name": "Santa Cruz",
+    "name_ru": "Санта-Крус"
+  },
+  {
+    "code": "santa_claus",
+    "name": "Santa Claus",
+    "name_ru": "Санта-Клаус"
+  },
+  {
+    "code": "st",
+    "continent": "Africa",
+    "name": "Sao Tome and Principe",
+    "name_ru": "Сан-Томе и Принсипи"
+  },
+  {
+    "code": "Sao Paulo",
+    "continent": "South America",
+    "name": "São Paulo",
+    "name_ru": "Сан-Паулу"
+  },
+  {
+    "code": "Sarawak",
+    "continent": "Asia",
+    "name": "Sarawak",
+    "name_ru": "Саравак"
+  },
+  {
+    "code": "sardines",
+    "name": "Sardines",
+    "name_ru": "Сардины"
+  },
+  {
+    "code": "saskatchewan",
+    "continent": "North America",
+    "name": "Saskatchewan",
+    "name_ru": "Саскачеван"
+  },
+  {
+    "code": "Sassanid Empire",
+    "continent": "Asia",
+    "name": "Sassanid Empire",
+    "name_ru": "Держава Сасанидов"
+  },
+  {
+    "code": "sa",
+    "continent": "Asia",
+    "name": "Saudi Arabia",
+    "name_ru": "Саудовская Аравия"
+  },
+  {
+    "code": "gb-sct",
+    "continent": "Europe",
+    "name": "Scotland",
+    "name_ru": "Шотландия"
+  },
+  {
+    "code": "Second Republic of Iraq",
+    "continent": "Asia",
+    "name": "Second Republic of Iraq",
+    "name_ru": "Вторая Иракская Республика"
+  },
+  {
+    "code": "Second Spanish Republic",
+    "continent": "Europe",
+    "name": "Second Spanish Republic",
+    "name_ru": "Вторая Испанская Республика"
+  },
+  {
+    "code": "Selangor",
+    "continent": "Asia",
+    "name": "Selangor",
+    "name_ru": "Селангор"
+  },
+  {
+    "code": "sn",
+    "continent": "Africa",
+    "name": "Senegal",
+    "name_ru": "Сенегал"
+  },
+  {
+    "code": "rs",
+    "continent": "Europe",
+    "name": "Serbia",
+    "name_ru": "Сербия"
+  },
+  {
+    "code": "seville",
+    "continent": "Europe",
+    "name": "Seville",
+    "name_ru": "Севилья"
+  },
+  {
+    "code": "sc",
+    "continent": "Africa",
+    "name": "Seychelles",
+    "name_ru": "Сейшельские острова"
+  },
+  {
+    "code": "Siam",
+    "continent": "Asia",
+    "name": "Siam",
+    "name_ru": "Сиам"
+  },
+  {
+    "code": "Siberia",
+    "continent": "Asia",
+    "name": "Siberia",
+    "name_ru": "Сибирь"
+  },
+  {
+    "code": "Sicily",
+    "continent": "Europe",
+    "name": "Sicily",
+    "name_ru": "Сицилия"
+  },
+  {
+    "code": "sl",
+    "continent": "Africa",
+    "name": "Sierra Leone",
+    "name_ru": "Сьерра-Леоне"
+  },
+  {
+    "code": "Sikkim",
+    "continent": "Asia",
+    "name": "Sikkim",
+    "name_ru": "Сикким"
+  },
+  {
+    "code": "sg",
+    "continent": "Asia",
+    "name": "Singapore",
+    "name_ru": "Сингапур"
+  },
+  {
+    "code": "sx",
+    "continent": "North America",
+    "name": "Sint Maarten",
+    "name_ru": "Синт-Мартен"
+  },
+  {
+    "code": "Slavonia",
+    "continent": "Europe",
+    "name": "Slavonia",
+    "name_ru": "Славония"
+  },
+  {
+    "code": "sk",
+    "continent": "Europe",
+    "name": "Slovakia",
+    "name_ru": "Словакия"
+  },
+  {
+    "code": "si",
+    "continent": "Europe",
+    "name": "Slovenia",
+    "name_ru": "Словения"
+  },
+  {
+    "code": "Socialist_flag",
+    "name": "Red Flag",
+    "name_ru": "Красный флаг"
+  },
+  {
+    "code": "sb",
+    "continent": "Oceania",
+    "name": "Solomon Islands",
+    "name_ru": "Соломоновы острова"
+  },
+  {
+    "code": "so",
+    "continent": "Africa",
+    "name": "Somalia",
+    "name_ru": "Сомали"
+  },
+  {
+    "code": "za",
+    "continent": "Africa",
+    "name": "South Africa",
+    "name_ru": "Южно-Африканская Республика"
+  },
+  {
+    "code": "South_Carolina",
+    "continent": "North America",
+    "name": "South Carolina",
+    "name_ru": "Южная Каролина"
+  },
+  {
+    "code": "South_Dakota",
+    "continent": "North America",
+    "name": "South Dakota",
+    "name_ru": "Южная Дакота"
+  },
+  {
+    "code": "gs",
+    "continent": "Antarctica",
+    "name": "South Georgia and the South Sandwich Islands",
+    "name_ru": "Южная Георгия и Южные Сандвичевы острова"
+  },
+  {
+    "code": "kr",
+    "continent": "Asia",
+    "name": "South Korea",
+    "name_ru": "Республика Корея"
+  },
+  {
+    "code": "ss",
+    "continent": "Africa",
+    "name": "South Sudan",
+    "name_ru": "Южный Судан"
+  },
+  {
+    "code": "1_Southern Ui Neill",
+    "continent": "Europe",
+    "name": "Southern Uí Néill",
+    "name_ru": "Южные Уи Нейлл"
+  },
+  {
+    "code": "es",
+    "continent": "Europe",
+    "name": "Spain",
+    "name_ru": "Испания"
+  },
+  {
+    "code": "spanish_empire",
+    "continent": "Europe",
+    "name": "Spanish Empire",
+    "name_ru": "Испанская империя"
+  },
+  {
+    "code": "Sparta",
+    "continent": "Europe",
+    "name": "Sparta",
+    "name_ru": "Спарта"
+  },
+  {
+    "code": "lk",
+    "continent": "Asia",
+    "name": "Sri Lanka",
+    "name_ru": "Шри-Ланка"
+  },
+  {
+    "code": "ps",
+    "continent": "Asia",
+    "name": "State of Palestine",
+    "name_ru": "Палестинские территории"
+  },
+  {
+    "code": "1_Strathclyde",
+    "continent": "Europe",
+    "name": "Strathclyde",
+    "name_ru": "Стратклайд"
+  },
+  {
+    "code": "sd",
+    "continent": "Africa",
+    "name": "Sudan",
+    "name_ru": "Судан"
+  },
+  {
+    "code": "Sultanate of Nejd",
+    "continent": "Asia",
+    "name": "Sultanate of Nejd",
+    "name_ru": "Султанат Неджд"
+  },
+  {
+    "code": "sr",
+    "continent": "South America",
+    "name": "Suriname",
+    "name_ru": "Суринам"
+  },
+  {
+    "code": "1_Sussex",
+    "continent": "Europe",
+    "name": "Sussex",
+    "name_ru": "Сассекс"
+  },
+  {
+    "code": "sj",
+    "continent": "Europe",
+    "name": "Svalbard and Jan Mayen",
+    "name_ru": "Шпицберген и Ян-Майен"
+  },
+  {
+    "code": "se",
+    "continent": "Europe",
+    "name": "Sweden",
+    "name_ru": "Швеция"
+  },
+  {
+    "code": "Sweden Norway Union",
+    "continent": "Europe",
+    "name": "Sweden Norway Union",
+    "name_ru": "Уния Швеции и Норвегии"
+  },
+  {
+    "code": "ch",
+    "continent": "Europe",
+    "name": "Switzerland",
+    "name_ru": "Швейцария"
+  },
+  {
+    "code": "sy",
+    "continent": "Asia",
+    "name": "Syria",
+    "name_ru": "Сирия"
+  },
+  {
+    "code": "tw",
+    "continent": "Asia",
+    "name": "Taiwan",
+    "name_ru": "Тайвань"
+  },
+  {
+    "code": "Tajik SSR",
+    "continent": "Asia",
+    "name": "Tajik SSR",
+    "name_ru": "Таджикская ССР"
+  },
+  {
+    "code": "tj",
+    "continent": "Asia",
+    "name": "Tajikistan",
+    "name_ru": "Таджикистан"
+  },
+  {
+    "code": "Tanintharyi",
+    "continent": "Asia",
+    "name": "Tanintharyi",
+    "name_ru": "Танинтайи"
+  },
+  {
+    "code": "tannutuva",
+    "continent": "Asia",
+    "name": "Tannu Tuva",
+    "name_ru": "Танну-Тува"
+  },
+  {
+    "code": "tz",
+    "continent": "Africa",
+    "name": "Tanzania",
+    "name_ru": "Танзания"
+  },
+  {
+    "code": "Tennessee",
+    "continent": "North America",
+    "name": "Tennessee",
+    "name_ru": "Теннесси"
+  },
+  {
+    "code": "Terengganu",
+    "continent": "Asia",
+    "name": "Terengganu",
+    "name_ru": "Тренгану"
+  },
+  {
+    "code": "Texas",
+    "continent": "North America",
+    "name": "Texas",
+    "name_ru": "Техас"
+  },
+  {
+    "code": "th",
+    "continent": "Asia",
+    "name": "Thailand",
+    "name_ru": "Таиланд"
+  },
+  {
+    "code": "tibet",
+    "continent": "Asia",
+    "name": "Tibet",
+    "name_ru": "Тибет"
+  },
+  {
+    "code": "tl",
+    "continent": "Asia",
+    "name": "Timor-Leste",
+    "name_ru": "Восточный Тимор"
+  },
+  {
+    "code": "tg",
+    "continent": "Africa",
+    "name": "Togo",
+    "name_ru": "Того"
+  },
+  {
+    "code": "tk",
+    "continent": "Oceania",
+    "name": "Tokelau",
+    "name_ru": "Токелау"
+  },
+  {
+    "code": "to",
+    "continent": "Oceania",
+    "name": "Tonga",
+    "name_ru": "Тонга"
+  },
+  {
+    "code": "Transylvania",
+    "continent": "Europe",
+    "name": "Transylvania",
+    "name_ru": "Трансильвания"
+  },
+  {
+    "code": "tt",
+    "continent": "South America",
+    "name": "Trinidad and Tobago",
+    "name_ru": "Тринидад и Тобаго"
+  },
+  {
+    "code": "sh-ta",
+    "continent": "Africa",
+    "name": "Tristan da Cunha",
+    "name_ru": "Тристан-да-Кунья"
+  },
+  {
+    "code": "Trucial States",
+    "continent": "Asia",
+    "name": "Trucial States",
+    "name_ru": "Договорный Оман"
+  },
+  {
+    "code": "tn",
+    "continent": "Africa",
+    "name": "Tunisia",
+    "name_ru": "Тунис"
+  },
+  {
+    "code": "tr",
+    "continent": "Asia",
+    "name": "Türkiye",
+    "name_ru": "Турция"
+  },
+  {
+    "code": "Turkmen SSR",
+    "continent": "Asia",
+    "name": "Turkmen SSR",
+    "name_ru": "Туркменская ССР"
+  },
+  {
+    "code": "tm",
+    "continent": "Asia",
+    "name": "Turkmenistan",
+    "name_ru": "Туркменистан"
+  },
+  {
+    "code": "tc",
+    "continent": "North America",
+    "name": "Turks and Caicos Islands",
+    "name_ru": "Тёркс и Кайкос"
+  },
+  {
+    "code": "tv",
+    "continent": "Oceania",
+    "name": "Tuvalu",
+    "name_ru": "Тувалу"
+  },
+  {
+    "code": "USA 1776",
+    "continent": "North America",
+    "name": "USA 1776",
+    "name_ru": "США 1776"
+  },
+  {
+    "code": "ussr",
+    "continent": "Europe",
+    "name": "USSR",
+    "name_ru": "СССР"
+  },
+  {
+    "code": "ug",
+    "continent": "Africa",
+    "name": "Uganda",
+    "name_ru": "Уганда"
+  },
+  {
+    "code": "ua",
+    "continent": "Europe",
+    "name": "Ukraine",
+    "name_ru": "Украина"
+  },
+  {
+    "code": "Ukrainian SSR",
+    "continent": "Europe",
+    "name": "Ukrainian SSR",
+    "name_ru": "Украинская ССР"
+  },
+  {
+    "code": "1_Ulaid",
+    "continent": "Europe",
+    "name": "Ulaid",
+    "name_ru": "Улад"
+  },
+  {
+    "code": "Umayyad Caliphate",
+    "continent": "Asia",
+    "name": "Umayyad Caliphate",
+    "name_ru": "Омейядский халифат"
+  },
+  {
+    "code": "United Arab Republic",
+    "continent": "Asia",
+    "name": "United Arab Republic",
+    "name_ru": "Объединённая Арабская Республика"
+  },
+  {
+    "code": "gb",
+    "continent": "Europe",
+    "name": "United Kingdom",
+    "name_ru": "Великобритания"
+  },
+  {
+    "code": "un",
+    "name": "United Nations",
+    "name_ru": "Организация Объединенных Наций"
+  },
+  {
+    "code": "us",
+    "continent": "North America",
+    "name": "United States of America",
+    "name_ru": "США"
+  },
+  {
+    "code": "Upper Silesia",
+    "continent": "Europe",
+    "name": "Upper Silesia",
+    "name_ru": "Верхняя Силезия"
+  },
+  {
+    "code": "Urartu",
+    "continent": "Asia",
+    "name": "Urartu",
+    "name_ru": "Урарту"
+  },
+  {
+    "code": "uy",
+    "continent": "South America",
+    "name": "Uruguay",
+    "name_ru": "Уругвай"
+  },
+  {
+    "code": "Utah",
+    "continent": "North America",
+    "name": "Utah",
+    "name_ru": "Юта"
+  },
+  {
+    "code": "Uzbek SSR",
+    "continent": "Asia",
+    "name": "Uzbek SSR",
+    "name_ru": "Узбекская ССР"
+  },
+  {
+    "code": "uz",
+    "continent": "Asia",
+    "name": "Uzbekistan",
+    "name_ru": "Узбекистан"
+  },
+  {
+    "code": "valencia",
+    "continent": "Europe",
+    "name": "Valencia",
+    "name_ru": "Валенсия"
+  },
+  {
+    "code": "vu",
+    "continent": "Oceania",
+    "name": "Vanuatu",
+    "name_ru": "Вануату"
+  },
+  {
+    "code": "ve",
+    "continent": "South America",
+    "name": "Venezuela",
+    "name_ru": "Венесуэла"
+  },
+  {
+    "code": "venice",
+    "continent": "Europe",
+    "name": "Venice",
+    "name_ru": "Венеция"
+  },
+  {
+    "code": "Vermont",
+    "continent": "North America",
+    "name": "Vermont",
+    "name_ru": "Вермонт"
+  },
+  {
+    "code": "vn",
+    "continent": "Asia",
+    "name": "Vietnam",
+    "name_ru": "Вьетнам"
+  },
+  {
+    "code": "vg",
+    "continent": "North America",
+    "name": "Virgin Islands (British)",
+    "name_ru": "Виргинские острова (Великобритания)"
+  },
+  {
+    "code": "vi",
+    "continent": "North America",
+    "name": "Virgin Islands (U.S.)",
+    "name_ru": "Виргинские острова (США)"
+  },
+  {
+    "code": "Virginia",
+    "continent": "North America",
+    "name": "Virginia",
+    "name_ru": "Виргиния"
+  },
+  {
+    "code": "Vojvodina",
+    "continent": "Europe",
+    "name": "Vojvodina",
+    "name_ru": "Воеводина"
+  },
+  {
+    "code": "Wa State",
+    "continent": "Asia",
+    "name": "Wa State",
+    "name_ru": "Штат Ва"
+  },
+  {
+    "code": "gb-wls",
+    "continent": "Europe",
+    "name": "Wales",
+    "name_ru": "Уэльс"
+  },
+  {
+    "code": "Wallonia",
+    "continent": "Europe",
+    "name": "Wallonia",
+    "name_ru": "Валлония"
+  },
+  {
+    "code": "wf",
+    "continent": "Oceania",
+    "name": "Wallis and Futuna",
+    "name_ru": "Уоллис и Футуна"
+  },
+  {
+    "code": "Washington",
+    "continent": "North America",
+    "name": "Washington",
+    "name_ru": "Вашингтон"
+  },
+  {
+    "code": "1_Wessex",
+    "continent": "Europe",
+    "name": "Wessex",
+    "name_ru": "Уэссекс"
+  },
+  {
+    "code": "west_germany",
+    "continent": "Europe",
+    "name": "West Germany",
+    "name_ru": "ФРГ"
+  },
+  {
+    "code": "West Papua",
+    "continent": "Asia",
+    "name": "West Papua",
+    "name_ru": "Западное Папуа"
+  },
+  {
+    "code": "West Roman Empire",
+    "continent": "Europe",
+    "name": "West Roman Empire",
+    "name_ru": "Западная Римская империя"
+  },
+  {
+    "code": "West_Virginia",
+    "continent": "North America",
+    "name": "West Virginia",
+    "name_ru": "Западная Виргиния"
+  },
+  {
+    "code": "eh",
+    "continent": "Africa",
+    "name": "Western Sahara",
+    "name_ru": "Западная Сахара"
+  },
+  {
+    "code": "White Flag",
+    "name": "White Flag",
+    "name_ru": "Белый флаг"
+  },
+  {
+    "code": "Wisconsin",
+    "continent": "North America",
+    "name": "Wisconsin",
+    "name_ru": "Висконсин"
+  },
+  {
+    "code": "Wyoming",
+    "continent": "North America",
+    "name": "Wyoming",
+    "name_ru": "Вайоминг"
+  },
+  {
+    "code": "Yellow_Flag",
+    "name": "Yellow Flag",
+    "name_ru": "Жёлтый флаг"
+  },
+  {
+    "code": "ye",
+    "continent": "Asia",
+    "name": "Yemen",
+    "name_ru": "Йемен"
+  },
+  {
+    "code": "Yucatan",
+    "continent": "North America",
+    "name": "Yucatan",
+    "name_ru": "Юкатан"
+  },
+  {
+    "code": "yugoslavia",
+    "continent": "Europe",
+    "name": "Yugoslavia",
+    "name_ru": "Югославия"
+  },
+  {
+    "code": "Yukon",
+    "continent": "North America",
+    "name": "Yukon",
+    "name_ru": "Юкон"
+  },
+  {
+    "code": "Zaire",
+    "continent": "Africa",
+    "name": "Zaire",
+    "name_ru": "Заир"
+  },
+  {
+    "code": "zm",
+    "continent": "Africa",
+    "name": "Zambia",
+    "name_ru": "Замбия"
+  },
+  {
+    "code": "Zheleznogorsk",
+    "continent": "Asia",
+    "name": "Zheleznogorsk",
+    "name_ru": "Железногорск"
+  },
+  {
+    "code": "zw",
+    "continent": "Africa",
+    "name": "Zimbabwe",
+    "name_ru": "Зимбабве"
+  }
+]

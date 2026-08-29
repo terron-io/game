@@ -1,0 +1,2659 @@
+/* terron «штабная карта» — тема главной/лобби (НЕ трогает in-game UI).
+   Палитра и токены из макета A2. Скоуп: body:not(.in-game). */
+/* terron ПЕРФ (П2, 12.07): шрифты SELF-HOST вместо @import Google Fonts.
+   Чужой домен стоял в РЕНДЕР-БЛОКИРУЮЩЕМ CSS (первый экран ждал его таймаут,
+   в РФ периодически деградирует). woff2-сабсеты latin+cyrillic, ~17КБ/файл,
+   лежат в resources/fonts/web (скачаны с gwfh.mranftl.com). */
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/oswald-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/oswald-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/oswald-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/ibm-plex-mono-400.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/ibm-plex-mono-500.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/ibm-plex-mono-600.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/golos-text-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/golos-text-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/golos-text-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../../../resources/fonts/web/golos-text-700.woff2") format("woff2");
+}
+
+:root {
+  /* выбранный скин (градиент) для зоны ника; JS перезапишет из localStorage */
+  --t-skin: linear-gradient(135deg, #3a3a33, #2b2a24);
+  /* фон — тёплый «жёлтый» лист карты; блоки/меню — белые */
+  --t-bg: #efe6c8;
+  --t-parchment: #ffffff;
+  --t-sheet: #fdfcf7;
+  --t-ink: #2b2a24;
+  --t-ink-soft: rgba(43, 42, 36, 0.6);
+  --t-line: rgba(43, 42, 36, 0.18);
+  --t-red: #a8432b;
+  /* terron: приглушённый зелёный «включено» — пара к --t-red (чипы лобби). */
+  --t-green: #3f7a4a;
+  --t-shadow: 3px 3px 0 0 rgba(43, 42, 36, 0.22);
+  --t-shadow-sm: 2px 2px 0 0 rgba(43, 42, 36, 0.22);
+  --t-display: "Oswald", sans-serif;
+  --t-mono: "IBM Plex Mono", monospace;
+  --t-body: "Golos Text", system-ui, sans-serif;
+}
+
+/* ---- Жёлтый фон-лист + штабная сетка (только вне игры) ---- */
+body:not(.in-game) {
+  background-color: var(--t-bg) !important;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 119px,
+      var(--t-line) 119px 120px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 119px,
+      var(--t-line) 119px 120px
+    ) !important;
+  color: var(--t-ink) !important;
+  font-family: var(--t-body) !important;
+}
+
+/* terron: в ИГРЕ — тот же шрифт, что на главной (Golos Text), чтобы не «прыгал»
+   при входе. Шрифты @import глобальны; здесь применяем базовый + перебиваем
+   Tailwind font-sans у HUD. Моноширинные (цифры/таймеры) не трогаем. */
+body.in-game {
+  font-family: var(--t-body), system-ui, sans-serif !important;
+}
+body.in-game .font-sans {
+  font-family: var(--t-body), system-ui, sans-serif !important;
+}
+
+/* terron: ТЁМНОЕ СТЕКЛО на игровых HUD-панелях — карта просвечивает, интерфейс
+   легче. Скоуп body.in-game (тему главной не трогаем). Главные панели сейчас
+   bg-gray-800/* и bg-gray-900/* (ресурс-бар, лидерборд, сайдбары, лента/чат,
+   атаки, топ-кнопки) → единый полупрозрачный фон + backdrop-blur. */
+body.in-game .bg-gray-800\/92,
+body.in-game .bg-gray-800\/90,
+body.in-game .bg-gray-800\/80,
+body.in-game .bg-gray-800\/75,
+body.in-game .bg-gray-900\/95,
+body.in-game .bg-gray-900\/90,
+body.in-game .bg-gray-900\/70,
+body.in-game .bg-gray-900\/60,
+body.in-game .bg-gray-700\/60 {
+  background-color: rgba(13, 17, 23, 0.55) !important;
+  backdrop-filter: blur(9.5px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(9.5px) saturate(1.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* убрать тёмную картовую подложку OpenFront на главной */
+body:not(.in-game) canvas,
+body:not(.in-game) [class*="world"],
+body:not(.in-game) .background-map {
+  opacity: 0 !important;
+}
+
+/* ---- Типографика ---- */
+body:not(.in-game) h1,
+body:not(.in-game) h2,
+body:not(.in-game) h3,
+body:not(.in-game) .nav-menu-item {
+  font-family: var(--t-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--t-ink) !important;
+}
+
+/* ---- Навигация + футер: пергамент, чернила ---- */
+body:not(.in-game) nav,
+body:not(.in-game) footer {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border-color: var(--t-line) !important;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .nav-menu-item {
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink) !important;
+  border-radius: 0 !important;
+  padding: 5px 12px !important;
+  background: var(--t-sheet) !important; /* белые блоки меню */
+  box-shadow: var(--t-shadow-sm);
+  font-weight: 600;
+  font-size: 12px !important;
+  letter-spacing: 0.01em !important;
+  text-transform: lowercase !important; /* новости, лидеры… */
+}
+/* меню: плотнее (меньше расстояние между пунктами) */
+body:not(.in-game) nav[class*="gap-"] {
+  gap: 10px !important;
+}
+/* подзаголовок логотипа (вместо номера версии) */
+body:not(.in-game) .terron-sub {
+  font-family: var(--t-mono) !important;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: var(--t-ink-soft) !important;
+  margin-top: 2px;
+}
+/* версию игры на главной не показываем (мобилка) */
+body:not(.in-game) #game-version {
+  display: none !important;
+}
+body:not(.in-game) .nav-menu-item.active,
+body:not(.in-game) .nav-menu-item:hover {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+}
+
+/* «↗ terron.io» — ссылка наружу в шапке, видна ТОЛЬКО внутри плеера itch.io
+   (см. isItchEmbed). Красная, чтобы читалась как ссылка, а не как пункт меню. */
+body:not(.in-game) .nav-menu-item.nav-openout {
+  background: var(--t-red) !important;
+  color: #fff !important;
+  border-color: var(--t-ink) !important;
+  text-decoration: none;
+  text-transform: uppercase !important;
+}
+body:not(.in-game) .nav-menu-item.nav-openout:hover {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+}
+
+/* ---- Кнопки: «печать» (жёсткий офсет, без блюра) ---- */
+body:not(.in-game) button,
+body:not(.in-game) a.button,
+body:not(.in-game) .o-button {
+  font-family: var(--t-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 0 !important;
+  box-shadow: var(--t-shadow);
+  transition:
+    transform 0.05s ease,
+    box-shadow 0.05s ease;
+}
+body:not(.in-game) button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+/* первичная (Играть) — чернильная */
+body:not(.in-game) button[class*="bg-blue"],
+body:not(.in-game) button[class*="primary"],
+body:not(.in-game) .play-button {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  border: 1px solid var(--t-ink) !important;
+}
+
+/* ---- Панели/карточки/модалки → «лист» планшета ---- */
+body:not(.in-game) [class*="bg-zinc-9"],
+body:not(.in-game) [class*="bg-gray-8"],
+body:not(.in-game) [class*="bg-gray-9"],
+body:not(.in-game) [class*="bg-slate-8"],
+body:not(.in-game) [class*="bg-slate-9"] {
+  background: var(--t-sheet) !important;
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--t-shadow);
+  backdrop-filter: none !important;
+}
+
+/* поля ввода (позывной) */
+body:not(.in-game) input[type="text"],
+body:not(.in-game) input:not([type]) {
+  background: var(--t-parchment) !important;
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink) !important;
+  border-radius: 0 !important;
+  font-family: var(--t-display) !important;
+}
+
+/* мелкие моно-метки (координаты/цифры/версия) */
+body:not(.in-game) .l-header__highlightText,
+body:not(.in-game) [data-i18n*="version"],
+body:not(.in-game) .mono {
+  font-family: var(--t-mono) !important;
+  color: var(--t-ink-soft) !important;
+}
+
+/* белый текст из тёмной темы → чернила */
+body:not(.in-game) .text-white,
+body:not(.in-game) [class*="text-white"] {
+  color: var(--t-ink) !important;
+}
+
+/* terron: тёмные КОНТЕНТ-панели из дарк-темы оригинала остаются тёмными, а их текст
+   флипается в чернила → тёмный-на-тёмном = невидим. Делаем такие панели светлым
+   «листом» (только сплошные классы; полупрозрачные бэкдропы оверлеев НЕ трогаем). */
+body:not(.in-game) .bg-gray-700,
+body:not(.in-game) .bg-gray-800,
+body:not(.in-game) .bg-gray-900,
+body:not(.in-game) .bg-slate-700,
+body:not(.in-game) .bg-slate-800,
+body:not(.in-game) .bg-slate-900,
+body:not(.in-game) .bg-zinc-700,
+body:not(.in-game) .bg-zinc-800,
+body:not(.in-game) .bg-zinc-900,
+body:not(.in-game) .bg-neutral-800,
+body:not(.in-game) .bg-gray-900\/40,
+body:not(.in-game) .bg-slate-900\/40,
+body:not(.in-game) .bg-slate-800\/90 {
+  background-color: var(--t-sheet) !important;
+}
+
+/* инфо-хинт (напр. привязки клавиш): светло-синий текст нечитаем на светлой теме.
+   В игре (тёмный фон) оставляем как есть. */
+body:not(.in-game) .t-info-hint {
+  color: var(--t-ink-soft) !important;
+  background: rgba(37, 99, 235, 0.08) !important;
+  border-color: rgba(37, 99, 235, 0.28) !important;
+}
+
+/* ===== шапка/футер БЕЗ подложки (как в референсе) ===== */
+/* nav[class*=bg-zinc] специфичнее панельного правила → побеждает */
+body:not(.in-game) nav[class*="bg-zinc"],
+body:not(.in-game) nav,
+body:not(.in-game) footer {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+body:not(.in-game) nav[class*="bg-zinc"] {
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+/* футер — тонкая строка, почти без высоты */
+body:not(.in-game) footer {
+  padding: 4px 16px !important;
+  font-size: 11px !important;
+  gap: 14px !important;
+  flex-wrap: wrap;
+  min-height: 0 !important;
+}
+
+/* ===== строка входа: позывной + флаг + ИГРАТЬ ===== */
+/* зелёная рамка (как серая у СКИН, только зелёная) — сигнал «основная кнопка». Без свечения. */
+body:not(.in-game) .play-cta {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  font-family: var(--t-display) !important;
+  border: 2px solid #4fae5a !important;
+  box-shadow: var(--t-shadow);
+}
+body:not(.in-game) .play-cta:hover {
+  border-color: #63c46e !important;
+}
+body:not(.in-game) .play-cta:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+/* terron: ИГРАТЬ заблокирована (невалидный ник/тег) — глушим зелёную рамку и
+   осветляем, чтобы читалось как disabled (как карточки лобби). */
+body:not(.in-game) .play-cta:disabled {
+  background: rgba(43, 42, 36, 0.35) !important;
+  color: rgba(244, 241, 222, 0.6) !important;
+  border-color: rgba(43, 42, 36, 0.25) !important;
+  box-shadow: none !important;
+}
+
+/* ===== контент главной (кастомные классы OpenFront) ===== */
+
+/* фон-декор OpenFront (карта мира + гексы + лого) убираем ВЕЗДЕ: на главной у
+   нас своя «штабная» тема, а при переходе в игру он флэшил поверх загрузки. */
+#hex-grid,
+#background-layer {
+  display: none !important;
+}
+/* спокойный фон во время загрузки карты (зазор лобби→карта), без флэша */
+body.in-game {
+  background: #0b1320 !important;
+}
+
+/* реклама удалена (см. ADS.md). Правило-предохранитель на случай сторонних остатков. */
+body:not(.in-game) [id*="ad-slot"],
+body:not(.in-game) [class*="ramp"],
+body:not(.in-game) [id^="pw-"] {
+  display: none !important;
+}
+
+/* тёмные панели/карточки/инпут (.bg-surface) → «лист» планшета */
+body:not(.in-game) .bg-surface {
+  background: var(--t-sheet) !important;
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--t-shadow);
+}
+
+/* синие первичные кнопки (СОЛО/Играть) → чернильные */
+body:not(.in-game) .bg-malibu-blue,
+body:not(.in-game) .bg-aquarius,
+body:not(.in-game) [class*="bg-malibu-blue"] {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  border: 1px solid var(--t-ink) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--t-shadow);
+}
+
+/* чипы-оверлеи на карточках карт — красный «старт», как в макете */
+body:not(.in-game) .bg-malibu-blue.text-xs,
+body:not(.in-game) .bg-black\/70 {
+  background: var(--t-red) !important;
+  color: #fff !important;
+}
+/* terron: мобильное слайд-меню — НЕ красное (ловило .bg-black/70). Наш фон —
+   планшетный «лист» (id перебивает класс по специфичности). */
+body:not(.in-game) #sidebar-menu {
+  background: var(--t-bg) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ===== остатки интерфейса → референс ===== */
+/* квадратные углы везде на главной (печатный стиль) */
+body:not(.in-game) [class*="rounded"] {
+  border-radius: 0 !important;
+}
+/* титульная плашка карточки лобби → чернильная, текст пергамент */
+body:not(.in-game) .bg-black\/55 {
+  background: var(--t-ink) !important;
+  backdrop-filter: none !important;
+}
+body:not(.in-game) .bg-black\/55,
+body:not(.in-game) .bg-black\/55 * {
+  color: var(--t-parchment) !important;
+}
+/* мелкие светлые пиллы (Скины и т.п.) → лист */
+body:not(.in-game) [class*="bg-white"],
+body:not(.in-game) [class*="bg-gray-2"],
+body:not(.in-game) [class*="bg-gray-3"],
+body:not(.in-game) [class*="bg-neutral-2"] {
+  background: var(--t-sheet) !important;
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink) !important;
+}
+/* terron 23.08: ИКОНКИ НА СВЕТЛЫХ КАРТОЧКАХ. Файлы называются *IconWhite.svg и
+   действительно белые — они рассчитаны на тёмный фон. Под пергаментной темой
+   НЕвыбранная карточка (bg-white/5) становится светлым листом, и белая иконка
+   на нём исчезает: в «Отключении юнитов» выключенный юнит выглядел пустым
+   прямоугольником с одной подписью (репорт владельца). Выбранные карточки тема
+   красит в ink, там иконка белая и видна — поэтому инвертируем ТОЛЬКО светлые.
+   Дочерний комбинатор: иконка лежит прямо в кнопке-карточке. */
+/* ⚠️ 23.08, вторая правка (жалоба игрока: «немного сломались кнопки, по
+   крайней мере с моей автоматической тёмной темой»): инверсия НЕ ГОДИТСЯ.
+   Браузерная авто-тёмная тема сама перекрашивает светлый фон в тёмный, и
+   инвертированная (то есть ЧЁРНАЯ) иконка снова исчезает — теперь уже на
+   тёмном. Мы не можем узнать, включена ли она у игрока.
+   Поэтому иконку НЕ КРАСИМ, а даём ей собственную тёмную подложку: белая
+   картинка на тёмном чипе читается и на светлом фоне, и на принудительно
+   затемнённом. */
+body:not(.in-game) [class*="bg-white"] > img[src*="IconWhite"] {
+  background: rgba(43, 42, 36, 0.85);
+  border-radius: 3px;
+  padding: 2px;
+  box-sizing: content-box;
+}
+
+/* ink-кнопки/выбранные карточки (СОЛО/сложность/режим/тоглы): текст всегда
+   пергамент. Через [class*=] — иначе классы с opacity (bg-malibu-blue/20) не
+   матчатся, и текст падал на text-white→ink (тёмный на тёмном = невидимый). */
+body:not(.in-game) [class*="bg-malibu-blue"],
+body:not(.in-game) [class*="bg-malibu-blue"] *,
+body:not(.in-game) [class*="bg-aquarius"],
+body:not(.in-game) [class*="bg-aquarius"] * {
+  color: var(--t-parchment) !important;
+}
+
+/* жёлтые предупреждения (достижения выключены и т.п.): жёлтый текст на светлом
+   фоне не читался → тёмная охра + чуть заметнее фон */
+body:not(.in-game) [class*="text-yellow-3"],
+body:not(.in-game) [class*="text-yellow-4"],
+body:not(.in-game) [class*="text-yellow-5"] {
+  color: #8a6a12 !important;
+}
+body:not(.in-game) [class*="bg-yellow-500"] {
+  background: rgba(212, 175, 55, 0.22) !important;
+  border-color: rgba(138, 106, 18, 0.5) !important;
+}
+
+/* слайдеры (кол-во ботов/наций и пр.): appearance:none убирал трек → невидимо.
+   Возвращаем видимый трек + бегунок (читается и на тёмных, и на светлых карточках) */
+body:not(.in-game) input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px !important;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45) !important;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  box-shadow: none;
+}
+body:not(.in-game) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--t-red, #c0392b);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+body:not(.in-game) input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--t-red, #c0392b);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+/* ===== карточка лобби «лист» (по референсу A2): всё светлое ===== */
+body:not(.in-game) .lobby-card {
+  background: var(--t-sheet) !important;
+  border: 1px solid var(--t-ink) !important;
+  box-shadow: var(--t-shadow) !important;
+  overflow: hidden;
+  border-radius: 0 !important;
+}
+/* шапка = ЗАКЛАДКА «как в папке»: слева выступ с режимом и таймером, справа
+   свободное поле шапки (там живёт анонс золотого матча). Отдельная полоса над
+   витриной для анонса была бы прямым вычетом из высоты карточки. */
+body:not(.in-game) .lobby-sheet-hdr {
+  background: var(--t-bg) !important;
+  color: var(--t-ink-soft) !important;
+  border-bottom: 1px solid var(--t-line);
+  font-family: var(--t-mono) !important;
+  text-transform: none !important;
+  /* terron 29.07: БЕЗ зазора между закладками. gap:10px оставлял между ними
+     полосу фона шапки — на золотой карточке она читалась как «шов» между
+     золотой и белой вкладкой. Разделяет их border-right самой закладки. */
+  gap: 0;
+  padding: 0 12px 0 0 !important;
+  min-height: 34px;
+}
+body:not(.in-game) .lobby-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--t-bg);
+  border-right: 1px solid var(--t-line);
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Активная вкладка — «вытянутый ярлычок»: цвет листа, без нижней границы,
+   визуально сливается с телом карточки. Неактивная сидит в глубине шапки. */
+body:not(.in-game) .lobby-tab.is-active {
+  background: var(--t-sheet);
+  cursor: default;
+}
+body:not(.in-game) .lobby-tab:not(.is-active) {
+  opacity: 0.62;
+}
+body:not(.in-game) .lobby-tab:not(.is-active):hover {
+  opacity: 1;
+}
+/* Событийные вкладки узнаются ЦВЕТОМ ФОНА, а не только текстом: рядом стоят
+   золотая и алмазная, и на общем пергаменте они читались как одна и та же
+   «жёлтая» (репорт владельца 10.08). Золото — тёплое, алмаз — ледяной. */
+body:not(.in-game) .lobby-tab.gold {
+  color: #8a6a12 !important;
+  background: #f7ecc8;
+  border-right-color: #d4af37;
+}
+body:not(.in-game) .lobby-tab.gold.is-active {
+  background: #f2dfa4;
+}
+body:not(.in-game) .lobby-tab.gold * {
+  color: #8a6a12 !important;
+}
+/* Гашение неактивных до 0.62 съедало и цвет — событийным хватает лёгкого. */
+body:not(.in-game) .lobby-tab.gold:not(.is-active),
+body:not(.in-game) .lobby-tab.diamond:not(.is-active) {
+  opacity: 0.85;
+}
+body:not(.in-game) .lobby-sheet-hdr * {
+  color: var(--t-ink-soft) !important;
+  text-transform: none !important;
+}
+body:not(.in-game) .lobby-sheet-start {
+  color: var(--t-red) !important;
+}
+/* карта в рамке (вода — светло-голубой фон под картинкой) */
+body:not(.in-game) .lobby-map {
+  background: var(--t-sheet) !important;
+}
+body:not(.in-game) .lobby-map-frame {
+  background: #c3d2da !important;
+  border: 1px solid var(--t-line);
+}
+/* футер: светлый лист, название чернилами, счётчик приглушённо, кнопка ВОЙТИ */
+body:not(.in-game) .lobby-foot {
+  background: var(--t-sheet) !important;
+  border-top: 1px solid var(--t-line);
+}
+body:not(.in-game) .lobby-name {
+  font-family: var(--t-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: clamp(16px, 2.4vh, 24px);
+  line-height: 1;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .lobby-count {
+  font-family: var(--t-mono) !important;
+  font-size: 12px;
+  color: var(--t-ink-soft) !important;
+  margin-top: 4px;
+}
+body:not(.in-game) .lobby-join {
+  flex: 0 0 auto;
+  font-family: var(--t-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  box-shadow: var(--t-shadow-sm);
+  padding: 12px 26px;
+  font-size: 18px;
+}
+body:not(.in-game) .lobby-join.arrow {
+  padding: 6px 12px;
+  font-size: 16px;
+}
+/* ===== terron: ЗОЛОТОЙ МАТЧ — почасовое лобби с наградой победителю ===== */
+/* Карточка целиком уходит в золото: рамка, шапка, футер, кнопка ВОЙТИ. Цель —
+   чтобы «золотое» читалось с одного взгляда даже боковым зрением. */
+body:not(.in-game) .lobby-card.golden {
+  border-color: #8a6a12 !important;
+  box-shadow:
+    0 0 0 3px #d4af37,
+    var(--t-shadow) !important;
+}
+body:not(.in-game) .lobby-card.golden .lobby-sheet-hdr,
+body:not(.in-game) .lobby-card.golden .lobby-foot,
+body:not(.in-game) .lobby-card.golden .lobby-map {
+  background: #f7ecc8 !important;
+}
+/* У золотой карточки золотится ТОЛЬКО золотая вкладка: обычная остаётся
+   обычной (иначе читается, будто ффа-лобби тоже золотое).
+   terron 29.07: фон обычной вкладки тут НЕЙТРАЛЬНЫЙ, а не `--t-bg` — пергамент
+   #efe6c8 сам по себе жёлтый и на золотой шапке (#f7ecc8) читался как ещё один
+   оттенок золота. Серо-кремовый разводит их однозначно. */
+body:not(.in-game) .lobby-card.golden .lobby-tab:not(.gold):not(.diamond) {
+  background: #eae8de;
+  color: var(--t-ink-soft) !important;
+  border-right-color: var(--t-line);
+}
+body:not(.in-game) .lobby-card.golden .lobby-tab:not(.gold):not(.diamond) * {
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .lobby-card.golden .lobby-sheet-hdr {
+  border-bottom-color: #d4af37;
+}
+body:not(.in-game) .lobby-card.golden .lobby-foot {
+  border-top-color: #d4af37;
+}
+body:not(.in-game) .lobby-card.golden .lobby-sheet-start {
+  color: #8a6a12 !important;
+}
+body:not(.in-game) .lobby-card.golden .lobby-join {
+  background: linear-gradient(180deg, #e8cc63 0%, #d4af37 100%) !important;
+  color: #2b2a24 !important;
+}
+/* Плашка «ЗОЛОТОЙ МАТЧ» поверх карты + строка награды в футере. */
+body:not(.in-game) .golden-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #d4af37;
+  color: #2b2a24;
+  font-family: var(--t-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid #8a6a12;
+}
+/* Анонс в шапке справа от закладки: «ЗОЛОТОЙ МАТЧ +10 💎 за победу · через 8:12» */
+body:not(.in-game) .golden-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  /* вкладки жмутся влево, награда — к правому краю шапки */
+  margin-left: auto;
+  color: #8a6a12;
+  font-family: var(--t-mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+body:not(.in-game) .golden-note b {
+  font-family: var(--t-display);
+  letter-spacing: 0.1em;
+  color: #6b5209;
+}
+body:not(.in-game) .golden-note-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px; /* «+10💎» одним блоком: на телефоне каждый пиксель шапки на счету */
+}
+/* Иконка алмаза — фиксированный размер ВЕЗДЕ (вкладка, шапка): без него
+   картинка растягивалась на всю карточку. */
+body:not(.in-game) .golden-gem {
+  width: 13px !important;
+  height: 13px !important;
+  min-width: 13px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: -2px;
+}
+body:not(.in-game) .golden-note-left {
+  color: var(--t-red);
+}
+/* Значок события вместо названия — только на узких экранах (см. ниже). */
+body:not(.in-game) .lobby-tab-short {
+  display: none;
+}
+/* Узкие экраны: вкладок ТРИ (обычная + золотая + алмазная), и полные подписи с
+   наградой в строку не влезают — алмазный таймер обрезался прямо у края
+   (проверено на 375px). Оставляем суть: значок события и время до старта. */
+@media (max-width: 560px) {
+  body:not(.in-game) .golden-note-reward {
+    display: none;
+  }
+  body:not(.in-game) .lobby-tab-full {
+    display: none;
+  }
+  body:not(.in-game) .lobby-tab-short {
+    display: inline;
+    font-size: 13px;
+  }
+  body:not(.in-game) .lobby-tab {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+}
+
+/* ===== terron: АЛМАЗНЫЙ МАТЧ — суточное лобби, награда на порядок больше =====
+   Та же схема, что у золотого, но во льду: золото и лёд не путаются боковым
+   зрением, а на витрине вкладки стоят рядом. Цвета: #4aa8d8 (лёд), #14536f
+   (тёмный контур/текст), #e2f2fa (светлый фон блоков). */
+body:not(.in-game) .lobby-tab.diamond {
+  color: #0f5f85 !important;
+  background: #dff0fa;
+  border-right-color: #4aa8d8;
+}
+body:not(.in-game) .lobby-tab.diamond.is-active {
+  background: #bfe1f4;
+}
+body:not(.in-game) .lobby-tab.diamond * {
+  color: #0f5f85 !important;
+}
+body:not(.in-game) .lobby-card.diamond {
+  border-color: #14536f !important;
+  box-shadow:
+    0 0 0 3px #4aa8d8,
+    var(--t-shadow) !important;
+}
+body:not(.in-game) .lobby-card.diamond .lobby-sheet-hdr,
+body:not(.in-game) .lobby-card.diamond .lobby-foot,
+body:not(.in-game) .lobby-card.diamond .lobby-map {
+  background: #e2f2fa !important;
+}
+/* У алмазной карточки во льду ТОЛЬКО алмазная вкладка — остальные нейтральны
+   (та же логика, что у золотой: иначе читается, будто все лобби алмазные). */
+body:not(.in-game) .lobby-card.diamond .lobby-tab:not(.diamond):not(.gold) {
+  background: #eae8de;
+  color: var(--t-ink-soft) !important;
+  border-right-color: var(--t-line);
+}
+body:not(.in-game) .lobby-card.diamond .lobby-tab:not(.diamond):not(.gold) * {
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .lobby-card.diamond .lobby-sheet-hdr {
+  border-bottom-color: #4aa8d8;
+}
+body:not(.in-game) .lobby-card.diamond .lobby-foot {
+  border-top-color: #4aa8d8;
+}
+body:not(.in-game) .lobby-card.diamond .lobby-sheet-start {
+  color: #14536f !important;
+}
+body:not(.in-game) .lobby-card.diamond .lobby-join {
+  background: linear-gradient(180deg, #7fcbec 0%, #4aa8d8 100%) !important;
+  color: #10202b !important;
+}
+
+/* terron: карточка лобби заблокирована (невалидный ник/тег клана). Высоко-
+   контрастная тёмная кнопка ВОЙТИ переживала opacity-50 и не читалась как
+   disabled — глушим её и обесцвечиваем карту, чтобы блок был очевиден. */
+body:not(.in-game) .lobby-card:disabled .lobby-join {
+  background: rgba(43, 42, 36, 0.18) !important;
+  color: rgba(43, 42, 36, 0.45) !important;
+  box-shadow: none !important;
+}
+body:not(.in-game) .lobby-card:disabled .lobby-map-frame img {
+  filter: grayscale(1);
+}
+
+/* ===== декор «штабной карты» (map-decor): градусы по краям, компас, штамп ===== */
+/* старый одиночный компас-::after отключён — всё в .map-decor ниже */
+body:not(.in-game) .map-decor {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  font-family: var(--t-mono) !important;
+  color: var(--t-ink-soft) !important;
+}
+/* концентрические круги слева-снизу (как в референсе) */
+body:not(.in-game) .map-decor .md-rings {
+  position: absolute;
+  left: -130px;
+  bottom: -130px;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  opacity: 0.55;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 36px,
+    rgba(43, 42, 36, 0.07) 36px 37px
+  );
+}
+/* топо-горизонтали: бледные концентрические контуры из углов (как в референсе) */
+body:not(.in-game) .map-decor .md-topo {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-radial-gradient(
+    circle at 95% 10%,
+    transparent 0 118px,
+    rgba(43, 42, 36, 0.035) 118px 119px
+  );
+}
+body.in-game .map-decor {
+  display: none !important;
+}
+/* градусы сверху (10°…100°) */
+body:not(.in-game) .map-decor .md-top {
+  position: absolute;
+  top: 96px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 60px;
+}
+/* градусы слева (70°…20°) */
+body:not(.in-game) .map-decor .md-left {
+  position: absolute;
+  top: 130px;
+  bottom: 90px;
+  left: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+body:not(.in-game) .map-decor span {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+}
+/* компас N↑ справа-сверху */
+body:not(.in-game) .map-decor .md-compass {
+  position: absolute;
+  top: 150px;
+  right: 60px;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--t-ink-soft);
+  opacity: 0.55;
+  border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%232b2a24' stroke-width='1.5'%3E%3Ccircle cx='120' cy='120' r='110'/%3E%3Ccircle cx='120' cy='120' r='78'/%3E%3Cline x1='120' y1='6' x2='120' y2='234'/%3E%3Cline x1='6' y1='120' x2='234' y2='120'/%3E%3C/g%3E%3Cpath d='M120 18 L132 54 L120 46 L108 54 Z' fill='%232b2a24'/%3E%3Ccircle cx='120' cy='120' r='5' fill='%232b2a24'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+/* штамп TERRON · ШТАБ · 54°N 83°E слева-снизу (приглушённо-синий) */
+body:not(.in-game) .map-decor .md-stamp {
+  position: absolute;
+  left: 40px;
+  bottom: 70px;
+  width: 150px;
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1.5px solid rgba(90, 110, 140, 0.5);
+  border-radius: 50%;
+  color: rgba(90, 110, 140, 0.75) !important;
+  transform: rotate(-8deg);
+  opacity: 0.8;
+}
+body:not(.in-game) .map-decor .md-stamp b {
+  font-family: var(--t-display) !important;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+}
+body:not(.in-game) .map-decor .md-stamp span {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  opacity: 1;
+  color: rgba(90, 110, 140, 0.75) !important;
+}
+
+/* ===== фикс скролла главной (flexbox min-height:0) ===== */
+/* без этого нижние кнопки (соло против ботов / создать / по коду) обрезаны */
+body:not(.in-game) main,
+body:not(.in-game) main > div {
+  min-height: 0 !important;
+}
+body:not(.in-game) main > div {
+  scrollbar-width: thin;
+  /* плотнее вертикаль → контент влезает */
+  gap: 14px !important;
+  padding-bottom: 8px !important;
+}
+/* НЕ делаем внутренний скролл: скроллит ВНЕШНИЙ контейнер (#main-content) вместе
+   с футером — единый скролл на всех экранах, футер в потоке, кнопки не режутся. */
+/* футер тонкий, «без высоты» (как в референсе) */
+body:not(.in-game) footer {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+/* ===== логотип-wordmark TERRON ===== */
+body:not(.in-game) .terron-logo {
+  font-family: var(--t-display) !important;
+  font-weight: 700;
+  font-size: 34px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t-ink) !important;
+  text-decoration: none;
+  line-height: 1;
+  display: inline-block;
+  white-space: nowrap;
+}
+/* подзаголовок логотипа — слева под TERRON */
+body:not(.in-game) .terron-sub {
+  text-align: left !important;
+  margin-left: 2px;
+}
+
+/* тёмное время (класс terron-dim ставит TerronAmbient): тёмный логотип-wordmark
+   тонул бы в затемнённом фоне — делаем его светлым, чтоб читался. */
+body:not(.in-game).terron-dim .terron-logo {
+  color: #ece5d2 !important;
+  text-shadow: 0 1px 16px rgba(0, 0, 0, 0.55);
+}
+/* шестерня настроек так же тонула бы в затемнённом фоне — осветляем (ховер ниже
+   оставляем красным, он специфичнее по :hover не перебивает базовый цвет). */
+/* ⚠️ ТОЛЬКО ДЕСКТОПНАЯ ШАПКА (26.08). Правило осветляет шестерню, потому что
+   шапка лежит ПОВЕРХ затемнённой страницы. Мобильная шторка (#sidebar-menu) в
+   ночном режиме остаётся СВЕТЛЫМ пергаментным листом — там осветлённая шестерня
+   становилась светлым по светлому и пропадала совсем (репорт «иконка настроек в
+   бургере пропала»: цвет #ece5d2 на фоне #efe6c8). Селектор без привязки к
+   поверхности не различал эти два случая. */
+body:not(.in-game).terron-dim desktop-nav-bar .nav-menu-item.nav-gear,
+body:not(.in-game).terron-dim desktop-nav-bar .nav-menu-item.nav-gear.active {
+  color: #ece5d2 !important;
+}
+/* футер ночью: тёмные чернила тонут в затемнённом фоне. Светлый текст + тёмный
+   ОРЕОЛ (text-shadow) — читается и на тёмных краях виньетки, и на тёплой «луже»
+   света от лампы (там фон светлеет). SVG-иконки (telegram/play) красятся через
+   fill, не color — их не трогает. */
+body:not(.in-game).terron-dim footer,
+body:not(.in-game).terron-dim footer * {
+  color: #ece5d2 !important;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.92),
+    0 0 2px rgba(0, 0, 0, 0.8) !important;
+}
+/* приглушённый блок «онлайн · партии» ночью поднимаем к полной видимости */
+body:not(.in-game).terron-dim footer .opacity-60 {
+  opacity: 0.95 !important;
+}
+
+/* ===== футер: чернильные текст-ссылки ===== */
+body:not(.in-game) footer a,
+body:not(.in-game) footer span {
+  color: var(--t-ink) !important;
+  font-family: var(--t-mono) !important;
+  letter-spacing: 0.02em;
+}
+
+/* ===== строка входа: [ФЛАГ] [ТЕГ] ник · СКИН ===== */
+/* зона ника залита выбранным скином (градиент --t-skin), текст — пергамент */
+body:not(.in-game) .play-id {
+  background: #fff !important; /* блок ника — белый */
+  border: 1px solid var(--t-ink) !important;
+  box-shadow: var(--t-shadow) !important;
+}
+body:not(.in-game) .play-id,
+body:not(.in-game) .play-id * {
+  color: var(--t-ink) !important; /* тёмный текст на белом */
+}
+/* флаг — слева, компактный чип по центру по высоте (в один уровень с текстом) */
+body:not(.in-game) .play-id flag-input,
+body:not(.in-game) .play-id .play-flag {
+  display: flex !important;
+  align-items: center;
+  align-self: center;
+  height: 30px !important;
+  aspect-ratio: 3 / 2;
+  flex: 0 0 auto;
+  margin-left: 10px;
+}
+body:not(.in-game) .play-id flag-input .flag-btn {
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+body:not(.in-game) .play-id #flag-preview,
+body:not(.in-game) .play-id #flag-preview img,
+body:not(.in-game) .play-id flag-input img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 0 !important;
+}
+/* нет флага → короткая надпись (i18n flag_input.short: «Флаг»/«Flag»), мелким */
+body:not(.in-game) .play-id flag-input .flag-btn > span:not(#flag-preview) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--t-display) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.06em;
+  color: var(--t-ink) !important;
+  line-height: 1;
+  text-transform: uppercase;
+}
+/* поля ника/тега — без рамок/фона, текст пергамент, ЕДИНЫЙ размер, по центру */
+body:not(.in-game) .play-id input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--t-ink) !important;
+  font-family: var(--t-display) !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+body:not(.in-game) .play-id input::placeholder {
+  color: rgba(43, 42, 36, 0.45) !important;
+}
+/* клан-тег виден (слева от ника), как чип */
+body:not(.in-game) .play-id username-input > div > div:first-child {
+  display: flex !important;
+  margin-right: 6px;
+}
+body:not(.in-game) .play-id username-input {
+  padding-left: 10px;
+  /* terron: якорь для absolute-тултипа ошибки (top-full). Без него тултип
+     цеплялся за далёкий позиционированный предок и рисовался гигантским
+     красным блоком внизу страницы вместо узкой плашки под полем тега. */
+  position: relative;
+}
+/* terron: текст ошибки тега читаем — .play-id * форсит ink (тёмное на тёмно-
+   красном фоне плашки = «без текста»). Возвращаем светлый красный. */
+body:not(.in-game) .play-id #username-validation-error,
+body:not(.in-game) .play-id #clan-tag-validation-error,
+body:not(.in-game) .play-id #username-validation-error *,
+body:not(.in-game) .play-id #clan-tag-validation-error * {
+  color: #fecaca !important;
+}
+/* terron: текст тега красный, когда тег заблокирован (синтаксис/не-член) —
+   .play-id * форсит ink, поэтому перебиваем по aria-invalid с большей
+   специфичностью. Сигнал «вход заблокирован» прямо в поле. */
+body:not(.in-game) .play-id username-input input[aria-invalid="true"] {
+  color: var(--t-red) !important;
+}
+/* «СКИН» — кнопка-надпись без подложки, справа */
+body:not(.in-game) .play-id .skin-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--t-ink) !important;
+  font-family: var(--t-display) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 18px;
+  padding: 0 14px !important;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-left: 1px solid rgba(43, 42, 36, 0.25) !important;
+  cursor: pointer;
+}
+/* terron: на телефоне строка входа компактнее — флаг/тег не должны съедать ник */
+@media (max-width: 767px) {
+  body:not(.in-game) .play-id input {
+    font-size: 15px !important;
+  }
+  body:not(.in-game) .play-id .skin-btn {
+    font-size: 13px;
+    padding: 0 10px !important;
+  }
+  body:not(.in-game) .play-id username-input {
+    padding-left: 7px;
+  }
+  body:not(.in-game) .play-id flag-input,
+  body:not(.in-game) .play-id .play-flag {
+    margin-left: 7px;
+    height: 26px !important;
+  }
+}
+/* нижняя панель «Мои скины» (разворачивается снизу по кнопке СКИН) */
+body:not(.in-game) .skin-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(43, 42, 36, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: skin-sheet-fade 0.15s ease;
+}
+body:not(.in-game) .skin-sheet {
+  width: 100%;
+  max-width: 1100px;
+  max-height: 72vh;
+  overflow-y: auto;
+  background: var(--t-bg);
+  border-top: 2px solid var(--t-ink);
+  box-shadow: 0 -3px 0 0 rgba(43, 42, 36, 0.22);
+  padding: 16px 20px 24px;
+  animation: skin-sheet-up 0.2s ease;
+}
+@keyframes skin-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes skin-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+body:not(.in-game) .skin-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+body:not(.in-game) .skin-sheet-title {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 20px;
+  color: var(--t-ink);
+}
+body:not(.in-game) .skin-sheet-manage {
+  background: transparent;
+  border: none;
+  color: var(--t-ink);
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+body:not(.in-game) .skin-sheet-x {
+  background: transparent;
+  border: none;
+  color: var(--t-ink);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+body:not(.in-game) .skin-sheet-grid {
+  margin: 0;
+}
+/* меню скинов: position:fixed по координатам кнопки (правый-нижний угол меню
+   в точке (left,top)), чтобы не клипалось overflow-контейнерами строки/main */
+body:not(.in-game) .play-id .skin-menu {
+  position: fixed;
+  transform: translate(-100%, -100%);
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: var(--t-sheet);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+  z-index: 100000;
+}
+body:not(.in-game) .play-id .skin-swatch {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--t-ink) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  padding: 0 !important;
+}
+body:not(.in-game) .play-id .skin-swatch.on {
+  outline: 2px solid var(--t-red);
+  outline-offset: 1px;
+}
+
+/* ===== футер: без подложки совсем, язык — мелкий текст-чип ===== */
+body:not(.in-game) .terron-footer,
+body:not(.in-game) .terron-footer * {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body:not(.in-game) .terron-footer lang-selector,
+body:not(.in-game) .terron-footer lang-selector * {
+  border: none !important;
+}
+body:not(.in-game) .terron-footer lang-selector button {
+  padding: 0 2px !important;
+  font-size: 11px !important;
+  box-shadow: none !important;
+}
+/* подложка футера: гасим ВСЮ цепочку (host page-footer + обёртка-див) */
+body:not(.in-game) page-footer,
+body:not(.in-game) div:has(> page-footer) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ===== чат — только внутри сессии, на главной его нет ===== */
+body:not(.in-game) chat-panel {
+  display: none !important;
+}
+
+/* ===== обучение: подсветка кнопки ГОРОДА в нижнем баре (UnitDisplay) =====
+   UnitDisplay — light DOM, поэтому глобальный CSS достаёт. Класс tut-hl-city
+   ставится в render когда активен body.tut-city (шаг build). НЕ скоупим под
+   :not(.in-game) — нужно именно в игре. */
+@keyframes tutCityGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 175, 55, 0);
+    border-color: #d4af37 !important;
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #d4af37,
+      0 0 16px 5px rgba(212, 175, 55, 0.85);
+    border-color: #ffe07a !important;
+  }
+}
+.tut-hl-city {
+  animation: tutCityGlow 1.1s ease-in-out infinite;
+  opacity: 1 !important;
+  z-index: 5;
+}
+
+/* обучение: во время шага постройки лишние кнопки блокируем (строить нельзя) */
+.tut-blocked {
+  pointer-events: none !important;
+  opacity: 0.25 !important;
+  filter: grayscale(1);
+}
+
+/* Приоритет наших подсказок: пока показана наша подсказка (SpawnTutorial ставит
+   body.tut-visible), игровая плашка HeadsUpMessage (.hud-msg) уезжает в центр,
+   чтобы не пересекаться. Нет нашей подсказки → HeadsUp на штатном top:15%.
+   Только мобайл — на десктопе места хватает. */
+@media (max-width: 767px) {
+  body.tut-visible .hud-msg {
+    top: 42% !important;
+  }
+}
+
+/* ===================================================================== */
+/* ОБЩИЕ КОМПОНЕНТЫ «ДОСЬЕ» — профиль (/@slug) и аккаунт (/account).      */
+/* Один источник стиля: эти классы используют ОБА экрана, ничего          */
+/* кастомного в самих компонентах. Палитра/токены — штабная карта выше.   */
+/* ===================================================================== */
+
+body:not(.in-game) .t-page {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px;
+}
+body:not(.in-game) .t-h3 {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 14px;
+  color: var(--t-ink-soft) !important;
+  margin: 22px 0 10px;
+}
+body:not(.in-game) .t-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+/* шапка-досье: аватар · позывной · уровень */
+body:not(.in-game) .t-id {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+body:not(.in-game) .t-avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--t-ink);
+  color: var(--t-parchment) !important;
+  font-family: var(--t-display);
+  font-weight: 700;
+  font-size: 30px;
+  box-shadow: var(--t-shadow);
+}
+body:not(.in-game) .t-name {
+  font-family: var(--t-display);
+  font-size: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--t-ink) !important;
+  line-height: 1.1;
+}
+body:not(.in-game) .t-slug {
+  font-family: var(--t-mono);
+  font-size: 13px;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .t-lvl {
+  margin-left: auto;
+  text-align: center;
+  border: 1px solid var(--t-ink);
+  background: var(--t-parchment);
+  padding: 8px 14px;
+  flex: 0 0 auto;
+}
+body:not(.in-game) .t-lvl b {
+  font-family: var(--t-display);
+  font-size: 18px;
+}
+body:not(.in-game) .t-lvl span {
+  display: block;
+  font-family: var(--t-mono);
+  font-size: 11px;
+  color: var(--t-ink-soft);
+}
+
+/* карточка-показатель */
+body:not(.in-game) .t-stat {
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+  padding: 12px 14px;
+}
+body:not(.in-game) .t-stat-val {
+  font-family: var(--t-mono);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-stat-lbl {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t-ink-soft) !important;
+  margin-top: 6px;
+}
+body:not(.in-game) .t-accent {
+  color: var(--t-red) !important;
+}
+
+/* таблица детальной статы */
+body:not(.in-game) table.t-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+}
+body:not(.in-game) table.t-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--t-line);
+  font-family: var(--t-body);
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) table.t-table td.num {
+  text-align: right;
+  font-family: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* достижения */
+body:not(.in-game) .t-ach {
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+  padding: 14px;
+  text-align: center;
+}
+body:not(.in-game) .t-ach.off {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+body:not(.in-game) .t-ach-ic {
+  font-size: 28px;
+}
+body:not(.in-game) .t-ach-t {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  font-size: 13px;
+  margin-top: 6px;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-ach-d {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  color: var(--t-ink-soft) !important;
+  margin-top: 4px;
+}
+
+/* строки реплеев */
+body:not(.in-game) .t-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+  padding: 10px 14px;
+}
+body:not(.in-game) .t-row + .t-row {
+  margin-top: 8px;
+}
+body:not(.in-game) .t-row-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+body:not(.in-game) .t-row-main b {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-muted {
+  font-family: var(--t-mono);
+  font-size: 12px;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .t-win {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-loss {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .t-quit {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  color: var(--t-red) !important;
+}
+
+/* настройки аккаунта: поля/кнопки */
+body:not(.in-game) .t-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+body:not(.in-game) .t-label {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .t-input {
+  width: 100%;
+  background: var(--t-parchment) !important;
+  border: 1px solid var(--t-ink) !important;
+  padding: 10px 12px;
+  font-family: var(--t-display) !important;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-btn {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 18px;
+  border: 1px solid var(--t-ink) !important;
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  box-shadow: var(--t-shadow);
+  cursor: pointer;
+}
+@keyframes t-skel-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+body:not(.in-game) .t-skel {
+  background: rgba(0, 0, 0, 0.1);
+  animation: t-skel-pulse 1.2s ease-in-out infinite;
+}
+body:not(.in-game) .shop-split {
+  display: flex;
+  margin-top: 8px;
+  border: 1px solid var(--t-ink);
+  overflow: hidden;
+}
+body:not(.in-game) .shop-half {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 4px;
+  font-family: var(--t-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--t-ink);
+  box-shadow: none;
+  text-transform: none;
+  transition: background 0.12s;
+}
+body:not(.in-game) .shop-half.lts {
+  background: rgba(110, 110, 110, 0.1);
+}
+body:not(.in-game) .shop-half.pts {
+  background: rgba(186, 117, 23, 0.13);
+}
+body:not(.in-game) .shop-half.lts:hover:not(:disabled) {
+  background: rgba(110, 110, 110, 0.28);
+}
+body:not(.in-game) .shop-half.pts:hover:not(:disabled) {
+  background: rgba(186, 117, 23, 0.32);
+}
+body:not(.in-game) .shop-half:active:not(:disabled) {
+  background: var(--t-ink);
+  color: var(--t-parchment);
+}
+body:not(.in-game) .shop-half.off {
+  opacity: 0.4;
+  cursor: default;
+}
+body:not(.in-game) .t-btn.ghost {
+  background: var(--t-parchment) !important;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-btn.danger {
+  background: var(--t-red) !important;
+  border-color: var(--t-red) !important;
+  color: #fff !important;
+}
+/* Крутилка входа через площадку: вращающийся квадрат с вырезом — квадратная
+   эстетика террона. Показывается на весь процесс входа (см. AccountSettings). */
+body:not(.in-game) .t-login-spin {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--t-ink, #2b2a24);
+  border-right-color: transparent;
+  animation: t-login-spin 0.8s steps(8) infinite;
+}
+@keyframes t-login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+body:not(.in-game) .t-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+body:not(.in-game) .t-err {
+  font-family: var(--t-mono);
+  font-size: 13px;
+  color: var(--t-red) !important;
+}
+body:not(.in-game) .t-link {
+  font-family: var(--t-mono);
+  font-size: 12px;
+  color: var(--t-red) !important;
+  text-decoration: none;
+}
+
+/* ===== создание клана (/clan/new) ===== */
+body:not(.in-game) .clan-create {
+  max-width: 560px;
+}
+/* строка идентичности: (флаг) [тег] имя — приближённо к виду в игре */
+body:not(.in-game) .clan-identity {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 6px;
+}
+body:not(.in-game) .clan-flag-btn {
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+  cursor: pointer;
+}
+body:not(.in-game) .clan-flag-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+body:not(.in-game) .clan-flag-btn .ph {
+  font-family: var(--t-display);
+  font-size: 22px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-tag-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 52px;
+  padding: 0 10px;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+}
+body:not(.in-game) .clan-tag-wrap .br {
+  font-family: var(--t-display);
+  font-size: 20px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-tag-input {
+  width: 5ch;
+  min-width: 5ch;
+  padding: 0;
+  border: 0 !important;
+  outline: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: center;
+  font-family: var(--t-display) !important;
+  font-size: 18px;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .clan-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 52px;
+}
+body:not(.in-game) .clan-hint {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  color: var(--t-ink-soft);
+  margin: 6px 0 20px;
+}
+body:not(.in-game) .clan-rm {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+/* строка «лейбл + контролы» (скобки, вступление) */
+body:not(.in-game) .clan-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-bottom: 16px;
+}
+body:not(.in-game) .clan-row > .t-label {
+  flex: 0 0 auto;
+}
+body:not(.in-game) .clan-brackets,
+body:not(.in-game) .clan-join {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+body:not(.in-game) .clan-br-btn {
+  padding: 7px 10px;
+  min-width: 44px;
+}
+body:not(.in-game) .clan-url {
+  display: flex;
+  align-items: center;
+}
+body:not(.in-game) .clan-url .t-input {
+  margin-left: 2px;
+}
+body:not(.in-game) .clan-mini {
+  font-size: 11px;
+  margin-top: 4px;
+}
+body:not(.in-game) .clan-count {
+  text-align: right;
+}
+body:not(.in-game) .clan-create-foot {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--t-line);
+}
+
+/* ===== страница клана (/@<slug> → клан) ===== */
+body:not(.in-game) .clan-view-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+body:not(.in-game) .clan-view-flag {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+}
+body:not(.in-game) .clan-view-flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+body:not(.in-game) .clan-view-flag .ph {
+  font-family: var(--t-display);
+  font-size: 14px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-view-tag {
+  font-family: var(--t-mono);
+  font-size: 13px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-view-name {
+  font-family: var(--t-display);
+  font-size: 28px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--t-ink);
+  line-height: 1.05;
+}
+body:not(.in-game) .clan-view-manage {
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+body:not(.in-game) .clan-view-actions {
+  display: flex;
+  gap: 6px;
+}
+/* поле «пригласить игрока» (управление) */
+body:not(.in-game) .clan-invite-row {
+  display: flex;
+  gap: 8px;
+}
+body:not(.in-game) .clan-invite-row .t-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body:not(.in-game) .clan-view-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+body:not(.in-game) .clan-badge {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border: 1px solid var(--t-line);
+  background: var(--t-parchment);
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-badge.open {
+  border-color: var(--t-ink);
+  color: var(--t-ink);
+}
+body:not(.in-game) .clan-view-desc {
+  font-family: var(--t-body);
+  color: var(--t-ink);
+  line-height: 1.5;
+  max-width: 620px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* terron: кликабельная соц-ссылка (иконка бренда + путь + «новая вкладка»).
+   Квадратный чип, вся зона кликабельна. Работает и вне игры, и в HUD. */
+.t-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  vertical-align: baseline;
+  text-decoration: none;
+  color: var(--t-ink, #2b2a24);
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.12em 0.42em;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.04);
+}
+.t-social:hover {
+  background: rgba(0, 0, 0, 0.09);
+  text-decoration: underline;
+}
+.t-social .t-social-path {
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* в тёмном HUD (в игре) — светлый вариант чипа */
+body.in-game .t-social {
+  color: #f3f4f6;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+body.in-game .t-social:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+/* список участников клана */
+body:not(.in-game) .clan-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body:not(.in-game) .clan-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+  text-decoration: none;
+}
+body:not(.in-game) .clan-member:hover {
+  border-color: var(--t-ink);
+}
+body:not(.in-game) .clan-member-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+body:not(.in-game) .clan-member-name {
+  font-family: var(--t-display);
+  font-size: 15px;
+  color: var(--t-ink);
+}
+body:not(.in-game) .clan-member-id {
+  font-family: var(--t-mono);
+  font-size: 12px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-member-role {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--t-ink-soft);
+}
+/* заявки на вступление (управление) */
+body:not(.in-game) .clan-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body:not(.in-game) .clan-req {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+}
+body:not(.in-game) .clan-req-id {
+  font-family: var(--t-mono);
+  font-size: 13px;
+  color: var(--t-ink);
+  text-decoration: none;
+}
+body:not(.in-game) .clan-req-act {
+  display: flex;
+  gap: 6px;
+}
+
+/* ===== хаб кланов (/clan) ===== */
+body:not(.in-game) .clan-hub-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+body:not(.in-game) .clan-hub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+body:not(.in-game) .clan-hub-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--t-parchment);
+  border: 1px solid var(--t-line);
+  box-shadow: var(--t-shadow);
+  cursor: pointer;
+}
+body:not(.in-game) .clan-hub-card:hover {
+  border-color: var(--t-ink);
+}
+body:not(.in-game) .clan-hub-flag {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--t-bg);
+  border: 1px solid var(--t-ink);
+}
+body:not(.in-game) .clan-hub-flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+body:not(.in-game) .clan-hub-flag .ph {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  color: var(--t-ink-soft);
+}
+body:not(.in-game) .clan-hub-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+body:not(.in-game) .clan-hub-name {
+  font-family: var(--t-display);
+  font-size: 16px;
+  color: var(--t-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body:not(.in-game) .clan-hub-sub {
+  font-family: var(--t-mono);
+  font-size: 11px;
+  color: var(--t-ink-soft);
+  margin-top: 2px;
+}
+body:not(.in-game) .clan-hub-arrow {
+  flex: 0 0 auto;
+  font-family: var(--t-display);
+  color: var(--t-ink-soft);
+}
+
+/* ===== меню: шестерня настроек без подложки, профиль — антрацит ===== */
+body:not(.in-game) .nav-menu-item.nav-gear,
+body:not(.in-game) .nav-menu-item.nav-gear:hover,
+body:not(.in-game) .nav-menu-item.nav-gear.active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px !important;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .nav-menu-item.nav-gear:hover {
+  color: var(--t-red) !important;
+}
+body:not(.in-game) .nav-menu-item.nav-profile,
+body:not(.in-game) .nav-menu-item.nav-profile.active {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  border: 1px solid var(--t-ink) !important;
+  box-shadow: var(--t-shadow-sm);
+}
+body:not(.in-game) .nav-menu-item.nav-profile:hover {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+  filter: brightness(1.25);
+}
+
+/* ===================================================================== */
+/* Доработки: выравнивание ника, читаемость модалок, меню/страница скинов  */
+/* ===================================================================== */
+
+/* ник и тег — по центру линии блока */
+body:not(.in-game) .play-id username-input,
+body:not(.in-game) .play-id username-input > div {
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+/* --- модалки на главной читаемы (соло против ботов и т.п.) --- */
+/* панель модалки — лист, не чёрная/серая */
+body:not(.in-game) section[class*="bg-black/70"] {
+  background: var(--t-sheet) !important;
+  color: var(--t-ink) !important;
+  backdrop-filter: none !important;
+  border-color: var(--t-ink) !important;
+}
+/* тёмные полупрозрачные подложки тогглов/слайдеров/выбранных карточек */
+body:not(.in-game) [class*="bg-black/2"],
+body:not(.in-game) [class*="bg-black/6"] {
+  background: rgba(43, 42, 36, 0.12) !important;
+}
+/* прочие тёмные утилиты → лист */
+body:not(.in-game) [class*="bg-neutral-7"],
+body:not(.in-game) [class*="bg-neutral-8"],
+body:not(.in-game) [class*="bg-neutral-9"],
+body:not(.in-game) [class*="bg-gray-6"],
+body:not(.in-game) [class*="bg-gray-7"],
+body:not(.in-game) [class*="bg-stone-7"],
+body:not(.in-game) [class*="bg-stone-8"],
+body:not(.in-game) [class*="bg-zinc-7"] {
+  background: var(--t-sheet) !important;
+  color: var(--t-ink) !important;
+}
+
+/* --- меню скинов (вертикальное: свотчи + управление) --- */
+body:not(.in-game) .play-id .skin-menu {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 184px;
+}
+body:not(.in-game) .play-id .skin-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 28px);
+  gap: 6px;
+}
+body:not(.in-game) .play-id .skin-manage {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--t-ink) !important;
+  font-family: var(--t-mono) !important;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  padding: 0 !important;
+  cursor: pointer;
+}
+
+/* --- страница скинов --- */
+body:not(.in-game) .t-skincard {
+  background: var(--t-sheet);
+  border: 1px solid var(--t-ink);
+  box-shadow: var(--t-shadow);
+  padding: 10px;
+}
+body:not(.in-game) .t-skinprev {
+  width: 100%;
+  aspect-ratio: 5 / 3; /* terron: формат флага (300×180) — contain заполняет ровно, без щелей */
+  height: auto;
+  border: 1px solid var(--t-ink);
+}
+body:not(.in-game) .t-skinprev-lg {
+  aspect-ratio: 1 / 1;
+  height: auto;
+  margin: 0 0 12px;
+}
+body:not(.in-game) .t-skinname {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  font-size: 13px;
+  margin-top: 8px;
+  color: var(--t-ink) !important;
+}
+body:not(.in-game) .t-balance {
+  font-family: var(--t-mono);
+  font-weight: 600;
+  color: var(--t-ink) !important;
+  border: 1px solid var(--t-ink);
+  background: var(--t-parchment);
+  padding: 4px 10px;
+}
+
+/* terron 26.08: БАЛАНС И «ПЛЮС» — ОДИН БЛОК (просьба владельца: «щас это блок и
+   кнопка, должно быть блок, внутри которой +»). Рамка живёт на обёртке, обе
+   половины — кнопки без своей рамки, разделённые тонкой чертой: снаружи одна
+   плитка, а нажать можно и число (выписка), и плюс (пополнение). */
+/* terron 26.08: витрина пополнения — РОВНО 3 колонки (пакетов шесть, выходит
+   аккуратная лестница 3×2). auto-fill давал на широком экране 4+2, и порядок
+   «дешевле → дороже» читался как случайная россыпь. Узкие экраны складываются
+   сами: 2 колонки, затем 1. */
+body:not(.in-game) .pay-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 760px) {
+  body:not(.in-game) .pay-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 440px) {
+  body:not(.in-game) .pay-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+body:not(.in-game) .t-balance-chip {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+body:not(.in-game) .t-balance-chip > button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  transition: background 0.12s;
+}
+body:not(.in-game) .t-balance-chip > button:hover {
+  background: rgba(43, 42, 36, 0.1);
+}
+body:not(.in-game) .t-balance-chip > button:active {
+  background: var(--t-ink);
+  color: var(--t-parchment);
+}
+body:not(.in-game) .t-balance-plus {
+  border-left: 1px solid var(--t-ink) !important;
+  padding: 4px 9px !important;
+  font-size: 15px;
+  line-height: 1;
+  background: rgba(43, 42, 36, 0.07) !important;
+}
+body:not(.in-game) .t-balance-plus:hover {
+  background: rgba(43, 42, 36, 0.18) !important;
+}
+body:not(.in-game) .t-balance-plus:active {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment);
+}
+body:not(.in-game) select.t-input {
+  font-family: var(--t-display) !important;
+}
+body:not(.in-game) .t-page input[type="range"] {
+  accent-color: var(--t-ink);
+  width: 100%;
+}
+
+/* ===== заголовок «Очередь фронтов» над карточками лобби ===== */
+body:not(.in-game) .fronts-title {
+  font-family: var(--t-display);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 13px;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .fronts-next {
+  font-family: var(--t-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--t-ink-soft) !important;
+}
+body:not(.in-game) .fronts-next b {
+  color: var(--t-red) !important;
+  font-weight: 600;
+}
+
+/* ===== модалки на главной: светлая панель (через CSS-переменные сквозь shadow DOM o-modal) ===== */
+body:not(.in-game) {
+  --t-modal-bg: #fdfcf7;
+  --t-modal-fg: #2b2a24;
+}
+/* terron 24.08: /ults (дерево ульт) — НА ВЕСЬ ЭКРАН (решение владельца
+   «не вижу фулскрина»). Страницы-модалки живут в общем листе main-layout
+   с капом 20/24см — для открытого дерева кап снимаем. Остальные страницы
+   не трогаем: гейт по видимому #page-ults через :has(). */
+body:not(.in-game) main-layout main > div:has(#page-ults:not(.hidden)) {
+  max-width: none;
+}
+/* Поповер карты ульт: скролл ЕСТЬ, но тонкий и аккуратный (решение владельца
+   24.08 — «чтобы я понимал, что он таки есть»). */
+body:not(.in-game) .ult-pop {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(43, 42, 36, 0.35) transparent;
+}
+body:not(.in-game) .ult-pop::-webkit-scrollbar {
+  width: 6px;
+}
+body:not(.in-game) .ult-pop::-webkit-scrollbar-thumb {
+  background: rgba(43, 42, 36, 0.3);
+  border-radius: 3px;
+}
+body:not(.in-game) .ult-pop::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* видимое disabled-состояние кнопок (а не белое-на-белом из bg-gray-6→лист) */
+body:not(.in-game) button:disabled,
+body:not(.in-game) o-button button:disabled,
+body:not(.in-game) o-button button[disabled] {
+  background: var(--t-line) !important;
+  color: var(--t-ink-soft) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+/* активная primary/submit o-button — чернильная, текст пергамент (видна) */
+body:not(.in-game) o-button button:not(:disabled)[class*="bg-malibu-blue"],
+body:not(.in-game) o-button button:not(:disabled)[class*="bg-blue"] {
+  background: var(--t-ink) !important;
+  color: var(--t-parchment) !important;
+}
+
+/* ===== Магазин — фуллскрин-оверлей (наша основная конверсия: ничего не отвлекает,
+   перекрываем нав) + короткая reveal-анимация открытия (~200мс). ===== */
+@keyframes terron-shop-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+#page-shop:not(.hidden) {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  z-index: 10010 !important; /* выше нава (z-50) и o-modal (9999) */
+  animation: terron-shop-reveal 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: center 42%;
+}
+
+/* ===== Редактор скинов — тоже фуллскрин-оверлей (создание своего скина) ===== */
+#page-skins:not(.hidden) {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  z-index: 10010 !important;
+  animation: terron-shop-reveal 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: center 42%;
+}
+
+/* ===== Скелетоны (мерцающие плейсхолдеры): UI появляется сразу, картинки догружаются ===== */
+@keyframes terron-skel {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.t-skel {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.05) 25%,
+    rgba(0, 0, 0, 0.11) 37%,
+    rgba(0, 0, 0, 0.05) 63%
+  );
+  background-size: 200% 100%;
+  animation: terron-skel 1.3s ease-in-out infinite;
+}
+
+/* terron: пункты меню в мобильном бургер-сайдбаре — плоские (без подложки/тени).
+   Скоуп на mobile-nav-bar, чтобы не трогать боксы десктоп-навбара. */
+body:not(.in-game) mobile-nav-bar button,
+body:not(.in-game) mobile-nav-bar .nav-menu-item {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ===== terron: КОМПАКТНАЯ раскладка стора. Два независимых гейта:
+   (A) html.gp-embed — игра внутри iframe площадки (self!==top) ИЛИ ?embed=1 (тест).
+   (B) @media(max-height:730px) — ОЧЕНЬ низкий вьюпорт: сам стор (720/600) и тест
+       через DevTools device-mode 1280×720. Порог 730 НИЖЕ развёрнутого десктоп-
+       браузера (макбук maximized ~780px+), поэтому ОБЫЧНАЯ terron.io НЕ затронута
+       (РАНЬШЕ был 820 → ловил ноуты и добавлял скролл на главной; владелец ругался).
+   Что делаем: десктоп-раскладка заливает высоту (flex-1) → на низком окне контент
+   режется без скролла. Переводим главную колонку на натуральную высоту (внешний
+   overflow-y-auto заскроллит) + прячем новости/промо приложения, чтобы влезли
+   карта+вход+ФУТЕР. Скоуп body:not(.in-game) — HUD не трогаем. ===== */
+html.gp-embed body:not(.in-game) main-layout > main,
+html.gp-embed body:not(.in-game) main-layout > main > div {
+  flex: 0 0 auto !important;
+}
+html.gp-embed body:not(.in-game) #page-play {
+  min-height: auto !important;
+}
+html.gp-embed body:not(.in-game) android-promo,
+html.gp-embed body:not(.in-game) news-box {
+  display: none !important;
+}
+
+/* ===== terron: гейты ВОЗМОЖНОСТЕЙ площадки (чек-лист модерации GamePush —
+   «прятать то, что площадка не поддерживает»). Классы ставит GamePushSDK по
+   флагам самой площадки (platform.isExternalLinksAllowed / isBackendAllowed),
+   а не по её типу — новая площадка подхватится сама.
+   • gp-no-external — площадка запрещает уводить игрока наружу: прячем внешние
+     ссылки (telegram / Google Play / App Store), помеченные .t-external-link,
+     и промо-приложения целиком.
+   • gp-no-backend — площадка без своего/чужого бэкенда: прячем всё, что без
+     сервера пустое (рейтинг, кланы, друзья, магазин, зал славы, статистика).
+     Целимся в data-page навбаров и href футера — так новый пункт меню не надо
+     помечать руками, а компоненты не трогаем вовсе. ===== */
+html.gp-no-external .t-external-link,
+html.gp-no-external android-promo {
+  display: none !important;
+}
+
+/* ===== terron 29.07: ВНУТРИ ПЛОЩАДКИ внешние ссылки скрыты БЕЗУСЛОВНО.
+   Требование модерации GamePush («убрать внешние ссылки из игры») — площадки не
+   любят, когда игрока уводят наружу. Раньше это включалось только по флагу
+   platform.isExternalLinksAllowed=false, но флаг ставят не все площадки, а
+   требование общее — поэтому гейт по gp-embed (мы в iframe площадки).
+   Прячем РОВНО ТО, НА ЧТО УКАЗАЛА МОДЕРАЦИЯ: telegram / Google Play / App Store
+   в футере (.t-external-link) и РАЗДЕЛ «ПРОПАГАНДА» целиком (модератор сам
+   предложил) — он весь про внешний шеринг: баннеры, хэштеги, блок «Ссылки» с
+   terron.io и t.me.
+   ⚠️ Большой промо-баннер приложения (android-promo) НЕ трогаем — решение
+   владельца: замечания по нему не было, лишнего не убираем.
+   Сам сайт terron.io этим не затронут: класс gp-embed там не ставится.
+   ⚠️ itch.io ИСКЛЮЧЁН (:not(.itch-embed)) — это не площадка GamePush, её запрет
+   на внешние ссылки туда не распространяется. Именно ИСКЛЮЧЁН, а не перекрыт
+   обратным `display: revert`: у #page-propaganda видимостью управляет РОУТЕР
+   (прячет неактивные страницы), и форс-показ вываливал «Пропаганду» прямо на
+   главную под лобби. ===== */
+html.gp-embed:not(.itch-embed) .t-external-link,
+html.gp-embed:not(.itch-embed) [data-page="page-propaganda"],
+html.gp-embed:not(.itch-embed) #page-propaganda {
+  display: none !important;
+}
+html.gp-no-backend [data-page="page-leaderboard"],
+html.gp-no-backend [data-page="page-clan"],
+html.gp-no-backend [data-page="page-friends"],
+html.gp-no-backend [data-page="page-shop"],
+html.gp-no-backend .terron-footer a[href="/glory"],
+html.gp-no-backend .terron-footer a[href="/stats"],
+html.gp-no-backend .t-backend-feature {
+  display: none !important;
+}
+
+@media (max-height: 730px) {
+  body:not(.in-game) main-layout > main,
+  body:not(.in-game) main-layout > main > div {
+    flex: 0 0 auto !important;
+  }
+  body:not(.in-game) #page-play {
+    min-height: auto !important;
+  }
+  body:not(.in-game) android-promo,
+  body:not(.in-game) news-box {
+    display: none !important;
+  }
+}
+
+/* Чат лобби на ДЕСКТОП-ширине в компактном режиме — кнопка+шторка (288px слева),
+   а не всегда-развёрнутая панель (перекрывала модалку лобби). На мобильной ширине
+   (<1024) чат сворачивается сам (lg:-классы), поэтому override только для ≥1024. */
+@media (min-width: 1024px) {
+  html.gp-embed .lobby-chat-desktop {
+    display: none !important;
+  }
+  html.gp-embed .lobby-chat-fab {
+    display: flex !important;
+  }
+  html.gp-embed .lobby-chat-drawer {
+    display: flex !important;
+    left: 12px !important;
+    right: auto !important;
+    width: 288px !important;
+    top: 96px !important;
+    bottom: 96px !important;
+  }
+  html.gp-embed .lobby-chat-close {
+    display: block !important;
+  }
+}
+@media (min-width: 1024px) and (max-height: 730px) {
+  .lobby-chat-desktop {
+    display: none !important;
+  }
+  .lobby-chat-fab {
+    display: flex !important;
+  }
+  .lobby-chat-drawer {
+    display: flex !important;
+    left: 12px !important;
+    right: auto !important;
+    width: 288px !important;
+    top: 96px !important;
+    bottom: 96px !important;
+  }
+  .lobby-chat-close {
+    display: block !important;
+  }
+}
+
+/* ===== terron: ЗОЛОТОЙ МАТЧ — рамка вокруг интерфейса на весь матч =====
+   Класс body.golden-match ставит ClientGameRunner по gameStartInfo.config.golden
+   и снимает в stop(). Рамка НЕ перехватывает клики (pointer-events:none) и
+   лежит выше HUD, но ниже модалок (у тех z-index 10000+). 1px без свечения и
+   пульсации (решение владельца 28.07: толстая светящаяся мешала смотреть). */
+body.golden-match::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  border: 1px solid #d4af37;
+}
+/* Алмазный матч — та же рамка, только льдом (см. TerronTuning TERRON_DIAMOND_*). */
+body.diamond-match::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  border: 1px solid #4aa8d8;
+}
+
+/* terron 30.07: ИГРОВЫЕ СЛОИ ЖИВУТ ТОЛЬКО В МАТЧЕ.
+   Все они постоянно висят в index.html и лишь получают ссылку на игру, поэтому
+   после мягкого выхода (внутри площадки страница НЕ перезагружается — требование
+   модерации GamePush) замирали поверх меню: подсказки, таймеры, панели, ленты.
+   Список собран из GameRenderer и index.html целиком, а не по одному тегу —
+   выборочное скрытие уже подводило (репорт 30.07: «попадаешь в меню, но поверх
+   висит игровой слой»). Прячем отсутствием класса in-game — тем же инвариантом,
+   которым живёт остальной игровой интерфейс. */
+body:not(.in-game) alert-frame,
+body:not(.in-game) build-menu,
+body:not(.in-game) chat-display,
+body:not(.in-game) chat-modal,
+body:not(.in-game) control-panel,
+body:not(.in-game) emoji-table,
+body:not(.in-game) events-display,
+body:not(.in-game) game-left-sidebar,
+body:not(.in-game) game-right-sidebar,
+body:not(.in-game) heads-up-message,
+body:not(.in-game) immunity-timer,
+body:not(.in-game) leader-board,
+body:not(.in-game) performance-overlay,
+body:not(.in-game) player-info-overlay,
+body:not(.in-game) player-panel,
+body:not(.in-game) replay-panel,
+body:not(.in-game) satellite-blackout-timer,
+body:not(.in-game) spawn-timer,
+body:not(.in-game) spawn-tutorial,
+body:not(.in-game) task-tracker,
+body:not(.in-game) team-stats,
+body:not(.in-game) tutorial-cards,
+body:not(.in-game) unit-display,
+body:not(.in-game) win-modal {
+  display: none !important;
+}
+
+/* terron 30.07: НА ВРЕМЯ РЕКЛАМЫ УБИРАЕМ СВОИ ОВЕРЛЕИ.
+   Ролик площадка рисует поверх нашего iframe, но модалки внутри него лежат выше
+   и закрывали его собой — игрок видел рекламу рамкой по краям. Класс ставит
+   GamePushSDK.setAdOpen по событиям *:start / *:close. visibility (а не display)
+   — чтобы не пересобирать раскладку и вернуть всё ровно как было. */
+html.gp-ad-open win-modal,
+html.gp-ad-open o-modal,
+html.gp-ad-open .toast-stack,
+html.gp-ad-open heads-up-message,
+html.gp-ad-open events-display,
+html.gp-ad-open control-panel,
+html.gp-ad-open build-menu {
+  visibility: hidden !important;
+}
+
+/* ===== ПЛАШКА «ТЫ В ЛОББИ» (terron 25.08, LobbyDock.ts) =====
+   Нижняя полоса, которая висит, пока окно лобби свёрнуто и игрок ходит по
+   сайту. Содержимое по требованию владельца — ОДНОЙ СТРОКОЙ и коротко:
+   значок события (💎/★) или режим, отсчёт, состав «4/10», кнопка возврата и
+   крестик выхода. Карту и прочее не пишем — это видно в самом лобби. */
+.lobby-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: var(--t-sheet);
+  border-top: 2px solid var(--t-ink);
+  box-shadow: 0 -3px 0 rgba(43, 42, 36, 0.1);
+  color: var(--t-ink);
+}
+body.in-game .lobby-dock {
+  display: none;
+}
+/* Плашка перекрывала подвал (telegram / соглашения / зал славы) — его ссылки
+   становились некликабельными. Поднимаем подвал ровно на её высоту, пока она
+   висит; класс ставит сама плашка (LobbyDock.updated). */
+body.lobby-docked .terron-footer {
+  margin-bottom: var(--lobby-dock-h, 52px);
+}
+.lobby-dock-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lobby-dock-spacer {
+  flex: 1 1 auto;
+}
+/* «живой» индикатор: лобби на связи */
+.lobby-dock-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--t-green);
+  animation: lobby-dock-pulse 1.6s ease-in-out infinite;
+}
+@keyframes lobby-dock-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.lobby-dock-gem {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.lobby-dock-star {
+  font-size: 18px;
+  line-height: 1;
+  color: #c8a33a;
+  flex: 0 0 auto;
+}
+.lobby-dock-mode {
+  font-family: var(--t-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+/* Отсчёт — моноширинный и с табличными цифрами: иначе строка дёргается
+   на каждой секунде (у пропорциональных цифр разная ширина). */
+.lobby-dock-time {
+  font-family: var(--t-mono);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.lobby-dock-count {
+  font-family: var(--t-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--t-ink-soft);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.lobby-dock-btn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border: 1px solid var(--t-ink);
+  background: var(--t-bg);
+  color: var(--t-ink);
+  font-family: var(--t-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 0;
+}
+.lobby-dock-btn:hover {
+  background: var(--t-sheet);
+}
+.lobby-dock-btn.primary {
+  background: var(--t-ink);
+  color: var(--t-sheet);
+}
+.lobby-dock-btn.primary:hover {
+  background: var(--t-red);
+}
+.lobby-dock-x {
+  padding: 7px 11px;
+  font-size: 13px;
+  line-height: 1;
+}
+.lobby-dock-x:hover {
+  background: var(--t-red);
+  color: var(--t-sheet);
+}
+/* Телефон: подпись кнопки возврата съедает строку — оставляем стрелку. */
+@media (max-width: 560px) {
+  .lobby-dock-body {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+  .lobby-dock-btn {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+}

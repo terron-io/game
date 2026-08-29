@@ -1,0 +1,162 @@
+import { toast } from "./Toast";
+import { html } from "lit";
+import { customElement } from "lit/decorators.js";
+import { tempTokenLogin } from "./Auth";
+import { BaseModal } from "./components/BaseModal";
+import "./components/Difficulties";
+import { modalHeader } from "./components/ui/ModalHeader";
+import { L, translateText } from "./Utils";
+
+@customElement("token-login")
+export class TokenLoginModal extends BaseModal {
+  private isAttemptingLogin = false;
+
+  private retryInterval: NodeJS.Timeout | undefined = undefined;
+
+  private token: string | null = null;
+
+  private email: string | null = null;
+
+  private attemptCount = 0;
+
+  constructor() {
+    super();
+  }
+
+  protected modalConfig() {
+    return { maxWidth: "620px" };
+  }
+
+  protected renderHeaderSlot() {
+    return modalHeader({
+      title: translateText("token_login_modal.title"),
+      onBack: () => this.close(),
+      ariaLabel: translateText("common.back"),
+    });
+  }
+
+  protected renderBody() {
+    return html`
+      <div class="flex-1 flex flex-col gap-4 p-6">
+        ${this.email ? this.loginSuccess(this.email) : this.loggingIn()}
+      </div>
+    `;
+  }
+
+  private loggingIn() {
+    const loggingText = translateText("token_login_modal.logging_in");
+    return html`
+      <div class="flex items-center gap-4">
+        <div
+          class="w-12 h-12 rounded-full border border-blue-400/40 bg-blue-500/10 flex items-center justify-center"
+        >
+          <div
+            class="w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"
+          ></div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <p class="text-lg font-semibold text-white">${loggingText}</p>
+          <div class="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+            <div class="h-full w-1/2 bg-blue-400/80 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private loginSuccess(email: string) {
+    const successText = translateText("token_login_modal.success", { email });
+    return html`
+      <div class="flex items-center gap-4">
+        <div
+          class="w-12 h-12 rounded-full border border-emerald-400/40 bg-emerald-500/10 flex items-center justify-center"
+        >
+          <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+        </div>
+        <p class="text-base text-white/90">${successText}</p>
+      </div>
+    `;
+  }
+
+  public openWithToken(token: string): void {
+    this.token = token;
+    this.email = null;
+    this.attemptCount = 0;
+    this.isAttemptingLogin = false;
+    this.open();
+  }
+
+  public open(args?: Record<string, unknown>): void {
+    if (!this.token) {
+      return;
+    }
+    super.open(args);
+  }
+
+  protected onOpen(): void {
+    clearInterval(this.retryInterval);
+    this.retryInterval = setInterval(() => this.tryLogin(), 3000);
+  }
+
+  protected onClose(): void {
+    this.token = null;
+    clearInterval(this.retryInterval);
+    this.attemptCount = 0;
+    this.isAttemptingLogin = false;
+  }
+
+  private async tryLogin() {
+    if (this.isAttemptingLogin) {
+      return;
+    }
+    if (this.attemptCount > 3) {
+      clearInterval(this.retryInterval);
+      this.close();
+      toast(
+        L(
+          "Не удалось войти. Попробуйте позже.",
+          "Couldn't sign in. Please try again later.",
+        ),
+        "error",
+      );
+      return;
+    }
+    this.attemptCount++;
+    this.isAttemptingLogin = true;
+    if (this.token === null) {
+      this.close();
+      return;
+    }
+    try {
+      const res = await tempTokenLogin(this.token);
+      if (res.ok) {
+        this.email = res.email;
+        clearInterval(this.retryInterval);
+        setTimeout(() => {
+          this.close();
+          void import("./SoftNavigate").then(({ softReload }) => softReload());
+        }, 1000);
+        this.requestUpdate();
+        return;
+      }
+      // Просрочена/использована/невалидна → не ретраим, объясняем (без деталей).
+      if (res.expired) {
+        clearInterval(this.retryInterval);
+        this.close();
+        toast(
+          L(
+            "Ссылка для входа устарела или уже использована. Запросите новую на странице входа.",
+            "This sign-in link has expired or was already used. Request a new one from the sign-in page.",
+          ),
+          "error",
+        );
+        return;
+      }
+      // временная ошибка — позволим циклу повторить
+    } catch (e) {
+      console.error(e);
+    } finally {
+      this.isAttemptingLogin = false;
+    }
+  }
+}

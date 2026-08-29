@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: СОСТАВ СМЕРТИ — тикающий поезд (new-units/TRAINS.md) -->
+  <path d="M16 10h32c4 0 6 3 6 6v24H10V16c0-3 2-6 6-6zM18 18h12v12H18zM34 18h12v12H34z" fill-opacity="0.9"/>
+  <path d="M8 44h48v8H8zM16 54a5 5 0 1 0 0 .1zM48 54a5 5 0 1 0 0 .1z"/>
+  <circle cx="32" cy="30" r="6" fill="#fff" fill-opacity="0.55"/>
+</svg>

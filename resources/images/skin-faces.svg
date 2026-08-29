@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- крупный тайл «лица»: заполненная плитка с простым лицом; при крупном
+       тайлинге территория покрывается рядами персонажей -->
+  <rect x="40" y="40" width="944" height="944" rx="120" fill="#e9c46a" stroke="#7a5b1e" stroke-width="22"/>
+  <circle cx="372" cy="430" r="70" fill="#2b2a24"/>
+  <circle cx="652" cy="430" r="70" fill="#2b2a24"/>
+  <circle cx="392" cy="412" r="22" fill="#fff"/>
+  <circle cx="672" cy="412" r="22" fill="#fff"/>
+  <path d="M324 628 Q512 808 700 628" fill="none" stroke="#2b2a24" stroke-width="46" stroke-linecap="round"/>
+  <circle cx="262" cy="560" r="48" fill="#e07a5f" fill-opacity="0.65"/>
+  <circle cx="762" cy="560" r="48" fill="#e07a5f" fill-opacity="0.65"/>
+</svg>

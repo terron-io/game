@@ -1,0 +1,921 @@
+<!doctype html>
+<html lang="en" class="h-full preload" translate="no">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- terron: игра во iframe площадки-стора (Яндекс Игры / VK / Пикабу / GamePush)?
+         Ставим html.gp-embed СИНХРОННО, до рендера — CSS-косметика стора (скрытый
+         промо приложения и т.п.) применяется без мигания. cross-origin top кинет →
+         это тоже чужой iframe. На terron.io / нативном приложении — self===top, класс
+         не ставится. -->
+    <script>
+      (function () {
+        try {
+          // ?embed=1 — форс gp-embed для ТЕСТА раскладки стора из обычного браузера
+          // (в обычной вкладке self===top, поэтому иначе не проверить).
+          var forced = /[?&]embed=1\b/.test(window.location.search);
+          if (forced || window.self !== window.top)
+            document.documentElement.classList.add("gp-embed");
+          // itch.io: раскладку под iframe (кроп HUD, компактный верх) оставляем —
+          // плеер itch такой же жёсткий 1280×720. А вот ЗАПРЕТЫ ПЛОЩАДКИ (скрытые
+          // внешние ссылки, убранная «Пропаганда») там ни при чём — снимаем их
+          // отдельным классом, см. terron-theme.css.
+          if (/[?&]embed=itch\b/.test(window.location.search))
+            document.documentElement.classList.add("itch-embed");
+        } catch (e) {
+          document.documentElement.classList.add("gp-embed");
+        }
+      })();
+    </script>
+    <!-- terron: gp-embed — площадка может показывать НЕ ВЕСЬ наш iframe (песочница
+         GamePush: пресет ставит iframe жёстко 1280×720, контейнер overflow:hidden →
+         при невысоком окне низ кадра отрезан ВМЕСТЕ с нижним HUD). Изнутри iframe
+         кроп невидим обычными средствами, но IntersectionObserver отдаёт видимый
+         прямоугольник ДАЖЕ в кросс-доменном iframe (координаты — в нашей системе).
+         Меряем сентинел на весь вьюпорт → сколько низа/верха скрыто → CSS-переменные
+         --gp-crop-b / --gp-crop-t на <html>. Нижний HUD поднимается на --gp-crop-b
+         (transform-хук контейнера, тот же что --kb-inset). Вне embed скрипт молчит. -->
+    <script>
+      (function () {
+        if (!document.documentElement.classList.contains("gp-embed")) return;
+        if (typeof IntersectionObserver !== "function") return;
+        var apply = function (b, t) {
+          var s = document.documentElement.style;
+          s.setProperty("--gp-crop-b", (b | 0) + "px");
+          s.setProperty("--gp-crop-t", (t | 0) + "px");
+        };
+        // шаг 1% → точность ~7px на 720p; мельче не надо (дрожь гоняет стили)
+        var thresholds = [];
+        for (var i = 0; i <= 100; i++) thresholds.push(i / 100);
+        var onIO = function (entries) {
+          var e = entries[entries.length - 1];
+          var r = e.intersectionRect;
+          var cropB = 0;
+          var cropT = 0;
+          if (e.isIntersecting && r && r.height > 0) {
+            cropB = Math.max(0, window.innerHeight - r.bottom);
+            cropT = Math.max(0, r.top);
+          }
+          // <8px — скругления/скроллбар-дрожь, не двигаем
+          apply(cropB < 8 ? 0 : cropB, cropT < 8 ? 0 : cropT);
+        };
+        var boot = function () {
+          var sentinel = document.createElement("div");
+          sentinel.style.cssText =
+            "position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;visibility:hidden;z-index:-1;";
+          document.body.appendChild(sentinel);
+          var io = new IntersectionObserver(onIO, { threshold: thresholds });
+          io.observe(sentinel);
+          // resize нашего вьюпорта: сентинел fixed на inset:0 меняется вместе с ним,
+          // но переподписка форсит немедленный пересчёт (IO иначе может промолчать,
+          // если ratio не пересёк порог).
+          window.addEventListener("resize", function () {
+            io.unobserve(sentinel);
+            io.observe(sentinel);
+          });
+        };
+        if (document.body) boot();
+        else document.addEventListener("DOMContentLoaded", boot);
+      })();
+    </script>
+    <!-- terron: бикон загрузки — ловим «сорвался на входе» (первый ответ HTML
+         прошёл, но остатки сайта не докачались: DPI-throttle, из-за которого
+         часть РФ не заходит без VPN). Летит ПРЯМО СЕЙЧАС, на первых байтах HTML
+         (знаменатель). Парный ready-бикон стреляет с ВЕРХА основного бандла (когда
+         JS-нагрузка доехала) — если бандл придушили, ready не придёт и сессия =
+         дроп «первый пакет прошёл, дальше пизда». Разбор: /admin/ru-ban. -->
+    <script>
+      (function () {
+        try {
+          var s = sessionStorage.getItem("t_lb_sid");
+          if (!s) {
+            s =
+              Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+            sessionStorage.setItem("t_lb_sid", s);
+          }
+          window.__tLbSid = s;
+          new Image().src =
+            "/api/lb?s=" + encodeURIComponent(s) + "&e=boot&t=" + Date.now();
+        } catch (e) {}
+      })();
+    </script>
+    <!-- terron: двухуровневый зонд полосы — ЧИСТЫЙ детект РФ-throttle. Сразу (не
+         ждём бандл) тянем два несжимаемых файла с того же origin (тот же SNI →
+         тот же DPI-throttle): small ~4КБ просачивается сквозь замедление, large
+         ~256КБ под throttle (≤5КБ/с) не докачивается за grace, а реальный медленный
+         инет (3G ~50КБ/с) успевает за секунды. Блок = small ✅ & large ❌. Отсекает
+         медленный интернет И «человек закрыл вкладку». Разбор: /admin/ru-ban. -->
+    <script>
+      (function () {
+        try {
+          var s = window.__tLbSid;
+          if (!s || typeof fetch !== "function") return;
+          var beacon = function (stage, ms) {
+            try {
+              new Image().src =
+                "/api/lb?s=" +
+                encodeURIComponent(s) +
+                "&e=" +
+                stage +
+                "&d=" +
+                (ms | 0) +
+                "&t=" +
+                Date.now();
+            } catch (e) {}
+          };
+          var probe = function (kb, stage) {
+            var t0 = Date.now();
+            var opts = { cache: "no-store" };
+            try {
+              var ctl = new AbortController();
+              opts.signal = ctl.signal;
+              setTimeout(function () {
+                try {
+                  ctl.abort();
+                } catch (e) {}
+              }, 30000);
+            } catch (e) {}
+            // ?r= уникальный на каждую загрузку → обход любого кеша.
+            fetch("/api/lbprobe?sz=" + kb + "&r=" + s + Date.now(), opts)
+              .then(function (r) {
+                return r.arrayBuffer();
+              })
+              .then(function () {
+                beacon(stage, Date.now() - t0);
+              })
+              .catch(function () {
+                /* throttle/timeout/уход → бикон не летит → settled=throttled */
+              });
+          };
+          probe(4, "probe_small");
+          probe(256, "probe_large");
+        } catch (e) {}
+      })();
+    </script>
+    <!-- terron: переключатель окружения prod/dev. Тумблер в футере пишет
+         localStorage.terron_env; этот скрипт применяет выбор ДО старта
+         приложения (редирект на нужный хост). Нужно для Android-приложения
+         (грузит terron.io, но можно увести на dev.terron.io). Только при
+         явном несовпадении выбора и хоста — обычных юзеров не трогает. -->
+    <script>
+      // terron: одноразовая чистка старого флага переключателя окружений
+      // (раньше он вызывал залипающий редирект на разных origin). Сейчас
+      // переключалка просто переходит на другой хост, без форс-редиректа.
+      (function () {
+        try {
+          localStorage.removeItem("terron_env");
+        } catch (e) {}
+      })();
+    </script>
+    <!-- terron: ОФЛАЙН-ГИБРИД (Apple 4.2). Онлайн = ЖИВОЙ сайт (актуальная игра),
+         офлайн = ЛОКАЛЬНЫЙ бандл (сингл + вшитые карты). Переход:
+           • онлайн→офлайн = АВТО (связь пропала → уходим в бандл);
+           • офлайн→онлайн = ПОП-АП (связь вернулась → спрашиваем, грузить ли живую).
+         На вебе/деве — no-op (isNative=false). См. OFFLINE-IOS.md. -->
+    <script>
+      (function () {
+        var cap = window.Capacitor;
+        var isNative = !!(
+          cap &&
+          cap.isNativePlatform &&
+          cap.isNativePlatform()
+        );
+        if (!isNative) return; // веб/дев — no-op
+
+        var LIVE = "https://terron.io/";
+        // terron: бандл-цель ПО ПЛАТФОРМЕ (не по текущему протоколу — на terron.io он
+        // https и дал бы неверную цель). iOS = capacitor://localhost (iosScheme:capacitor,
+        // кастомная схема перехватывается → достижима офлайн даже рантайм-редиректом с
+        // terron.io; https://localhost офлайн НЕ грузился). Android = https://localhost.
+        var plat = cap && cap.getPlatform && cap.getPlatform();
+        var BUNDLE =
+          plat === "ios" ? "capacitor://localhost/" : "https://localhost/";
+        // terron 21.08: МАРКЕР АПКИ ДЛЯ АНАЛИТИКИ. На origin terron.io мост
+        // Capacitor может не инжектиться (флапает в WKWebView), поэтому «я из
+        // апки» передаём единственным, что переживает смену origin, — query.
+        // Клиент (Analytics.clientPlatform) приклеит его в localStorage апки.
+        // ⚠️ ТОЛЬКО в адресе перехода: LIVE участвует в склейке URL пинга
+        // (LIVE + "commit.txt?_=") — с query там получился бы битый адрес.
+        var LIVE_ENTRY =
+          LIVE + "?from=" + (plat === "ios" ? "ios_app" : "android_app");
+        var onLive = /(^|\.)terron\.io$/i.test(location.hostname);
+
+        // Пинг живого сайта. no-cors → ответ opaque, но РЕЗОЛВ промиса = хост достижим
+        // (нельзя доверять navigator.onLine/событиям — в WKWebView застревают).
+        // cache-bust + no-store → не ложный «онлайн» из кеша.
+        function pingLive(cb) {
+          try {
+            var ctrl = new AbortController();
+            var t = setTimeout(function () {
+              ctrl.abort();
+            }, 2500);
+            fetch(LIVE + "commit.txt?_=" + Date.now(), {
+              mode: "no-cors",
+              cache: "no-store",
+              signal: ctrl.signal,
+            })
+              .then(function () {
+                clearTimeout(t);
+                cb(true);
+              })
+              .catch(function () {
+                clearTimeout(t);
+                cb(false);
+              });
+          } catch (e) {
+            cb(false);
+          }
+        }
+
+        // terron: НЕ дёргаем переход во время игры — авто-редирект посреди матча
+        // выкинул бы из партии. Класс in-game ставит Main.ts на старте игры.
+        function inGame() {
+          return !!(
+            document.body && document.body.classList.contains("in-game")
+          );
+        }
+
+        // Один переход на загрузку страницы (после replace мы всё равно уходим).
+        var done = false;
+
+        if (!onLive) {
+          // === БАНДЛ (офлайн-контекст) ===
+          // Есть связь И НЕ в офлайн-игре → АВТО на живой сайт (без попапа).
+          // В офлайн-игре — ждём её конца (in-game снимется → уйдём след. поллом).
+          function tryGoLive() {
+            if (done) return;
+            pingLive(function (online) {
+              if (done || !online || inGame()) return;
+              done = true;
+              location.replace(LIVE_ENTRY);
+            });
+          }
+          tryGoLive(); // холодный старт
+          setInterval(tryGoLive, 5000);
+          // События — лишь ХИНТ для скорости (в WKWebView врут), решает pingLive.
+          window.addEventListener("online", tryGoLive);
+          document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") tryGoLive();
+          });
+        } else {
+          // === ЖИВОЙ САЙТ (онлайн-контекст) ===
+          // Связь пропала И НЕ в онлайн-игре → на офлайн-бандл (вшитые карты).
+          // В игре НЕ дёргаем — пусть игра сама обработает дисконнект.
+          // ВАЖНО: navigator.onLine===false — НАДЁЖНЫЙ сигнал офлайна на iPad
+          // (бейдж подтвердил), в отличие от pingLive (no-cors fetch может дать
+          // ложный «онлайн» из кэша WKWebView). Поэтому триггерим по нему НАПРЯМУЮ.
+          function goBundle() {
+            if (inGame()) return;
+            location.replace(BUNDLE);
+          }
+          function tryGoBundle() {
+            if (done) return;
+            if (navigator.onLine === false) {
+              done = true;
+              goBundle();
+              return;
+            }
+            pingLive(function (online) {
+              if (done || online || inGame()) return;
+              done = true;
+              goBundle();
+            });
+          }
+          tryGoBundle(); // сразу на загрузке (вдруг уже офлайн)
+          setInterval(tryGoBundle, 3000);
+          window.addEventListener("offline", tryGoBundle);
+          document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") tryGoBundle();
+          });
+        }
+      })();
+    </script>
+    <!-- terron iOS: высота наложенной клавиатуры → CSS-переменная --kb-inset.
+         С overlays-content layout-viewport НЕ меняется, но visualViewport
+         ужимается на высоту клавы. Нижнюю чат-панель поднимаем на --kb-inset,
+         чтобы поле ввода было видно. Игра/координаты не трогаются. -->
+    <script>
+      (function () {
+        var vv = window.visualViewport;
+        if (!vv) return;
+        function update() {
+          // Когда страница зумнута (pinch / focus-zoom), vv.height/offset врут —
+          // не трогаем подъём панели, иначе её «выкидывает». При scale≈1 считаем.
+          if (vv.scale && vv.scale > 1.01) return;
+          var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          document.documentElement.style.setProperty("--kb-inset", kb + "px");
+        }
+        vv.addEventListener("resize", update);
+        vv.addEventListener("scroll", update);
+        update();
+      })();
+    </script>
+    <!-- terron iOS: клавиатура ДОЛЖНА накладываться (overlays-content), НЕ
+         ужимать layout-viewport. Иначе при открытии чата вся вёрстка едет и
+         канвас меняет размер → пересчёт «экран→мир» врёт (тапы смещаются).
+         Чат-инпут поднимаем над клавой отдельно через visualViewport (--kb-inset).
+         maximum-scale=1 + user-scalable=no: WKWebView (в отличие от Safari) их
+         УВАЖАЕТ → пинч НЕ зумит страницу/UI (ломало радиалку и окна). Зум КАРТЫ
+         делает сама игра через pointer-события — он не задет. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content"
+    />
+    <!-- terron: БЕЗ data-i18n — иначе i18n-цикл LangSelector перезапишет заголовок
+         унаследованным от апстрима значением (ar: «OpentFront…», «(ALPHA)» и т.п.).
+         Заголовок задаётся жёстко брендом в LangSelector. -->
+    <title>terron.io</title>
+    <link rel="manifest" href="<%- manifestHref %>" />
+    <link rel="icon" type="image/svg+xml" href="<%- faviconHref %>" />
+
+    <!-- Preload styles -->
+    <style>
+      .preload {
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.5s ease-out;
+      }
+
+      /* iOS safe area support */
+      body {
+        padding-top: env(safe-area-inset-top);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+      }
+
+      /* Ensure full viewport height on iOS */
+      html,
+      body {
+        height: 100%;
+        height: -webkit-fill-available;
+        min-height: 100%;
+        min-height: -webkit-fill-available;
+        /* iOS/Telegram-вебвью: гасим «резиновый» оверскролл всего окна, иначе
+           на тач-драге по карте скроллится/качается вся страница вместо панорамы
+           игры. Скролл главной не ломается — она скроллит внутренним контейнером. */
+        overscroll-behavior: none;
+      }
+    </style>
+
+    <!-- SEO -->
+    <link rel="canonical" href="https://terron.io/" />
+    <meta
+      name="description"
+      content="Conquer the world in this multiplayer battle royale! Expand your nation, eliminate opponents, and dominate the map in this fast-paced IO game."
+    />
+
+    <!-- Open Graph / Twitter — инжектится сервером (RenderHtml.ts) с учётом языка
+         краулера: РФ-соцсети (VK/Mail/OK) + Яндекс получают русский OG, остальные — EN. -->
+    <!--TERRON_OG-->
+    <!-- JSON-LD (schema.org) + hreflang — инжектит RenderHtml.ts (только главная). -->
+    <!--TERRON_HEAD_EXTRA-->
+
+    <!-- Injected from Server env -->
+    <script>
+      window.BOOTSTRAP_CONFIG = {
+        gitCommit: <%- gitCommit %>,
+        assetManifest: <%- assetManifest %>,
+        cdnBase: <%- cdnBase %>,
+        gameEnv: <%- gameEnv %>,
+        numWorkers: <%- numWorkers %>,
+        turnstileSiteKey: <%- turnstileSiteKey %>,
+        jwtAudience: <%- jwtAudience %>,
+        instanceId: <%- instanceId %>,
+      };
+      document.documentElement.style.setProperty(
+        "--background-image-url",
+        `url("<%- backgroundImageUrl %>")`,
+      );
+      // document.documentElement.style.setProperty(
+      //   "--desktop-logo-image-url",
+      //   `url("<%- desktopLogoImageUrl %>")`,
+      // );
+      document.documentElement.style.setProperty(
+        "--mobile-logo-image-url",
+        `url("<%- mobileLogoImageUrl %>")`,
+      );
+    </script>
+
+    <!-- Cloudflare Turnstile — ВЫКЛЮЧЕН (18.07): исполнение давно гейтировано
+         (Main.ts, env!==Dev), а скрипт грузился у ВСЕХ — лишний сторонний запрос,
+         на РФ-мобилках блокируемый/висящий. Вернётся — раскомментировать.
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+      async
+      defer
+    ></script> -->
+
+    <!-- terron: ad/analytics trackers removed (no AdSense/AdWords/GA/Playwire/CF-Insights/Google Ad Manager) -->
+
+    <!-- Yandex.Metrika counter (наша аналитика) -->
+    <script type="text/javascript">
+      (function (m, e, t, r, i, k, a) {
+        m[i] =
+          m[i] ||
+          function () {
+            (m[i].a = m[i].a || []).push(arguments);
+          };
+        m[i].l = 1 * new Date();
+        for (var j = 0; j < document.scripts.length; j++) {
+          if (document.scripts[j].src === r) {
+            return;
+          }
+        }
+        ((k = e.createElement(t)),
+          (a = e.getElementsByTagName(t)[0]),
+          (k.async = 1),
+          (k.src = r),
+          a.parentNode.insertBefore(k, a));
+      })(
+        window,
+        document,
+        "script",
+        "https://mc.webvisor.org/metrika/tag_ww.js?id=109773286",
+        "ym",
+      );
+
+      ym(109773286, "init", {
+        ssr: true,
+        clickmap: true,
+        ecommerce: "dataLayer",
+        referrer: document.referrer,
+        url: location.href,
+        accurateTrackBounce: true,
+        trackLinks: true,
+      });
+    </script>
+    <!-- noscript-пиксель не нужен: игра требует JS. -->
+    <!-- /Yandex.Metrika counter -->
+  </head>
+
+  <body
+    class="h-full select-none font-sans min-h-screen bg-neutral-800 transition-opacity duration-300 ease-in-out flex flex-row overflow-hidden"
+  >
+    <!-- SEO-контент для краулеров со слабым JS (Яндекс): реальный индексируемый
+         текст в <noscript>. Инжектит RenderHtml.ts под язык краулера (только главная). -->
+    <!--TERRON_SEO_BODY-->
+    <!-- Декор «штабной карты» (только вне игры): градусы по краям, компас, штамп -->
+    <div class="map-decor" aria-hidden="true">
+      <div class="md-topo"></div>
+      <div class="md-rings"></div>
+      <div class="md-top">
+        <span>10°</span><span>20°</span><span>30°</span><span>40°</span
+        ><span>50°</span><span>60°</span><span>70°</span><span>80°</span
+        ><span>90°</span><span>100°</span>
+      </div>
+      <div class="md-left">
+        <span>70°</span><span>60°</span><span>50°</span><span>40°</span
+        ><span>30°</span><span>20°</span>
+      </div>
+      <div class="md-compass">N↑</div>
+      <div class="md-stamp">
+        <b data-i18n="main.decor_brand">ТЕРРОН</b
+        ><span data-i18n="main.decor_hq">ШТАБ</span><span>54°N 83°E</span>
+      </div>
+    </div>
+    <div id="hex-grid" class="fixed inset-0 -z-50 pointer-events-none">
+      <div
+        id="background-layer"
+        class="absolute inset-0 bg-cover bg-center opacity-30 [filter:brightness(1.0)] dark:[filter:sepia(0.2)_saturate(1.2)_hue-rotate(180deg)_brightness(0.9)]"
+        style="
+          background-image: var(--background-image-url);
+          background-position: center calc(50% + 2cm);
+        "
+      ></div>
+      <div
+        class="absolute inset-0 bg-center bg-no-repeat bg-contain hidden lg:block"
+        style="background-image: var(--desktop-logo-image-url); opacity: 0.5"
+      ></div>
+      <div
+        class="absolute inset-0 bg-center bg-no-repeat bg-contain lg:hidden"
+        style="background-image: var(--mobile-logo-image-url); opacity: 0.5"
+      ></div>
+    </div>
+
+    <!-- LEFT SIDEBAR MENU -->
+
+    <div
+      id="mobile-menu-backdrop"
+      class="lg:hidden! in-[.in-game]:hidden hidden pointer-events-none [&.open]:block [&.open]:pointer-events-auto [&.open]:fixed [&.open]:inset-0 [&.open]:bg-black/60 [&.open]:z-[40000] transition-opacity"
+      role="presentation"
+      aria-hidden="true"
+    ></div>
+
+    <mobile-nav-bar
+      id="sidebar-menu"
+      class="peer [.in-game_&]:hidden z-[40001] fixed left-0 top-0 h-full flex flex-col justify-start overflow-visible bg-black/70 backdrop-blur-xl border-r border-white/10 transition-transform duration-500 ease-out transform -translate-x-full w-[70%] [&.open]:translate-x-0 lg:hidden"
+      role="dialog"
+      data-i18n-aria-label="main.menu"
+    ></mobile-nav-bar>
+
+    <!-- MAIN CONTENT AREA -->
+    <div
+      class="in-[.in-game]:hidden flex-1 relative overflow-y-auto h-full transition-[margin] duration-500 ease-out will-change-[margin-left] flex flex-col"
+    >
+      <!-- Desktop Top Bar -->
+      <desktop-nav-bar></desktop-nav-bar>
+
+      <div
+        id="turnstile-container"
+        class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-99999"
+      ></div>
+
+      <!-- Main container with responsive padding -->
+      <main-layout class="contents">
+        <play-page class="contents"></play-page>
+        <matchmaking-modal
+          id="page-matchmaking"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></matchmaking-modal>
+        <news-modal
+          id="page-news"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></news-modal>
+        <host-lobby-modal
+          id="page-host-lobby"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></host-lobby-modal>
+        <join-lobby-modal
+          id="page-join-lobby"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></join-lobby-modal>
+        <!-- terron: чат лобби (десктоп — слева, телефон — плавающая кнопка).
+             Данные лобби пушат host/join-модалки через sync(). -->
+        <lobby-chat-panel></lobby-chat-panel>
+        <!-- terron 25.08: плашка «ты в лобби» — видна, пока окно лобби
+             свёрнуто и игрок бродит по сайту (см. LobbyDock.ts). -->
+        <lobby-dock></lobby-dock>
+        <store-modal
+          id="page-item-store"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></store-modal>
+        <user-setting
+          id="page-settings"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></user-setting>
+        <rating-page
+          id="page-leaderboard"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></rating-page>
+        <troubleshooting-modal
+          id="page-troubleshooting"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></troubleshooting-modal>
+
+        <clan-hub-page
+          id="page-clan"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></clan-hub-page>
+        <friends-page
+          id="page-friends"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></friends-page>
+        <clan-create-page
+          id="page-clan-create"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></clan-create-page>
+        <account-modal
+          id="page-account"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></account-modal>
+        <profile-page
+          id="page-profile"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></profile-page>
+        <skins-page
+          id="page-skins"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></skins-page>
+        <shop-page
+          id="page-shop"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></shop-page>
+        <stats-page
+          id="page-stats"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></stats-page>
+        <propaganda-page
+          id="page-propaganda"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></propaganda-page>
+        <copyrights-page
+          id="page-copyrights"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></copyrights-page>
+        <hall-of-fame-page
+          id="page-hall-of-fame"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></hall-of-fame-page>
+        <!-- terron 28.08: контейнеры админ/модер-страниц удалены вместе с самими
+             страницами — админка живёт отдельным внутренним приложением
+             (см. комментарий в Main.ts). Были: page-admin, page-balance,
+             page-admin-news, page-petri-bonus, page-ru-ban, page-ios-reports,
+             page-moder-skin, page-moder-achievements. -->
+        <money-page
+          id="page-money"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></money-page>
+        <currency-page
+          id="page-currency"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></currency-page>
+        <ult-tree-page
+          id="page-ults"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></ult-tree-page>
+        <prime-page
+          id="page-prime"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></prime-page>
+        <guide-page
+          id="page-guide"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></guide-page>
+        <wiki-page
+          id="page-wiki"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></wiki-page>
+        <help-modal
+          id="page-help"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></help-modal>
+        <language-modal
+          id="page-language"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></language-modal>
+        <flag-input-modal
+          id="flag-input-modal"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></flag-input-modal>
+        <territory-patterns-modal
+          id="territory-patterns-modal"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></territory-patterns-modal>
+        <ranked-modal
+          id="page-ranked"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></ranked-modal>
+      </main-layout>
+
+      <div class="[.in-game_&]:hidden flex flex-col shrink-0 mt-auto">
+        <page-footer></page-footer>
+      </div>
+
+      <!-- terron: атмосфера день/ночь + кликабельная лампа (только на главной) -->
+      <terron-ambient></terron-ambient>
+
+      <!-- Global Modals -->
+    </div>
+
+    <!-- Game components -->
+    <div id="app"></div>
+
+    <!-- Bottom HUD: <sm=column, sm..lg=2col (HUD left | events right), lg+=3col grid centered -->
+    <div
+      class="fixed bottom-0 left-0 w-full z-[200] flex flex-col pointer-events-none sm:flex-row sm:items-end lg:grid lg:grid-cols-[1fr_1fr_500px] min-[1200px]:grid-cols-[1fr_500px_1fr] lg:items-end min-[1200px]:px-4"
+      style="
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        /* terron iOS: при открытой клавиатуре поднимаем панель над ней, чтобы
+           поле ввода чата было видно. --kb-inset=0 когда клавы нет → без сдвига.
+           terron embed: + подъём на срезанный площадкой низ iframe (--gp-crop-b,
+           скрипт в <head>) — иначе в кропнутом окне стора HUD за кадром. */
+        transform: translateY(
+          calc(-1 * var(--kb-inset, 0px) - var(--gp-crop-b, 0px))
+        );
+        transition: transform 0.15s ease-out;
+      "
+    >
+      <!-- HUD: <sm contents (children join outer flex), sm+ flex-col 460px, lg+ col-2 -->
+      <!-- terron ЗАМЕТКА: на брейкпоинте lg (1024–1199px) контрол-меню уходит
+           ВПРАВО (col-start-3) — это правило задумывалось ПОД ПЛАНШЕТНОЕ
+           разрешение (iPad). На 13" десктопе окно попадает в тот же диапазон,
+           поэтому меню тоже справа — это НЕЗАПЛАНИРОВАННЫЙ побочный эффект, но
+           решили оставить (выглядит ок). С min-[1200px] меню возвращается в
+           центр (десктоп). Если будем разводить планшет и узкий десктоп —
+           править здесь. -->
+      <div
+        class="contents sm:flex sm:flex-col sm:pointer-events-none w-full sm:w-[500px] lg:w-fit lg:min-w-[500px] lg:max-w-[96vw] lg:justify-self-end lg:col-start-3 lg:-translate-x-2 lg:mb-2 min-[1200px]:col-start-2 min-[1200px]:translate-x-0 min-[1200px]:mb-0 sm:z-10"
+      >
+        <attacks-display
+          class="w-full pointer-events-auto order-1 sm:order-none"
+        ></attacks-display>
+        <!-- terron: вне игры панель пустая → её фон/тень торчали 2px-полосой на
+             главной. Прячем обёртку, пока не в игре. -->
+        <div
+          class="[body:not(.in-game)_&]:hidden pointer-events-auto bg-gray-800/92 backdrop-blur-sm sm:rounded-tr-lg lg:rounded-t-lg min-[1200px]:rounded-lg shadow-lg order-3 sm:order-none"
+        >
+          <control-panel class="w-full"></control-panel>
+          <!-- terron: ряд построек — ОДИН ряд, растёт по контенту (w-max); панель
+               снаружи прижата вправо (justify-self-end) и растёт ВЛЕВО, не за экран. -->
+          <unit-display class="hidden lg:block w-max ml-auto"></unit-display>
+        </div>
+      </div>
+
+      <!-- events+chat (полный лог): <sm order-2 (над баром, СЛИТ с баром — так на
+           мобиле и надо), sm — правая часть. На lg+ ВЫНОСИМ из grid нижнего HUD в
+           отдельный fixed-угол слева снизу: иначе высота чата сидела в той же
+           grid-строке и толкала центральную панель параметров в центр экрана.
+           Так чат и нижнее меню РАЗВЯЗАНЫ на десктопе. -->
+      <div
+        class="flex flex-col pointer-events-none items-end order-2 sm:order-none sm:flex-1 lg:fixed lg:bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] lg:left-[calc(env(safe-area-inset-left)+0.5rem)] lg:w-auto lg:items-start lg:z-[200]"
+      >
+        <chat-display
+          class="w-full sm:w-auto pointer-events-auto"
+        ></chat-display>
+        <events-display
+          class="w-full sm:w-auto pointer-events-auto"
+        ></events-display>
+        <actionable-events
+          class="w-full sm:w-auto pointer-events-auto"
+        ></actionable-events>
+      </div>
+    </div>
+
+    <!-- Game modals and overlays -->
+    <emoji-table></emoji-table>
+    <build-menu></build-menu>
+    <!-- terron: прицельное управление (эксперимент, по умолчанию выключено) -->
+    <aim-control></aim-control>
+    <win-modal></win-modal>
+    <game-starting-modal></game-starting-modal>
+    <terron-daily-flyout></terron-daily-flyout>
+    <!-- terron iOS: единый блюр-бар верха (виден только когда статус-бар скрыт в
+         игре, body.sb-hidden). Полная ширина, высота нотча; таймер/иконки сидят
+         на нём без своих фонов. CSS — styles.css. -->
+    <div class="ingame-top-bar"></div>
+
+    <!-- terron iOS: top/right = safe-area (fixed-элемент игнорит body{padding},
+         поэтому инсеты тут явно; на десктопе top-4/right-4). -->
+    <div
+      class="ingame-topbar-right flex flex-col items-end fixed top-[env(safe-area-inset-top)] right-[env(safe-area-inset-right)] min-[1200px]:top-4 min-[1200px]:right-4 z-1000 gap-2"
+    >
+      <game-right-sidebar></game-right-sidebar>
+      <replay-panel></replay-panel>
+    </div>
+    <settings-modal></settings-modal>
+    <graphics-settings-modal></graphics-settings-modal>
+    <player-panel></player-panel>
+    <spawn-timer></spawn-timer>
+    <spawn-tutorial></spawn-tutorial>
+    <tutorial-cards></tutorial-cards>
+    <task-tracker></task-tracker>
+    <immunity-timer></immunity-timer>
+    <satellite-blackout-timer></satellite-blackout-timer>
+    <game-info-modal></game-info-modal>
+    <alert-frame></alert-frame>
+    <chat-modal></chat-modal>
+    <multi-tab-modal></multi-tab-modal>
+    <!-- terron: отдельный плавающий чат удалён — влит в единую ленту events-display -->
+    <game-left-sidebar></game-left-sidebar>
+    <!-- terron: кнопка-фотик (снимок карты без интерфейса) переехала в ряд иконок
+         ленты событий (events-display) — справа от фильтров категорий. -->
+    <performance-overlay></performance-overlay>
+    <player-info-overlay></player-info-overlay>
+    <leader-board></leader-board>
+    <team-stats></team-stats>
+    <heads-up-message></heads-up-message>
+
+    <!-- Scripts -->
+    <script>
+      // terron perf (Z19): показываем страницу по DOMContentLoaded (DOM+CSS
+      // готовы), а НЕ по window.load — тот ждёт ВСЕ ресурсы (картинки/шрифты),
+      // и на мобильной сети юзер смотрел в пустой экран до 3с.
+      window.addEventListener("DOMContentLoaded", function () {
+        requestAnimationFrame(() => {
+          document.documentElement.classList.remove("preload");
+        });
+      });
+
+      // Fallback: если DOMContentLoaded почему-то не пришёл.
+      setTimeout(function () {
+        document.documentElement.classList.remove("preload");
+      }, 1500);
+    </script>
+
+    <script>
+      // Fallback sidebar toggle so hamburger works even if module bundle fails to load
+      window.__toggleSidebar = function (e) {
+        try {
+          const sidebar = document.getElementById("sidebar-menu");
+          const backdrop = document.getElementById("mobile-menu-backdrop");
+          if (!sidebar || !backdrop) return;
+
+          const isOpen = sidebar.classList.contains("open");
+
+          if (isOpen) {
+            sidebar.classList.remove("open");
+            backdrop.classList.remove("open");
+            document.documentElement.classList.remove("overflow-hidden");
+            sidebar.setAttribute("aria-hidden", "true");
+            sidebar.removeAttribute("aria-modal");
+            backdrop.setAttribute("aria-hidden", "true");
+          } else {
+            sidebar.classList.add("open");
+            backdrop.classList.add("open");
+            document.documentElement.classList.add("overflow-hidden");
+            sidebar.setAttribute("aria-hidden", "false");
+            sidebar.setAttribute("aria-modal", "true");
+            backdrop.setAttribute("aria-hidden", "false");
+          }
+
+          const hb = document.getElementById("hamburger-btn");
+          if (hb) hb.setAttribute("aria-expanded", (!isOpen).toString());
+        } catch (err) {
+          console.error("Toggle failed", err);
+        }
+      };
+
+      // Wire up the hamburger button inline
+      const hamburger = document.getElementById("hamburger-btn");
+      if (hamburger) {
+        hamburger.onclick = window.__toggleSidebar;
+        hamburger.setAttribute("aria-expanded", "false");
+      }
+
+      // Wire up backdrop click to close menu
+      const backdrop = document.getElementById("mobile-menu-backdrop");
+      if (backdrop) {
+        backdrop.onclick = function (e) {
+          const sidebar = document.getElementById("sidebar-menu");
+          if (sidebar && sidebar.classList.contains("open")) {
+            window.__toggleSidebar(e);
+          }
+        };
+      }
+
+      // Wire up Escape key to close menu
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" || e.key === "Esc") {
+          const sidebar = document.getElementById("sidebar-menu");
+          if (sidebar && sidebar.classList.contains("open")) {
+            window.__toggleSidebar(e);
+          }
+        }
+      });
+    </script>
+
+    <script type="module" src="/src/client/Main.ts"></script>
+
+    <!-- terron: GamePush SDK (Yandex Игры / VK Play / Пикабу одним SDK). Канонический
+         сниппет (publicToken + callback=onGPInit, до </body>) грузим ТОЛЬКО когда игра
+         встроена в iframe площадки. На прямом terron.io и в нативном приложении (не
+         iframe) — НЕ грузим, интеграция инертна. gp кладём в window + резолвим промис
+         __gpReady, который ждёт клиент (GamePushSDK.ts) → «раньше инициализации» к СДК
+         больше не обращаемся. Точный порядок: onGPInit(gp) → await gp.player.ready. -->
+    <script>
+      (function () {
+        try {
+          if (window.self === window.top) return; // не iframe → площадки нет
+          // itch.io — НЕ площадка GamePush: там свой магазин, своя (или никакая)
+          // реклама и свои правила. Грузить туда чужой SDK значит крутить его
+          // рекламу на чужой витрине, слать их аналитике чужие сессии и ловить
+          // язык площадки, которой нет (см. isItchEmbed в Utils.ts).
+          if (/[?&]embed=itch\b/.test(window.location.search)) return;
+          window.__gpReady = new Promise(function (resolve) {
+            window.onGPInit = function (gp) {
+              window.__gp = gp;
+              resolve(gp);
+            };
+          });
+          var s = document.createElement("script");
+          s.async = true;
+          s.src =
+            "https://gamepush.com/sdk/game-score.js?projectId=28774&publicToken=8apF7hsZxFjWfBrsoD3cmf88O0ZPTqG4&callback=onGPInit";
+          document.body.appendChild(s);
+        } catch (e) {}
+      })();
+    </script>
+  </body>
+</html>

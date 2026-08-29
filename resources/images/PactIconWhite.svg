@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Пакт — свиток с печатью -->
+  <path d="M14 8h36v6H14zM14 14h36v34H14zM10 8a4 4 0 0 0 0 8h4V8zM50 48h-36v8h36z"/>
+  <circle cx="42" cy="40" r="7" fill="#000" opacity=".35"/>
+  <path d="M20 22h24v3H20zM20 29h24v3H20zM20 36h14v3H20z" fill="#000" opacity=".35"/>
+</svg>

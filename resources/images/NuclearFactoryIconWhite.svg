@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff">
+  <!-- terron: ультимейты — Ядерный завод (градирни + атом). Разблокирует МИРВ. -->
+  <!-- две градирни (вогнутые стенки) -->
+  <path d="M4.4 20.6 Q6 14 6.9 9.8 L9.5 9.8 Q10.4 14 12 20.6 Z"/>
+  <path d="M12 20.6 Q13.6 14 14.5 9.8 L17.1 9.8 Q18 14 19.6 20.6 Z"/>
+  <!-- ободки градирен -->
+  <rect x="6.5" y="9" width="3.4" height="1.3" rx="0.5"/>
+  <rect x="14.1" y="9" width="3.4" height="1.3" rx="0.5"/>
+  <!-- основание -->
+  <rect x="3" y="20.4" width="18" height="1.6" rx="0.5"/>
+  <!-- атом сверху: ядро + три орбиты -->
+  <circle cx="12" cy="4.6" r="1.1"/>
+  <ellipse cx="12" cy="4.6" rx="3.3" ry="1.35" fill="none" stroke="#ffffff" stroke-width="0.85"/>
+  <ellipse cx="12" cy="4.6" rx="3.3" ry="1.35" fill="none" stroke="#ffffff" stroke-width="0.85" transform="rotate(60 12 4.6)"/>
+  <ellipse cx="12" cy="4.6" rx="3.3" ry="1.35" fill="none" stroke="#ffffff" stroke-width="0.85" transform="rotate(120 12 4.6)"/>
+</svg>

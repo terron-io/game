@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: ВЗРЫВНЫЕ ПОЕЗДА — депо: ворота с путями (new-units/TRAINS.md) -->
+  <path d="M6 26 32 8l26 18v4H6z"/>
+  <path d="M10 34h44v18H10zM18 40h10v8H18zM36 40h10v8H36z" fill="#fff" fill-opacity="0.55"/>
+  <path d="M4 56h56v4H4zM12 52h4v10h-4zM48 52h4v10h-4z"/>
+</svg>

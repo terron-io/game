@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: ультимейты — Минирование. Морская мина: шар + 8 шипов-рожков. -->
+  <g transform="translate(32,33)">
+    <g>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(45)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(90)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(135)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(180)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(225)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(270)"/>
+      <rect x="-2" y="-27" width="4" height="10" rx="1.5" transform="rotate(315)"/>
+    </g>
+    <circle cx="0" cy="0" r="16"/>
+  </g>
+</svg>

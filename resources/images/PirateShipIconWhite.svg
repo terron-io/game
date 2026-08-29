@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: ПИРАТСТВО — пиратский катер: корпус, парус с черепом.
+       Иконка кнопки «корабль», пока стоит штаб Пиратства (new-units/PIRACY). -->
+  <path d="M8 42h48l-6 12H14z"/>
+  <path d="M30 6h4v34h-4z"/>
+  <path d="M34 10h18l-6 7 6 7H34z"/>
+  <circle cx="42" cy="16" r="3" fill="#000"/>
+  <path d="M6 36h52v4H6z" fill-opacity="0.75"/>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- режим без тайлинга: картинка растягивается на весь AABB территории.
+       Захватил всю карту → флаг на всю карту. Полностью непрозрачный. -->
+  <rect x="0" y="0" width="1024" height="341" fill="#d12b2b"/>
+  <rect x="0" y="341" width="1024" height="342" fill="#f2f2f0"/>
+  <rect x="0" y="683" width="1024" height="341" fill="#1d3f8f"/>
+  <g transform="translate(512,512)" fill="#e9c46a" stroke="#7a5b1e" stroke-width="10">
+    <path d="M0,-150 L44,-46 L156,-46 L66,24 L100,134 L0,68 L-100,134 L-66,24 L-156,-46 L-44,-46 Z"/>
+  </g>
+</svg>

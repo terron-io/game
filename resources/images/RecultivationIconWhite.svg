@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Рекультивация — лопата, разгребающая заражённый грунт -->
+  <path d="M40 6l18 18-6 6-18-18 6-6z"/>
+  <path d="M34 18 20 32l12 12 14-14-12-12z"/>
+  <path d="M6 50h52v8H6zM14 46h6v4h-6zM30 44h6v6h-6zM44 46h6v4h-6z"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#fff">
+  <!-- terron: Космодром — ракета на стартовом столе -->
+  <path d="M32 2c6 8 10 18 10 28v10H22V30C22 20 26 10 32 2zm0 14a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/>
+  <path d="M22 42 12 52v6h10V42zM42 42l10 10v6H42V42z"/>
+  <path d="M6 58h52v6H6z"/>
+</svg>
