@@ -1,0 +1,228 @@
+{
+  "name": "Bering Sea (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        1239,
+        259
+      ],
+      "name": "Polar Bears",
+      "flag": "polar_bears"
+    },
+    {
+      "coordinates": [
+        1614,
+        252
+      ],
+      "name": "Utqiaġvik",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1865,
+        226
+      ],
+      "name": "Prudhoe Bay",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1914,
+        628
+      ],
+      "name": "Anchorage",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        2317,
+        650
+      ],
+      "name": "Juneau",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        2186,
+        461
+      ],
+      "name": "Whitehorse",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1555,
+        445
+      ],
+      "name": "Kotzebue",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1524,
+        566
+      ],
+      "name": "Nome",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1650,
+        779
+      ],
+      "name": "Bethel",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1861,
+        877
+      ],
+      "name": "Kodiak",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1861,
+        483
+      ],
+      "name": "Fairbanks",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1870,
+        361
+      ],
+      "name": "Fort Yukon",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        1527,
+        1132
+      ],
+      "name": "Unalaska",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        502,
+        965
+      ],
+      "name": "Petropavlovsk-Kamchatsky",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        665,
+        836
+      ],
+      "name": "Ust-Kamchatsk",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1140,
+        626
+      ],
+      "name": "Anadyr",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        853,
+        585
+      ],
+      "name": "Kamenskoye",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1312,
+        553
+      ],
+      "name": "Provideniya",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1025,
+        362
+      ],
+      "name": "Bilibino",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1218,
+        482
+      ],
+      "name": "Egvekinot",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        871,
+        245
+      ],
+      "name": "Chersky",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        744,
+        278
+      ],
+      "name": "Srednekolymsk",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        620,
+        318
+      ],
+      "name": "Zyryanka",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        495,
+        560
+      ],
+      "name": "Magadan",
+      "flag": "ru"
+    }
+  ],
+  "teamGameSpawnAreas": {
+    "2": [
+      {
+        "height": 1600,
+        "width": 1375,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "height": 1600,
+        "width": 1125,
+        "x": 1375,
+        "y": 0
+      }
+    ]
+  },
+  "map": {
+    "width": 2704,
+    "height": 1476,
+    "num_land_tiles": 1367382
+  },
+  "map4x": {
+    "width": 1352,
+    "height": 738,
+    "num_land_tiles": 335234
+  },
+  "map16x": {
+    "width": 676,
+    "height": 369,
+    "num_land_tiles": 81410
+  }
+}

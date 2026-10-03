@@ -4,7 +4,12 @@ import {
   TERRON_MINISTRY_RADIUS,
   TERRON_RAILGUN_RANGE,
 } from "../core/configuration/TerronTuning";
-import { ULTIMATE_REGISTRY, UnitType } from "../core/game/Game";
+import {
+  ultCasts,
+  ULTIMATE_REGISTRY,
+  UltStats,
+  UnitType,
+} from "../core/game/Game";
 
 /**
  * ЕДИНЫЙ реестр строений и ультимейтов — иконки + i18n + ВСЁ отображение ульты
@@ -25,19 +30,23 @@ import { ULTIMATE_REGISTRY, UnitType } from "../core/game/Game";
  * из архива матча.
  */
 
-/** Снимок ульт-счётчиков (форма PlayerView.ultStats(); для ховера Мин.правды —
- *  поля stolen/stolenGained подменяются per-unit значениями). */
-export interface UltStatSnapshot {
-  stolen: number;
-  stolenGained: number;
-  mirvLaunches: number;
-  mirvTiles: number;
-  fortTiles: number;
-  splitTiles: number;
-  religionTiles: number;
-  religionTithe: number;
-  waterTiles: number;
-}
+/**
+ * Снимок ульт-счётчиков (форма PlayerView.ultStats(); для ховера Мин.правды —
+ * поля stolen/stolenGained подменяются per-unit значениями).
+ *
+ * ⚠️ terron 26.08: ядерный `UltStats` — это СУММАРНЫЕ ЗА МАТЧ счётчики, и живым
+ * показаниям Реваншизма (текущее замедление / уровень монумента) там не место.
+ * Поэтому снимок КЛИЕНТСКИЙ и шире ядерного типа: ядро не трогаем, а тултип
+ * получает всё одним объектом.
+ */
+export type UltStatSnapshot = UltStats & {
+  /** Насколько % медленнее идёт захват моей земли прямо сейчас. */
+  revanchismSlowPct: number;
+  /** Уровень стоящего монумента (1..3; 0 — монумента нет). */
+  revanchismLevel: number;
+  /** Сколько % срезано от исторического пика. */
+  revanchismLostPct: number;
+};
 
 /** Одна строка-счётчик тултипа: i18n-ключ + как достать число из снимка. */
 export interface UltStatLineSpec {
@@ -82,6 +91,25 @@ const ULT_EXTRAS: Partial<
       { i18nKey: "ultimate.stat_fort_tiles", pick: (s) => s.fortTiles },
     ],
   },
+  // terron 26.08: РЕВАНШИЗМ — «показывай текущие состояния» (владелец). Одна
+  // запись видна СРАЗУ В ТРЁХ местах: панель (UnitDisplay), радиал телефона
+  // (RadialMenuElements) и ховер монумента на карте (StructureHoverController).
+  [UnitType.Revanchism]: {
+    statLines: [
+      {
+        i18nKey: "ultimate.stat_revanchism_slow",
+        pick: (s) => s.revanchismSlowPct,
+      },
+      {
+        i18nKey: "ultimate.stat_revanchism_level",
+        pick: (s) => s.revanchismLevel,
+      },
+      {
+        i18nKey: "ultimate.stat_revanchism_lost",
+        pick: (s) => s.revanchismLostPct,
+      },
+    ],
+  },
   [UnitType.Split]: {
     statLines: [
       { i18nKey: "ultimate.stat_split_tiles", pick: (s) => s.splitTiles },
@@ -107,14 +135,22 @@ const ULT_EXTRAS: Partial<
     hoverRadiusTiles:
       TERRON_MINISTRY_RADIUS * TERRON_MEDIA_MINISTRY_RADIUS_MULT,
   },
+  // terron 25.08: ТЕРРАФОРМИНГ — у штаба видно ОБА счётчика (что затопил и
+  // что насыпал), у каждой ракеты — свой.
   [UnitType.RiversBack]: {
     statLines: [
       { i18nKey: "ultimate.stat_water_tiles", pick: (s) => s.waterTiles },
+      { i18nKey: "ultimate.stat_land_tiles", pick: (s) => s.landTiles },
     ],
   },
   [UnitType.WaterNuke]: {
     statLines: [
       { i18nKey: "ultimate.stat_water_tiles", pick: (s) => s.waterTiles },
+    ],
+  },
+  [UnitType.LandNuke]: {
+    statLines: [
+      { i18nKey: "ultimate.stat_land_tiles", pick: (s) => s.landTiles },
     ],
   },
 };
@@ -139,15 +175,17 @@ const ULT_CATALOG_ENTRIES: Partial<Record<UnitType, UnitMeta>> =
           },
         ],
       ];
-      if (u.cast !== undefined) {
+      // terron 25.08: ВСЕ касты ульты, а не только слотовый (`ultCasts`) —
+      // у Терраформинга их три, и забытый каст остался бы без иконки и имени.
+      for (const c of ultCasts(u)) {
         rows.push([
-          u.cast.type,
+          c.type,
           {
-            type: u.cast.type,
-            icon: A(u.cast.icon),
-            key: u.cast.key,
+            type: c.type,
+            icon: A(c.icon),
+            key: c.key,
             ultimate: true,
-            ...(ULT_EXTRAS[u.cast.type] ?? {}),
+            ...(ULT_EXTRAS[c.type] ?? {}),
           },
         ]);
       }
@@ -155,7 +193,52 @@ const ULT_CATALOG_ENTRIES: Partial<Record<UnitType, UnitMeta>> =
     }),
   ) as Partial<Record<UnitType, UnitMeta>>;
 
+/**
+ * terron 31.08: БАЗОВЫЕ строимые юниты. Их метаданные жили ТОЛЬКО в ручной
+ * раскладке меню (`buildTable` в BuildMenu.ts), а прицельное управление берёт
+ * иконку отсюда — поэтому на телефоне бункер, обе ядерки, корабль и
+ * дрон-камикадзе рисовались БЕЗ ИКОНКИ вовсе.
+ *
+ * ⚠️ Держать их здесь, а не импортировать раскладку: `BuildMenu` сам тянет этот
+ * каталог, и обратный импорт замкнул бы круг. Полноту стережёт
+ * `tests/client/InputSurfacesContract.test.ts` — он падает, если у строимого
+ * типа нет иконки или имени.
+ */
+const BASE_CATALOG_ENTRIES: Partial<Record<UnitType, UnitMeta>> = {
+  [UnitType.DefensePost]: {
+    type: UnitType.DefensePost,
+    icon: A("ShieldIconWhite.svg"),
+    key: "defense_post",
+    ultimate: false,
+  },
+  [UnitType.AtomBomb]: {
+    type: UnitType.AtomBomb,
+    icon: A("NukeIconWhite.svg"),
+    key: "atom_bomb",
+    ultimate: false,
+  },
+  [UnitType.HydrogenBomb]: {
+    type: UnitType.HydrogenBomb,
+    icon: A("MushroomCloudIconWhite.svg"),
+    key: "hydrogen_bomb",
+    ultimate: false,
+  },
+  [UnitType.Warship]: {
+    type: UnitType.Warship,
+    icon: A("BattleshipIconWhite.svg"),
+    key: "warship",
+    ultimate: false,
+  },
+  [UnitType.SuicideDrone]: {
+    type: UnitType.SuicideDrone,
+    icon: A("DroneIconWhite.svg"),
+    key: "suicide_drone",
+    ultimate: false,
+  },
+};
+
 export const UNIT_CATALOG: Partial<Record<UnitType, UnitMeta>> = {
+  ...BASE_CATALOG_ENTRIES,
   ...ULT_CATALOG_ENTRIES,
   // terron 06.08: Мин правды ВЛИТА В МЕДИА — отдельного здания больше нет,
   // карточка закомментирована (статлайны и радиус ауры переехали в [Media]).
@@ -236,18 +319,6 @@ export function unitSkinFor(
     return { icon: A(r.icon), key: r.key };
   }
   return null;
-}
-
-/** Иконка корабля с учётом подмены (подлодка/пиратская лодка). */
-export function warshipIconFor(
-  hasUltimate: ((t: UnitType) => boolean) | boolean,
-): string {
-  // Back-compat: старый вызов с булевым «есть Подводный флот».
-  const has =
-    typeof hasUltimate === "boolean"
-      ? (t: UnitType) => hasUltimate && t === UnitType.SubmarineBase
-      : hasUltimate;
-  return unitSkinFor(UnitType.Warship, has)?.icon ?? A("BattleshipIconWhite.svg");
 }
 
 /** Метаданные по типу или по сырой строке из БД (= значение UnitType). */
@@ -347,9 +418,26 @@ const UNIT_NAME_I18N: Partial<Record<UnitType, string>> = {
   [UnitType.AirborneAssault]: "unit_type.airborne_assault",
 };
 
-/** i18n-ключ названия юнита (undefined — названия в словаре нет). */
+/**
+ * i18n-ключ названия юнита (undefined — названия в словаре нет).
+ *
+ * terron 31.08 — ПОЧЕМУ ВЫВОДИТСЯ, А НЕ ПЕРЕЧИСЛЯЕТСЯ: таблица `UNIT_NAME_I18N`
+ * велась руками и разошлась с каталогом — двенадцать типов остались без имени
+ * (МЕДИА, Депо смерти, Шагающий город, все три ракеты Терраформинга…), хотя
+ * ключи в словаре для них ЕСТЬ. На поверхностях, которые берут имя отсюда
+ * (прицельное управление на телефоне), такие кнопки подписывались сырым
+ * значением enum — «Doom Train» вместо «Состав смерти».
+ *
+ * Теперь ключ выводится из записи каталога (`unit_type.<key>`), а ручная
+ * таблица осталась ТОЛЬКО для того, чего в каталоге нет по смыслу (поезда,
+ * самолёты, десант — их не строят кнопкой) и для исключений, где ключ словаря
+ * не совпадает с ключом записи. Новая ульта/каст получает имя сама.
+ */
 export function unitNameI18nKey(t: UnitType | string): string | undefined {
-  return UNIT_NAME_I18N[t as UnitType];
+  const manual = UNIT_NAME_I18N[t as UnitType];
+  if (manual !== undefined) return manual;
+  const key = unitMeta(t)?.key;
+  return key === undefined ? undefined : `unit_type.${key}`;
 }
 
 /** Радиус круга по ховеру структуры (тайлы) или undefined = круга нет. */

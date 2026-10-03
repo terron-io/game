@@ -1,8 +1,8 @@
 import {
   TERRON_PIRACY_BOAT_HEALTH,
   TERRON_PIRACY_STEALTH_REVEAL_RADIUS,
+  TERRON_SUBMARINE_REVEAL_DELAY_TICKS,
 } from "../configuration/TerronTuning";
-import { TERRON_SUBMARINE_REVEAL_DELAY_TICKS } from "../configuration/TerronTuning";
 import { simpleHash, toInt, withinInt } from "../Util";
 import {
   AllUnitParams,
@@ -54,6 +54,8 @@ export class UnitImpl implements Unit {
   private _missileTimerQueue: number[] = [];
   private _hasTrainStation: boolean = false;
   private _level: number = 1;
+  // terron: РЕВАНШИЗМ — снесён руками владельца (см. markSelfDemolished).
+  private _selfDemolished = false;
   private _targetable: boolean = true;
   private _loaded: boolean | undefined;
   private _trainType: TrainType | undefined;
@@ -74,6 +76,8 @@ export class UnitImpl implements Unit {
   // terron 05.08: какая по счёту столица игрока (1 — первая). Подпись второй и
   // дальше рисуется как «Новая Зарница» — см. CapitalNames.capitalLabel.
   private _capitalGeneration = 0;
+  // terron 04.09 ПЕРФ: порядок вставки в список владельца (PlayerImpl.indexUnitAdded).
+  listSeq = 0;
 
   constructor(
     private _type: UnitType,
@@ -274,8 +278,11 @@ export class UnitImpl implements Unit {
   }
 
   // terron: ПИРАТСТВО — миссия «Блокада» (плывёт / на якоре / рисуется ли).
-  private _blockade: { target: TileRef; anchored: boolean; drawn: boolean } | null =
-    null;
+  private _blockade: {
+    target: TileRef;
+    anchored: boolean;
+    drawn: boolean;
+  } | null = null;
   blockadeMission() {
     return this._blockade;
   }
@@ -455,13 +462,32 @@ export class UnitImpl implements Unit {
     }
     this._lastOwner = this._owner;
     this._lastOwner._units = this._lastOwner._units.filter((u) => u !== this);
+    this._lastOwner.indexUnitRemoved(this);
+    this._lastOwner.invalidateUnitCounts();
     this._owner = newOwner;
     this._owner._units.push(this);
+    this._owner.indexUnitAdded(this);
+    this._owner.invalidateUnitCounts();
     // terron: ульт-здание сменило владельца (захват) → переносим учёт, чтобы
     // ПАССИВКА заработала у нового владельца (hasUltimate). new-units/ULTIMATES.md
     if (Ultimates.has(this._type)) {
       this._lastOwner.untrackUltBuilding(this);
       this._owner.trackUltBuilding(this);
+      // terron: РЕВАНШИЗМ — у прежнего владельца забрали монумент: это самая
+      // дорогая из причин (сразу потолок очков). Только если он его САМ построил
+      // — перехват уже захваченной статуи уровней не приносит.
+      if (this._type === UnitType.Revanchism) {
+        if (this._capturedTick === null) {
+          this._lastOwner.registerRevanchismLoss("captured");
+        }
+        // ⚠️ ЗАХВАЧЕННАЯ СТАТУЯ — ВСЕГДА 1-Й УРОВЕНЬ (решение владельца 26.08):
+        // уровень лежит в монументе, а не в игроке, и чужие накопления по
+        // наследству не передаются. Ставим напрямую: setLevel шлёт свой update,
+        // а общий addUpdate ниже по методу и так будет.
+        this._level = 1;
+        this.mg.invalidateUnitCounts();
+    this._owner.invalidateUnitCounts();
+      }
       this._capturedTick = this.mg.ticks(); // отсчёт самоуничтожения захвата
     }
     // terron: СТОЛИЦЫ — захваченная столица ПЕРЕХОДИТ новому владельцу (бонусы ему;
@@ -538,6 +564,25 @@ export class UnitImpl implements Unit {
     return this._deletionAt !== null;
   }
 
+  // terron: РЕВАНШИЗМ — «этот снос сделан РУКАМИ ВЛАДЕЛЬЦА». Отличить самоснос от
+  // настоящей потери по аргументу `destroyer` НЕЛЬЗЯ: когда под зданием забирают
+  // землю, PlayerExecution зовёт голый `delete()` без разрушителя — и настоящая
+  // потеря приехала бы как самоснос (пол-уровня зря). Ставит только
+  // DeleteUnitExecution — единственное место, которое знает, что это ручной снос.
+  markSelfDemolished(): void {
+    this._selfDemolished = true;
+  }
+
+  // terron: РЕВАНШИЗМ — уровень монумента проставляется при ПОСТРОЙКЕ (из очков
+  // игрока) и СБРАСЫВАЕТСЯ В 1 при захвате. increaseLevel не годится: там свои
+  // побочные эффекты (очередь таймеров шахт/ПВО).
+  setLevel(level: number): void {
+    this._level = Math.max(1, Math.trunc(level));
+    this.mg.invalidateUnitCounts();
+    this._owner.invalidateUnitCounts();
+    this.mg.addUpdate(this.toUpdate());
+  }
+
   markForDeletion(): void {
     if (!this.isActive()) {
       return;
@@ -564,9 +609,23 @@ export class UnitImpl implements Unit {
     this._destroyer = destroyer ?? undefined;
 
     this._owner._units = this._owner._units.filter((b) => b !== this);
+    this._owner.indexUnitRemoved(this);
     // terron: ульт-здание снесено/уничтожено → снять учёт (пассивка гаснет).
     if (Ultimates.has(this._type)) {
       this._owner.untrackUltBuilding(this);
+      // terron: РЕВАНШИЗМ — потеря СВОЕГО монумента копит очки уровня следующему.
+      // ⚠️ Только своя ПОСТРОЕННАЯ статуя (_capturedTick === null): иначе
+      // захватчик фармит уровни — захваченная ульта через 60 с взрывается сама
+      // (detonateCapturedUlt), и разрушителем там числится он же.
+      if (this._type === UnitType.Revanchism && this._capturedTick === null) {
+        this._owner.registerRevanchismLoss(
+          this._selfDemolished
+            ? "selfDestruct"
+            : // Земля под статуей ушла в ничью / выжгло ядеркой — это настоящая
+              // потеря, а не самоснос, хотя destroyer тут отсутствует.
+              "destroyed",
+        );
+      }
     }
     // terron: СТОЛИЦЫ — снос столицы обнуляет указатель владельца (доход гаснет;
     // база — без переезда, но следующий построенный город снова станет столицей).
@@ -842,6 +901,8 @@ export class UnitImpl implements Unit {
 
   increaseLevel(): void {
     this._level++;
+    this.mg.invalidateUnitCounts();
+    this._owner.invalidateUnitCounts();
     if ([UnitType.MissileSilo, UnitType.SAMLauncher].includes(this.type())) {
       this._missileTimerQueue.push(this.mg.ticks());
     }
@@ -850,6 +911,8 @@ export class UnitImpl implements Unit {
 
   decreaseLevel(destroyer?: Player): void {
     this._level--;
+    this.mg.invalidateUnitCounts();
+    this._owner.invalidateUnitCounts();
     if ([UnitType.MissileSilo, UnitType.SAMLauncher].includes(this.type())) {
       this._missileTimerQueue.pop();
     }

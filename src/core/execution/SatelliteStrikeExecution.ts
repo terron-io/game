@@ -16,7 +16,14 @@ import {
   TERRON_OURSKY_BLAST_DELAY_TICKS,
   TERRON_OURSKY_BUILD_TICKS,
 } from "../configuration/TerronTuning";
-import { Execution, Game, MessageType, Player, Unit, UnitType } from "../game/Game";
+import {
+  Execution,
+  Game,
+  MessageType,
+  Player,
+  Unit,
+  UnitType,
+} from "../game/Game";
 import { TileRef } from "../game/GameMap";
 import { GameUpdateType } from "../game/GameUpdates";
 
@@ -39,7 +46,16 @@ export class SatelliteStrikeExecution implements Execution {
     if (this.rocket === null) {
       const spawn = this.player.canBuild(UnitType.SatelliteStrike, this.tile);
       if (spawn === false) {
-        console.warn("cannot build Satellite Strike rocket");
+        // ⚠️ 01.09: отказ БОЛЬШЕ НЕ МОЛЧИТ. Раньше он уходил в console.warn —
+        // игрок жал каст, деньги оставались, на экране ничего, и это читалось
+        // как «ульта сломана» (репорт владельца и тестера).
+        this.mg.displayMessage(
+          this.player.units(UnitType.SatelliteStrike).length > 0
+            ? "events_display.satellite_strike_busy"
+            : "events_display.satellite_strike_bad_tile",
+          MessageType.SATELLITES_THREATENED,
+          this.player.id(),
+        );
         this.active = false;
         return;
       }
@@ -71,6 +87,11 @@ export class SatelliteStrikeExecution implements Execution {
 
     if (this.ticksUntilLaunch > 0) {
       this.ticksUntilLaunch--;
+      // Сколько осталось до пуска — ТЕМ ЖЕ каналом, что у Доры, поездов и
+      // баф-зданий: единый рисовальщик таймеров покажет отсчёт над носителем
+      // ВСЕМ. Без него каст выглядел как «ничего не произошло» — минуту на
+      // экране не менялось ничего (репорт 01.09).
+      this.rocket.setRailEta(this.ticksUntilLaunch);
       return;
     }
 

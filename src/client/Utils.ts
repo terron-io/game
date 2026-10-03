@@ -1,3 +1,4 @@
+import { translateInline } from "./InlineI18n";
 import IntlMessageFormat from "intl-messageformat";
 import {
   Duos,
@@ -484,8 +485,17 @@ function getCachedLangSelector(): LangSelector | null {
 // протекал в АНГЛИЙСКИЙ интерфейс (выбран EN, а L() отдавал RU). Убрано: язык
 // берём ТОЛЬКО из явного выбора (селектор/localStorage), иначе EN.
 // Для html-веток заворачивай в resolveMarkdown(L("**ru**…","**en**…")).
+// terron 19.09: остальные языки берут перевод из секции `inline` своего
+// файла по отпечатку английского текста (InlineI18n.ts). Нет перевода — EN.
 export const L = (ru: string, en: string): string => {
-  return getCurrentLang() === "ru" ? ru : en;
+  const lang = getCurrentLang();
+  if (lang === "ru") return brandText(ru);
+  if (lang === "en") return brandText(en);
+  const dict = getCachedLangSelector()?.translations as
+    | Record<string, string>
+    | null
+    | undefined;
+  return brandText(translateInline(en, dict) ?? en);
 };
 
 // terron: код текущего языка интерфейса (явный выбор: селектор/localStorage).
@@ -526,11 +536,25 @@ export function onTranslationsReady(cb: () => void): void {
   window.addEventListener("terron-lang-loaded", () => cb(), { once: true });
 }
 
+/**
+ * terron 09.09: имя игры в бегущем тексте приводится к имени в каталоге
+ * (Яндекс, п. 5.1.3 — модерация показала «TERRON» в вики, зале славы и шапке).
+ * Единственное исключение — штамп декора: он рисуется всегда, мимо гейта площадки,
+ * и в нём домен не нужен (см. `.md-stamp` в теме).
+ */
 export const translateText = (
   key: string,
   params?: Record<string, string | number>,
 ): string => {
-  const self = translateText as any;
+  const out = translateTextRaw(key, params);
+  return key === "main.decor_brand" ? out : brandText(out);
+};
+
+const translateTextRaw = (
+  key: string,
+  params?: Record<string, string | number>,
+): string => {
+  const self = translateTextRaw as any;
   self.formatterCache ??= new Map();
   self.lastLang ??= null;
 
@@ -687,6 +711,9 @@ export function getMessageTypeClasses(type: MessageType): string {
     // terron: шагающий город — служебные строки переноса зданий (владельцу).
     case MessageType.WALKING:
       return severityColors["info"];
+    // terron: отсчёт до победы — это плохая новость для всех, кроме лидера.
+    case MessageType.VICTORY_COUNTDOWN:
+      return severityColors["fail"];
     default:
       console.warn(`Message type ${type} has no explicit color`);
       return severityColors["white"];
@@ -736,6 +763,44 @@ export function isInIframe(): boolean {
  * (CSS .terron-logo поднимает в верхний регистр → «ТЕРРОН»), en → «terron».
  * Вне площадки поведение не меняется.
  */
+/**
+ * Игра показана ВНУТРИ площадки (VK/Яндекс/ОК/Пикабу) — класс ставит бутстрап
+ * `index.html`. Тот же гейт, что прячет внешние ссылки в футере.
+ *
+ * ⚠️ Прямая проверка класса, а не фасад `PlatformHost`: этот код собирается и в
+ * прод-дереве, где фасада ещё нет.
+ */
+export function onPlatformSurface(): boolean {
+  try {
+    return document.documentElement.classList.contains("gp-embed");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Название игры в бегущем тексте («Бой в TERRON — это…»). Внутри площадки —
+ * ровно как в каталоге (требование Яндекса 5.1.3: имя одинаково везде, и в
+ * материалах, и в игре): «ТЕРРОН.ио» по-русски, «TERRON.io» по-английски.
+ * На самом terron.io бренд остаётся латиницей — решение владельца.
+ */
+export function brandName(): string {
+  if (!onPlatformSurface()) return "TERRON";
+  return getCurrentLang() === "ru" ? "ТЕРРОН.ио" : "TERRON.io";
+}
+
+/**
+ * Подмена «TERRON» / «TERRON.io» в готовой строке на имя из каталога — только
+ * внутри площадки. Зовётся из L() и translateText(), поэтому вики, зал славы,
+ * гайд и словарь чинятся разом, без правки сотен строк. Строчное «terron.io»
+ * (адреса) не трогаем. Быстрый выход по indexOf — translateText горячий.
+ */
+export function brandText(s: string): string {
+  if (typeof s !== "string" || s.indexOf("TERRON") === -1) return s;
+  if (!onPlatformSurface()) return s;
+  return s.replace(/\bTERRON(?:\.io)?\b/g, brandName());
+}
+
 export function brandWordmark(): string {
   try {
     if (!document.documentElement.classList.contains("gp-embed")) {

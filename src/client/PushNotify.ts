@@ -20,10 +20,12 @@
 // её задним числом нельзя: это самый быстрый способ получить отписку.
 
 import { getApiBase } from "./Api";
-import { getPersistentID } from "./Auth";
+import { getAuthHeader, getPersistentID } from "./Auth";
+import { Host } from "./PlatformHost";
 import { L, getCurrentLang, isDevSite } from "./Utils";
 
-export type PushTopic = "diamond" | "golden";
+// terron 22.09: `dm` — пуш о новом личном сообщении (панель чатов).
+export type PushTopic = "diamond" | "golden" | "dm";
 
 /** Что сейчас с каналом. `unsupported` — браузер не умеет вовсе. */
 export type PushState = "unsupported" | "default" | "granted" | "denied";
@@ -98,10 +100,7 @@ export function topicForTier(tier: "golden" | "diamond" | null): PushTopic {
  * На terron.io и в наших приложениях self === top, класс не ставится.
  */
 export function inForeignFrame(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("gp-embed")
-  );
+  return Host.inPlatformFrame();
 }
 
 /** Ключ сервера кэшируем на сессию: ручка публичная, но дёргать её на каждый
@@ -197,6 +196,26 @@ export async function enablePush(
   }
 }
 
+/**
+ * terron 22.09: снять ОДНУ тему у текущей подписки браузера (остальные темы,
+ * например алмазный матч, остаются). Нет подписки — делать нечего.
+ */
+export async function disablePushTopic(topic: PushTopic): Promise<void> {
+  if (!pushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return;
+    await fetch(`${getApiBase()}/push/unsubscribe-topic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: sub.endpoint, topic }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function disablePush(): Promise<void> {
   if (!pushSupported()) return;
   try {
@@ -261,9 +280,15 @@ async function sendSubscription(
   } catch {
     /* пояс не обязателен — сервер упадёт на дефолт МСК */
   }
+  // terron 22.09: подписка привязывается к АККАУНТУ по токену — без него сервер
+  // пишет user_id = null, и адресный пуш (о ЛС) не найдёт ни одной подписки.
+  const auth = await getAuthHeader().catch(() => "");
   const r = await fetch(`${getApiBase()}/push/subscribe`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(auth ? { Authorization: auth } : {}),
+    },
     body: JSON.stringify({
       endpoint: json.endpoint,
       keys: json.keys,

@@ -11,12 +11,18 @@
 // нормально: у снаряда контрплея нет и не должно быть, вся защита вынесена на
 // этап подвоза. Снаряд — не ракета, ПВО его не касается.
 import {
+  railgunReloadTicks,
+  railgunSpeed,
   TERRON_RAILGUN_FOREIGN_GRACE_TICKS,
   TERRON_RAILGUN_RANGE,
-  TERRON_RAILGUN_RELOAD_TICKS,
-  TERRON_RAILGUN_SPEED,
 } from "../configuration/TerronTuning";
-import { MessageType, Player, Unit, UnitType } from "../game/Game";
+import {
+  actingAsCount,
+  MessageType,
+  Player,
+  Unit,
+  UnitType,
+} from "../game/Game";
 import { TileRef } from "../game/GameMap";
 import { railPath, railTilesFrom, thinReach } from "../game/RailReach";
 import { RailGunShellFlight } from "./RailGunShellFlight";
@@ -55,7 +61,7 @@ export class RailGunExecution extends UltimateBuildingExecution {
     if (this.checkForeignGround(player, ticks)) return;
     // Снимаем перезарядку, когда вышло время (как MissileSiloExecution).
     const q = this.hq.missileTimerQueue();
-    if (q.length > 0 && ticks - q[0] >= TERRON_RAILGUN_RELOAD_TICKS) {
+    if (q.length > 0 && ticks - q[0] >= railgunReloadTicks(this.factories(player))) {
       this.hq.reloadMissile();
     }
 
@@ -116,7 +122,10 @@ export class RailGunExecution extends UltimateBuildingExecution {
   private cooldownLeft(ticks: number): number {
     const q = this.hq.missileTimerQueue();
     if (q.length === 0) return 0;
-    return Math.max(0, q[0] + TERRON_RAILGUN_RELOAD_TICKS - ticks);
+    return Math.max(
+      0,
+      q[0] + railgunReloadTicks(this.factories(this.hq.owner())) - ticks,
+    );
   }
 
   /**
@@ -128,7 +137,8 @@ export class RailGunExecution extends UltimateBuildingExecution {
     if (left === 0 && this.pathTarget !== null && this.path.length === 0) {
       return 0; // ехать некуда — отсчёт врал бы
     }
-    const travel = Math.ceil(left / Math.max(1, TERRON_RAILGUN_SPEED));
+    const speed = railgunSpeed(this.factories(this.hq.owner()));
+    const travel = Math.ceil(left / Math.max(1, speed));
     return Math.max(travel, this.cooldownLeft(ticks));
   }
 
@@ -160,6 +170,17 @@ export class RailGunExecution extends UltimateBuildingExecution {
    * взрывается на месте (решение владельца 23.08). Вернулся на дружественную
    * землю раньше — отсчёт сбрасывается.
    */
+  /**
+   * Сколько фабрик у владельца орудия. terron 01.09: от этого числа зависят и
+   * перезарядка, и скорость (решение владельца).
+   *
+   * ⚠️ Через `actingAsCount` — тем же способом, что считают поезда: Депо
+   * смерти объявлено в реестре ПЯТЬЮ фабриками. Свой счёт разъехался бы.
+   */
+  private factories(player: Player): number {
+    return actingAsCount(UnitType.Factory, (t) => player.unitCount(t));
+  }
+
   private checkForeignGround(player: Player, ticks: number): boolean {
     const ground = this.mg.owner(this.hq.tile());
     const friendly =
@@ -246,7 +267,10 @@ export class RailGunExecution extends UltimateBuildingExecution {
         return;
       }
     }
-    for (let i = 0; i < TERRON_RAILGUN_SPEED; i++) {
+    // terron 01.09: шагов за тик тем больше, чем больше фабрик (после того
+    // как перезарядка упёрлась в пол). TerronTuning §ДОРА КОРМИТСЯ ФАБРИКАМИ.
+    const steps = railgunSpeed(this.factories(this.hq.owner()));
+    for (let i = 0; i < steps; i++) {
       if (this.pathIdx >= this.path.length) return;
       this.hq.move(this.path[this.pathIdx++]);
     }

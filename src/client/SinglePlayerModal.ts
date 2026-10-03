@@ -1,4 +1,3 @@
-import { isDevSite } from "./Utils";
 import { TemplateResult, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { L, translateText } from "../client/Utils";
@@ -15,7 +14,7 @@ import {
 import { listCachedMapNames } from "../core/game/MapCache";
 import { TeamCountConfig } from "../core/Schemas";
 import { generateID } from "../core/Util";
-import { hasLinkedAccount } from "./Api";
+import { isSignedIn } from "./Api";
 import { prefetchLobbyMap } from "./ClientGameRunner";
 import "./components/baseComponents/Button";
 import "./components/baseComponents/Modal";
@@ -40,6 +39,7 @@ import {
   sliderToNationsConfig,
   toOptionalNumber,
 } from "./utilities/GameConfigHelpers";
+import { isDevSite } from "./Utils";
 
 import { terrainMapFileLoader } from "./TerrainMapFileLoader";
 
@@ -194,7 +194,7 @@ export class SinglePlayerModal extends BaseModal {
       title: translateText("main.solo") || "Solo",
       onBack: () => this.close(),
       ariaLabel: translateText("common.back"),
-      rightContent: hasLinkedAccount(this.userMeResponse)
+      rightContent: isSignedIn(this.userMeResponse)
         ? html`<button
             @click=${this.toggleAchievements}
             class="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all shrink-0 ${this
@@ -379,7 +379,7 @@ export class SinglePlayerModal extends BaseModal {
               )}
             </div>`
           : null}
-        ${hasLinkedAccount(this.userMeResponse) && this.hasOptionsChanged()
+        ${isSignedIn(this.userMeResponse) && this.hasOptionsChanged()
           ? html`<div
               class="mt-3 px-4 py-3 rounded-xl bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-xs font-bold uppercase tracking-wider text-center"
             >

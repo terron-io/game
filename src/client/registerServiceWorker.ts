@@ -3,6 +3,7 @@
 // кешируются отдельно (src/core/game/MapCache.ts). Side-effect import из Main.ts.
 
 import { prefetchOfflineMaps } from "./OfflinePrefetch";
+import { Host } from "./PlatformHost";
 
 // terron: нативный бандл (iOS/Android) живёт на origin localhost — файлы вшиты в
 // апку, WebView отдаёт их напрямую и свежими. SW тут не нужен и ВРЕДЕН (кеширует
@@ -25,7 +26,9 @@ const IS_NATIVE_BUNDLE =
  * Поэтому на `/test` перед стартом: сносим SW, чистим все его кэши и ОДИН раз
  * перезагружаемся. Гард в sessionStorage — чтобы не уйти в петлю перезагрузок.
  */
-const TEST_PATH = /^\/(?:w\d+\/)?test\/?$/;
+// terron: полигоны — /test (механики) и /v2 (визуалы). Оба обязаны
+// открываться на СВЕЖЕЙ сборке, иначе стиль/фикс «не приехал».
+const TEST_PATH = /^\/(?:w\d+\/)?(?:test|v2)\/?$/;
 const FRESH_KEY = "terron_test_fresh";
 
 async function dropCachesForTestGround(): Promise<void> {
@@ -54,6 +57,9 @@ if (
   void dropCachesForTestGround();
 }
 
+/** Сборка под чужую площадку (Playgama и подобные). */
+const IS_PLATFORM_BUILD = Host.isPlatformBuild();
+
 if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   const boot = () => {
     // На полигоне SW не регистрируем вовсе: он для офлайна, а тут нужна
@@ -81,9 +87,19 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       setTimeout(() => void prefetchOfflineMaps(), 10_000);
       return;
     }
-    navigator.serviceWorker.register("/sw.js").catch((e) => {
-      console.warn("[sw] регистрация не удалась:", e);
-    });
+    // terron 30.08: В ПЛАТФОРМЕННОЙ СБОРКЕ SW НЕ РЕГИСТРИРУЕМ ВОВСЕ.
+    // Файла sw.js в бандле нет (он собирается для нашего сайта), путь «/sw.js»
+    // на чужом хостинге уходит на ИХ домен, и в их песочнице register() вернул
+    // не промис — отсюда `Cannot read properties of undefined (reading 'catch')`
+    // в консоли их QA-инструмента. Кэшировать там нечего и не нужно: офлайн у
+    // площадки не требуется, а свой SW на ЧУЖОМ origin — лишний риск.
+    // ⚠️ `?.catch` — второй рубеж: register может вернуть не промис и в другой
+    // песочнице, а падать из-за необязательного кэша игра не должна.
+    if (!IS_PLATFORM_BUILD) {
+      navigator.serviceWorker.register("/sw.js")?.catch?.((e) => {
+        console.warn("[sw] регистрация не удалась:", e);
+      });
+    }
     // terron (2026-07-05): обычной веб-вкладке НЕ греем офлайн при заходе —
     // пассивный кэш (MapCache + SW по факту запроса) наполняется сам во время
     // игры, а полный прегрев дыр запускает Main ПОСЛЕ первого матча

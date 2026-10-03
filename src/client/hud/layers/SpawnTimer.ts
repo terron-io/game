@@ -12,6 +12,9 @@ export class SpawnBarVisibleEvent implements GameEvent {
   constructor(public readonly visible: boolean) {}
 }
 
+/** Цвет полосы фазы спавна (янтарь: читается и на чёрном фоне, и на карте). */
+export const SPAWN_BAR_COLOR = "rgba(251, 191, 36, 0.95)";
+
 @customElement("spawn-timer")
 export class SpawnTimer extends LitElement implements Controller {
   public game: GameView;
@@ -20,10 +23,7 @@ export class SpawnTimer extends LitElement implements Controller {
 
   private ratios = [0];
   private _barVisible = false;
-  private colors = [
-    "rgba(31, 41, 55, 0.75)",
-    "rgba(0, 0, 0, 0.5)",
-  ];
+  private colors: string[] = [SPAWN_BAR_COLOR];
 
   private isVisible = false;
 
@@ -69,7 +69,9 @@ export class SpawnTimer extends LitElement implements Controller {
     if (this.game.inSpawnPhase()) {
       // During spawn phase, only one segment filling full width
       this.ratios = [this.game.ticks() / this.spawnTurns()];
-      this.colors = ["rgba(31, 41, 55, 0.75)"];
+      // terron 30.09 (Prirexx, телефон): тёмно-серая полоса сливалась с чёрной
+      // полосой за картой — янтарная видна и на чёрном, и на суше.
+      this.colors = [SPAWN_BAR_COLOR];
     } else {
       this.ratios = [];
       this.colors = [];

@@ -1,4 +1,5 @@
 import { ClientEnv } from "src/client/ClientEnv";
+import { gameOrigin } from "./GameHost";
 import { z } from "zod";
 import { EventBus } from "../core/EventBus";
 import {
@@ -394,7 +395,7 @@ export class LocalServer {
 
     Promise.all([compress(jsonString), getPlayToken()])
       .then(([compressedData, token]) => {
-        return fetch(`/${workerPath}/api/archive_singleplayer_game`, {
+        return fetch(`${gameOrigin()}/${workerPath}/api/archive_singleplayer_game`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

@@ -18,6 +18,8 @@
 // Поэтому хост и разрешение разведены: `payHost()` отвечает ГДЕ мы, а не что
 // можно.
 import { clientPlatform } from "./Analytics";
+
+declare const __PLATFORM_BUILD__: string | undefined;
 import { platformContext } from "./PlatformContext";
 
 export type PayHost =
@@ -72,6 +74,13 @@ function nativeToken(): string | null {
 
 /** Где мы сейчас. Считается на каждый вызов — признаки дешёвые и кэшируются ниже. */
 export function payHost(): PayHost {
+  // ⚠️ СБОРКА ПОД ПЛОЩАДКУ решает раньше всего. Бандл, залитый на их хостинг
+  // (Playgama и подобные), — это их магазин ВСЕГДА, даже если он открыт не в
+  // кадре: `framed()` там вернул бы false, и мы предложили бы свою платёжку
+  // внутри чужой площадки. Это ровно то нарушение, за которое снимают.
+  if (typeof __PLATFORM_BUILD__ === "string" && __PLATFORM_BUILD__.length > 0) {
+    return { kind: "platform", id: __PLATFORM_BUILD__.toUpperCase() };
+  }
   // Порядок важен: апка внутри чужого iframe невозможна, а вот площадка внутри
   // WebView (наша апка открыла VK?) — тоже нет. Чужой кадр решает первым.
   if (framed()) return { kind: "platform", id: platformContext() };

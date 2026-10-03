@@ -4,7 +4,11 @@ import { z } from "zod";
 import { TokenPayload, TokenPayloadSchema } from "../core/ApiSchemas";
 import { base64urlToUuid } from "../core/Base64";
 import { getApiBase, getAudience } from "./Api";
-import { platformAuthHeaders, platformContextReady } from "./PlatformContext";
+import {
+  isPlatformSurface,
+  platformAuthHeaders,
+  platformContextReady,
+} from "./PlatformContext";
 import { generateCryptoRandomUUID, getCurrentLang } from "./Utils";
 
 export type UserAuth = { jwt: string; claims: TokenPayload } | false;
@@ -261,21 +265,44 @@ async function refreshJwt(): Promise<void> {
   }
 }
 
+/** Мы спросили сессию, так и не узнав площадку (SDK не поднялся вовремя), и
+ *  получили 401. Ответ НЕ ОКОНЧАТЕЛЬНЫЙ: он про сайтовую куку, а игрок сидит в
+ *  каталоге, где кука своя. Ждём, пока площадка станет известна, и переспросим
+ *  ровно один раз — иначе игрок остаётся «гостем» и платит полный круг входа. */
+let __ctxRetryArmed = false;
+function armContextRetry(): void {
+  if (__ctxRetryArmed) return;
+  __ctxRetryArmed = true;
+  window.addEventListener(
+    "terron-platform-ctx",
+    () => {
+      if (__jwt !== null) return;
+      void adoptExternalSession();
+    },
+    { once: true },
+  );
+}
+
 async function doRefreshJwt(): Promise<void> {
   try {
     // ⚠️ Ждём, пока станет известна площадка: сессии сайта и каталога разведены
     // именем куки, и запрос без заголовка поднял бы САЙТОВУЮ сессию внутри ВК
     // (см. PlatformContext). Вне площадки ожидание мгновенное.
     await platformContextReady();
+    const headers = platformAuthHeaders();
     const response = await fetch(getApiBase() + "/auth/refresh", {
       method: "POST",
       credentials: "include",
-      headers: platformAuthHeaders(),
+      headers,
     });
     if (response.status === 401) {
       // Нет сессии (гость) — это норма, не ошибка. Запоминаем и не спамим.
       __sessionKnownAbsent = true;
       __jwt = null;
+      // Спросили не про ту куку — держим наготове повтор (см. armContextRetry).
+      if (Object.keys(headers).length === 0 && isPlatformSurface()) {
+        armContextRetry();
+      }
       return;
     }
     if (response.status !== 200) {
@@ -369,6 +396,32 @@ export function getPersistentID(): string {
   const sub = payload.sub;
   if (!sub) return getPersistentIDFromLocalStorage();
   return base64urlToUuid(sub);
+}
+
+/**
+ * terron 09.09: СТАБИЛЬНЫЙ КЛЮЧ УСТРОЙСТВА ДЛЯ АНАЛИТИКИ.
+ *
+ * ⚠️ getPersistentID() у ЗАЛОГИНЕННОГО отдаёт account-uuid, и это правильно для
+ * игры (сервер по нему узнаёт аккаунт), но ЯДОВИТО для воронки: ключ одного и
+ * того же человека меняется посреди сессии. На площадке с автовходом (ОК, ВК,
+ * Яндекс) вход происходит на каждой загрузке — значит КАЖДЫЙ человек оставлял
+ * в traffic_journey ДВЕ строки: анонимную «зашёл и не играл» (до входа) и
+ * аккаунтную «играл» (после). Конверсия канала делилась почти пополам, а
+ * глубина размазывалась по двум строкам (факт 09.09: у площадки OK 82 строки
+ * по account-uuid при 289 зашедших).
+ *
+ * Здесь — ключ, который НЕ меняется при входе: тот же анонимный id устройства,
+ * что лежал до логина. Только для аналитики (воронка, пульс онлайна, мост
+ * заказа к источнику). Игровые ручки по-прежнему берут getPersistentID().
+ */
+export function getDeviceID(): string {
+  try {
+    return getPersistentIDFromLocalStorage();
+  } catch {
+    // Хранилище запрещено в кадре (см. шим в index.html) — аналитике не
+    // критично, вернём пусто: сервер такой vid просто отбросит.
+    return "";
+  }
 }
 
 /**

@@ -20,7 +20,7 @@ import { GameView } from "../../core/game/GameView";
 import { Controller } from "../Controller";
 import { MouseMoveEvent, MouseOverEvent } from "../InputHandler";
 import { UIState } from "../UIState";
-import { warshipIconFor } from "../UnitCatalog";
+import { buttonFor } from "../UltSlots";
 import { ghostKindFor } from "../UnitVisuals";
 
 const ICON_PX = 30; // размер иконки под курсором
@@ -120,10 +120,13 @@ export class WarshipPreviewController implements Controller {
     const me = this.game.myPlayer();
     if (!me || !me.isAlive()) return;
 
-    // Иконка — ИЗ РЕЕСТРА ПОДМЕН: Подводный флот → подлодка, Пиратство →
-    // пиратская лодка, иначе линкор. Ровно то же, что на кнопке 8.
+    // terron 01.09: картинку госта даёт ТОТ ЖЕ ответ, что и кнопке в панели,
+    // радиале и прицельном управлении (`UltSlots.buttonFor`) — Подводный флот
+    // → подлодка, Пиратство → пиратская лодка, иначе линкор. Раньше это была
+    // отдельная функция только про корабль: появись второй юнит с иконочным
+    // гостом — его подмену пришлось бы вспоминать руками.
     const icon = this.iconFor(
-      warshipIconFor((t: UnitType) => me.hasUltimate(t)),
+      buttonFor(ghost as UnitType, (t: UnitType) => me.hasUltimate(t)).icon,
     );
     if (icon === null) return;
 

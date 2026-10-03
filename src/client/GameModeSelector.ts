@@ -1,10 +1,10 @@
-import { pollWhileVisible } from "./utilities/PollWhileVisible";
 import { html, LitElement, nothing, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { ClientEnv } from "src/client/ClientEnv";
 import { assetUrl } from "../core/AssetUrls";
 import {
-  eventRewardOf,
+  eveningOf,
+  eventPerPersonOf,
   TERRON_DIAMOND_ENABLED,
   TERRON_DIAMOND_FEATURE_LEAD_MS,
   TERRON_GOLDEN_ENABLED,
@@ -32,6 +32,7 @@ import { JoinLobbyEvent } from "./Main";
 import { isOffline, onOfflineChange } from "./Offline";
 import { terrainMapFileLoader } from "./TerrainMapFileLoader";
 import { UsernameInput } from "./UsernameInput";
+import { pollWhileVisible } from "./utilities/PollWhileVisible";
 import {
   calculateServerTimeOffset,
   getMapName,
@@ -48,7 +49,7 @@ const CARD_BG = "bg-surface";
 
 // terron: вкладки витрины. Событийные (золотой/алмазный матч) живут постоянно
 // рядом с ротационным ффа — см. блок «СОБЫТИЙНЫЕ МАТЧИ на витрине» ниже.
-type EventTab = "golden" | "diamond";
+type EventTab = "golden" | "diamond" | "fair";
 type TabKind = "ffa" | EventTab;
 
 // terron: кровавый алмаз (ПТС) — награда за победу в золотом матче. Та же
@@ -258,12 +259,25 @@ export class GameModeSelector extends LitElement {
                         media="(max-width: 1024px)"
                         srcset="${mapImageSmallSrc}"
                       />
+                      <!-- ⚠️ ДО УСПЕШНОЙ ЗАГРУЗКИ КАРТИНКУ НЕ ПОКАЗЫВАЕМ. В
+                           WebView площадки сеть первых секунд мертва (см.
+                           ImgRetry): превью падало, и вместо карты игрок видел
+                           значок «битая картинка» с подписью — ровно первый
+                           скрин владельца из ВК 09.09. ImgRetry повторяет сам,
+                           поэтому достаточно держать <img> прозрачным до load. -->
                       <img
                         src="${mapImageSrc}"
                         alt="${mapName}"
                         draggable="false"
                         loading="eager"
                         decoding="async"
+                        style="opacity:0;transition:opacity .18s ease-out"
+                        @load=${(e: Event) => {
+                          (e.currentTarget as HTMLElement).style.opacity = "1";
+                        }}
+                        @error=${(e: Event) => {
+                          (e.currentTarget as HTMLElement).style.opacity = "0";
+                        }}
                         class="absolute inset-0 w-full h-full object-cover object-center [image-rendering:auto]"
                       />
                     </picture>`
@@ -298,14 +312,14 @@ export class GameModeSelector extends LitElement {
   private handleLobbiesUpdate(lobbies: PublicGames) {
     const prevEvent = `${this.eventLobby("golden")?.gameID}:${
       this.eventLobby("diamond")?.gameID
-    }`;
+    }:${this.eventLobby("fair")?.gameID}`;
     this.lobbies = lobbies;
     this.serverTimeOffset = calculateServerTimeOffset(lobbies.serverTime);
     // terron: событийное лобби сменилось (прежнее ушло в матч) → забываем ручной
     // выбор вкладки: следующий цикл снова показывает обычный ффа по умолчанию.
     const nowEvent = `${this.eventLobby("golden")?.gameID}:${
       this.eventLobby("diamond")?.gameID
-    }`;
+    }:${this.eventLobby("fair")?.gameID}`;
     if (prevEvent !== nowEvent) {
       this.tabPick = null;
     }
@@ -362,8 +376,17 @@ export class GameModeSelector extends LitElement {
     // активной (см. activeTab).
     const gold = this.eventLobby("golden");
     const diamond = this.eventLobby("diamond");
-    const tab = this.activeTab(ffa, gold, diamond);
-    const shown = tab === "ffa" ? ffa : tab === "golden" ? gold : diamond;
+    // terron 23.09: лобби честных ботов (/fair) — фид несёт его только с дева.
+    const fair = this.eventLobby("fair");
+    const tab = this.activeTab(ffa, gold, diamond, fair);
+    const shown =
+      tab === "ffa"
+        ? ffa
+        : tab === "golden"
+          ? gold
+          : tab === "diamond"
+            ? diamond
+            : fair;
 
     return html`
       <div class="flex flex-col gap-4 w-full px-4 sm:px-0 mx-auto pb-4 sm:pb-0">
@@ -382,7 +405,7 @@ export class GameModeSelector extends LitElement {
                 ${shown
                   ? this.renderLobbyCard(
                       shown,
-                      this.renderLobbyTabs(ffa, gold, diamond, tab),
+                      this.renderLobbyTabs(ffa, gold, diamond, fair, tab),
                       true,
                     )
                   : nothing}
@@ -459,7 +482,9 @@ export class GameModeSelector extends LitElement {
     ? "golden"
     : /^\/(?:w\d+\/)?diamond\/?$/.test(window.location.pathname)
       ? "diamond"
-      : null;
+      : /^\/(?:w\d+\/)?fair\/?$/.test(window.location.pathname)
+        ? "fair"
+        : null;
 
   private maybeJoinEventFromUrl() {
     if (this.eventPending === null) return;
@@ -468,6 +493,19 @@ export class GameModeSelector extends LitElement {
     this.tabPick = this.eventPending;
     this.eventPending = null;
     this.validateAndJoin(lobby);
+  }
+
+  /**
+   * Текущий id лобби этого тира — для ЛЕЧЕНИЯ зависшего лобби.
+   *
+   * ⚠️ terron 01.09: если лобби под игроком умерло (выкат, рестарт, истёкший
+   * слот), раньше клиент делал перезагрузку страницы и упирался в «Game not
+   * found» — потому что просил СТАРОЕ лобби, которого уже нет. Мастер к тому
+   * моменту УЖЕ создал новое лобби того же тира, и оно есть вот в этом живом
+   * фиде: вернуть игрока туда честнее и быстрее, чем перезагружать вкладку.
+   */
+  public currentLobbyIdFor(kind: EventTab): string | null {
+    return this.eventLobby(kind)?.gameID ?? null;
   }
 
   private eventLobby(kind: EventTab): PublicGameInfo | undefined {
@@ -496,11 +534,13 @@ export class GameModeSelector extends LitElement {
     ffa: PublicGameInfo | undefined,
     gold: PublicGameInfo | undefined,
     diamond: PublicGameInfo | undefined,
+    fair: PublicGameInfo | undefined,
   ): TabKind {
     const available: TabKind[] = [];
     if (ffa) available.push("ffa");
     if (gold) available.push("golden");
     if (diamond) available.push("diamond");
+    if (fair) available.push("fair");
     if (available.length === 0) return "ffa";
     if (this.tabPick !== null && available.includes(this.tabPick)) {
       return this.tabPick;
@@ -508,6 +548,7 @@ export class GameModeSelector extends LitElement {
     // Алмазный старше золотого: если оба на подходе, главный — алмазный.
     if (diamond && this.eventIsFeatured("diamond", diamond)) return "diamond";
     if (gold && this.eventIsFeatured("golden", gold)) return "golden";
+    if (fair && this.eventIsFeatured("fair", fair)) return "fair";
     return available[0];
   }
 
@@ -541,16 +582,34 @@ export class GameModeSelector extends LitElement {
     lobby: PublicGameInfo,
     compact: boolean,
   ) {
+    // terron 23.09: у лобби честных ботов награды нет — вместо неё число ботов.
+    if (kind === "fair") {
+      return html`<span class="lobby-tab-full"
+          >${compact ? L("БОТЫ", "BOTS") : L("ЧЕСТНЫЕ БОТЫ", "FAIR BOTS")}</span
+        >
+        <span class="lobby-tab-short">⚔</span>
+        <span class="golden-note-reward"
+          >×${lobby.gameConfig?.fairBots?.length ?? 0}</span
+        >`;
+    }
     // Цифру награды крутят на сервере (env), поэтому берём её из конфига лобби.
-    const reward = eventRewardOf(lobby.gameConfig);
+    // terron 26.09: у командного вечернего — потолок доли на человека.
+    const reward = eventPerPersonOf(lobby.gameConfig);
+    const evening = eveningOf(lobby.gameConfig);
     const title =
-      kind === "diamond"
+      kind === "diamond" && evening !== null
         ? compact
-          ? L("АЛМАЗНЫЙ", "DIAMOND")
-          : L("АЛМАЗНЫЙ МАТЧ", "DIAMOND MATCH")
-        : compact
-          ? L("ЗОЛОТОЙ", "GOLD")
-          : L("ЗОЛОТОЙ МАТЧ", "GOLDEN MATCH");
+          ? L("ВЕЧЕРНИЙ", "EVENING")
+          : evening === "team"
+            ? L("ВЕЧЕРНИЙ · КОМАНДЫ", "EVENING · TEAMS")
+            : L("ВЕЧЕРНИЙ · СОЛО", "EVENING · SOLO")
+        : kind === "diamond"
+          ? compact
+            ? L("АЛМАЗНЫЙ", "DIAMOND")
+            : L("АЛМАЗНЫЙ МАТЧ", "DIAMOND MATCH")
+          : compact
+            ? L("ЗОЛОТОЙ", "GOLD")
+            : L("ЗОЛОТОЙ МАТЧ", "GOLDEN MATCH");
     // Без лишних пробелов: на телефоне вкладка обрезала таймер (репорт владельца
     // 29.07). Иконка алмаза + «+N» и так читаются как награда.
     // ⚠️ На узком экране вкладок ТРИ, и слово в каждую не влезает — там вместо
@@ -560,7 +619,10 @@ export class GameModeSelector extends LitElement {
     return html`<span class="lobby-tab-full">${title}</span>
       <span class="lobby-tab-short">${kind === "diamond" ? "💎" : "⭐"}</span>
       <span class="golden-note-reward"
-        >+${reward}<img class="golden-gem" src=${bloodDiamondIcon} alt=""
+        >+${reward}<img
+          class="golden-gem"
+          src=${bloodDiamondIcon}
+          alt=""
       /></span>`;
   }
 
@@ -577,7 +639,9 @@ export class GameModeSelector extends LitElement {
         ? "gold"
         : kind === "diamond"
           ? "diamond"
-          : ""}"
+          : kind === "fair"
+            ? "fair"
+            : ""}"
       role="tab"
       aria-selected=${active}
       @click=${(e: Event) => {
@@ -598,12 +662,14 @@ export class GameModeSelector extends LitElement {
     ffa: PublicGameInfo | undefined,
     gold: PublicGameInfo | undefined,
     diamond: PublicGameInfo | undefined,
+    fair: PublicGameInfo | undefined,
     active: TabKind,
   ) {
     const present: [TabKind, PublicGameInfo][] = [];
     if (ffa) present.push(["ffa", ffa]);
     if (gold) present.push(["golden", gold]);
     if (diamond) present.push(["diamond", diamond]);
+    if (fair) present.push(["fair", fair]);
     // Три вкладки в одну строку влезают только с короткими подписями.
     const compact = present.length > 2;
     const tabs = present.map(([kind, lobby]) =>
@@ -618,7 +684,9 @@ export class GameModeSelector extends LitElement {
       ? "diamond"
       : this.eventIsFeatured("golden", gold)
         ? "golden"
-        : null;
+        : this.eventIsFeatured("fair", fair)
+          ? "fair"
+          : null;
     const featured = present.findIndex(([kind]) => kind === featuredKind);
     const order =
       featured > 0
@@ -768,12 +836,22 @@ export class GameModeSelector extends LitElement {
                         media="(max-width: 1024px)"
                         srcset="${mapImageSmallSrc}"
                       />
+                      <!-- Прозрачна до успешной загрузки — см. соседнюю
+                           карточку: в WebView площадки первые запросы падают,
+                           и вместо превью показывался значок «битая картинка». -->
                       <img
                         src="${mapImageSrc}"
                         alt="${mapName ?? lobby.gameConfig?.gameMap ?? "map"}"
                         draggable="false"
                         loading="eager"
                         decoding="async"
+                        style="opacity:0;transition:opacity .18s ease-out"
+                        @load=${(e: Event) => {
+                          (e.currentTarget as HTMLElement).style.opacity = "1";
+                        }}
+                        @error=${(e: Event) => {
+                          (e.currentTarget as HTMLElement).style.opacity = "0";
+                        }}
                         class="absolute inset-0 w-full h-full ${useContain
                           ? "object-contain"
                           : "object-cover object-center"} [image-rendering:auto]"
@@ -894,9 +972,10 @@ export class GameModeSelector extends LitElement {
     if (!document.hidden && !document.body.classList.contains("in-game")) {
       const gold = this.eventLobby("golden");
       const diamond = this.eventLobby("diamond");
+      const fair = this.eventLobby("fair");
       const label = `${gold ? this.lobbyTimeLabel(gold) : ""}|${
         diamond ? this.lobbyTimeLabel(diamond) : ""
-      }`;
+      }|${fair ? this.lobbyTimeLabel(fair) : ""}`;
       if (label !== this.lastEventTickLabel) {
         this.lastEventTickLabel = label;
         this.requestUpdate();

@@ -2,6 +2,65 @@
 <html lang="en" class="h-full preload" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <!-- terron 04.09: ХРАНИЛИЩЕ БРАУЗЕРА МОЖЕТ БЫТЬ ЗАПРЕЩЕНО ЦЕЛИКОМ.
+         В чужом iframe при заблокированных сторонних данных (Safari/Chrome с
+         «блокировать сторонние куки», часть площадок) сам ДОСТУП к
+         window.localStorage бросает SecurityError. Клиент читает настройки в
+         конструкторах компонентов (UserSettings, LangSelector, кэш API) — то есть
+         страница умирала на загрузке: за 3 дня ~20 сессий с «Access is denied for
+         this document» в пяти разных местах, и все они — игрок без игры.
+         Оборачивать 280 обращений по одному — вечная погоня за следующим. Один
+         рубеж здесь: если хранилище недоступно, подставляем хранилище В ПАМЯТИ
+         (живёт до перезагрузки). Настройки не сохранятся между заходами, но игра
+         работает. Обычному браузеру этот скрипт ничего не меняет. -->
+    <script>
+      (function () {
+        function mem() {
+          var m = new Map();
+          return {
+            get length() {
+              return m.size;
+            },
+            key: function (i) {
+              var k = Array.from(m.keys())[i];
+              return k === undefined ? null : k;
+            },
+            getItem: function (k) {
+              k = String(k);
+              return m.has(k) ? m.get(k) : null;
+            },
+            setItem: function (k, v) {
+              m.set(String(k), String(v));
+            },
+            removeItem: function (k) {
+              m.delete(String(k));
+            },
+            clear: function () {
+              m.clear();
+            },
+          };
+        }
+        ["localStorage", "sessionStorage"].forEach(function (name) {
+          var ok = false;
+          try {
+            var s = window[name];
+            ok =
+              s !== null && s !== undefined && typeof s.getItem === "function";
+          } catch (e) {}
+          if (ok) return;
+          try {
+            Object.defineProperty(window, name, {
+              value: mem(),
+              configurable: true,
+              writable: false,
+            });
+            // Читает Health.ts → датчик storage_denied (сколько таких сессий).
+            window.__terronMemStorage =
+              (window.__terronMemStorage || "") + name + " ";
+          } catch (e) {}
+        });
+      })();
+    </script>
     <!-- terron: игра во iframe площадки-стора (Яндекс Игры / VK / Пикабу / GamePush)?
          Ставим html.gp-embed СИНХРОННО, до рендера — CSS-косметика стора (скрытый
          промо приложения и т.п.) применяется без мигания. cross-origin top кинет →
@@ -13,7 +72,45 @@
           // ?embed=1 — форс gp-embed для ТЕСТА раскладки стора из обычного браузера
           // (в обычной вкладке self===top, поэтому иначе не проверить).
           var forced = /[?&]embed=1\b/.test(window.location.search);
-          if (forced || window.self !== window.top)
+          // terron 02.09: ПЛОЩАДКА МОЖЕТ ОТКРЫТЬ НАС ВЕРХНИМ ДОКУМЕНТОМ, БЕЗ IFRAME.
+          //
+          // Мобильные приложения ВК и Одноклассников грузят игру прямо в свой
+          // WebView: iframe там нет вовсе, self === top. Пока признаком площадки
+          // был ОДИН только iframe, с телефона разом отваливалось всё: SDK не
+          // грузился (значит ни автовхода, ни рекламы — прямая претензия модерации
+          // ОК «в игре нет рекламы») и не применялись запреты площадки (видимые
+          // внешние ссылки — претензия Яндекса). Доказано логами 02.09: заход из
+          // приложения ВК пришёл с referrer «terron.io/?vk_access_token_settings=…»,
+          // то есть параметры запуска лежали в НАШЕМ адресе, а не у родителя.
+          //
+          // Поэтому второй признак — параметры запуска площадки в адресе. Их ставит
+          // сама площадка: ВК шлёт vk_app_id/vk_user_id, Одноклассники —
+          // api_server/application_key/logged_user_id.
+          //
+          // terron 03.09: ТРЕТИЙ ПРИЗНАК — НАША ССЫЛКА ДЛЯ ПЛОЩАДОК `?gp=1`.
+          // Модерация Яндекса (через GamePush) отклонила интеграцию по ссылке за
+          // «уводящие ссылки на главной»: модератор открывает ссылку ПРЯМО, в
+          // обычной вкладке — ни iframe, ни параметров запуска там нет, и сайт
+          // честно показывает себя сайтом (телега, сторы, «скачать»). Под
+          // gp-embed видимых внешних ссылок 0 — проверено на боевом. Поэтому
+          // площадкам отдаём ссылку с маркером: он включает режим площадки
+          // (и SDK GamePush) даже верхним документом. Обычный terron.io не задет.
+          var launched =
+            /[?&](vk_app_id|vk_user_id|api_server|application_key|logged_user_id|gp)=/.test(
+              window.location.search,
+            );
+          // ⚠️ ЗАПОМИНАЕМ НА ВКЛАДКУ: адресную строку чистит наш роутер, а любая
+          // последующая навигация внутри игры уносит параметры вместе с признаком
+          // площадки — и вторая загрузка снова считала бы себя обычным сайтом.
+          try {
+            if (launched) sessionStorage.setItem("terron_platform_launch", "1");
+            else if (sessionStorage.getItem("terron_platform_launch") === "1")
+              launched = true;
+          } catch (e) {}
+          // Читает клиент (GamePushSDK.isOnPlatform) — один источник правды на
+          // страницу, второй детект разъехался бы с этим.
+          window.__platformLaunch = launched;
+          if (forced || launched || window.self !== window.top)
             document.documentElement.classList.add("gp-embed");
           // itch.io: раскладку под iframe (кроп HUD, компактный верх) оставляем —
           // плеер itch такой же жёсткий 1280×720. А вот ЗАПРЕТЫ ПЛОЩАДКИ (скрытые
@@ -23,6 +120,47 @@
             document.documentElement.classList.add("itch-embed");
         } catch (e) {
           document.documentElement.classList.add("gp-embed");
+        }
+      })();
+    </script>
+    <!-- terron 02.09: ГЛАВНАЯ ПОКАЗЫВАЕТСЯ ЕДИНЫМ БЛОКОМ, А НЕ ПО ЧАСТЯМ.
+         Требование владельца после шести скринов с телефона: словарь, флаг, превью
+         карты доезжают по очереди, и первые секунды меню стоит сырыми ключами с
+         битыми картинками. Ставим html.boot-pending СИНХРОННО (до первого кадра):
+         CSS прячет main-layout и рисует плашку «ЗАГРУЗКА». Снимаем, когда пришёл
+         словарь (событие terron-lang-loaded из LangSelector) И страница догрузила
+         ассеты первого экрана (window load), — либо по потолку 6 с, чтобы мёртвая
+         сеть не оставила игрока перед пустым экраном навсегда. Матч (body.in-game)
+         снимает сразу — там свой оверлей загрузки карты. -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          root.classList.add("boot-pending");
+          var done = false;
+          var langReady = false;
+          var release = function () {
+            if (done) return;
+            done = true;
+            root.classList.remove("boot-pending");
+          };
+          var maybe = function () {
+            if (!langReady) return;
+            if (document.readyState === "complete") release();
+            else setTimeout(release, 1500); // ассеты первого экрана ещё едут — недолго
+          };
+          window.addEventListener("terron-lang-loaded", function () {
+            langReady = true;
+            maybe();
+          });
+          window.addEventListener("load", maybe);
+          setTimeout(release, 6000); // потолок: сеть мертва — показываем что есть
+          // Матч стартовал (адрес /game/…) — оверлей главной не нужен вовсе.
+          new MutationObserver(function () {
+            if (document.body && document.body.classList.contains("in-game")) release();
+          }).observe(root, { attributes: true, subtree: true, attributeFilter: ["class"] });
+        } catch (e) {
+          try { document.documentElement.classList.remove("boot-pending"); } catch (_) {}
         }
       })();
     </script>
@@ -77,12 +215,13 @@
         else document.addEventListener("DOMContentLoaded", boot);
       })();
     </script>
+    <!-- terron: RU-THROTTLE PROBES — вырезается в платформенных сборках -->
     <!-- terron: бикон загрузки — ловим «сорвался на входе» (первый ответ HTML
          прошёл, но остатки сайта не докачались: DPI-throttle, из-за которого
          часть РФ не заходит без VPN). Летит ПРЯМО СЕЙЧАС, на первых байтах HTML
          (знаменатель). Парный ready-бикон стреляет с ВЕРХА основного бандла (когда
          JS-нагрузка доехала) — если бандл придушили, ready не придёт и сессия =
-         дроп «первый пакет прошёл, дальше пизда». Разбор: /admin/ru-ban. -->
+         дроп «первый пакет прошёл, дальше обрыв». Разбор: /admin/ru-ban. -->
     <script>
       (function () {
         try {
@@ -151,6 +290,7 @@
         } catch (e) {}
       })();
     </script>
+    <!-- /terron: RU-THROTTLE PROBES -->
     <!-- terron: переключатель окружения prod/dev. Тумблер в футере пишет
          localStorage.terron_env; этот скрипт применяет выбор ДО старта
          приложения (редирект на нужный хост). Нужно для Android-приложения
@@ -329,6 +469,28 @@
 
     <!-- Preload styles -->
     <style>
+      /* terron 02.09: главная единым блоком — до словаря и ассетов первого экрана
+         main-layout скрыт, поверх плашка. Скоуп body:not(.in-game): HUD не трогаем. */
+      html.boot-pending body:not(.in-game) main-layout {
+        visibility: hidden;
+      }
+      html.boot-pending body:not(.in-game)::after {
+        content: "ЗАГРУЗКА…";
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 22px/1 Oswald, "IBM Plex Mono", monospace;
+        letter-spacing: 0.18em;
+        color: #2b2a24;
+        pointer-events: none;
+        z-index: 40;
+      }
+      html.boot-pending html[lang="en"] body:not(.in-game)::after,
+      html.boot-pending[lang="en"] body:not(.in-game)::after {
+        content: "LOADING…";
+      }
       .preload {
         visibility: hidden;
         opacity: 0;
@@ -549,6 +711,9 @@
         <!-- terron 25.08: плашка «ты в лобби» — видна, пока окно лобби
              свёрнуто и игрок бродит по сайту (см. LobbyDock.ts). -->
         <lobby-dock></lobby-dock>
+        <!-- terron 22.09: ЛС (друзья) + чат клана — панель справа, кнопка ✉.
+             Живёт вне матча; открывается из досье («Написать») и страницы клана. -->
+        <site-chat-panel></site-chat-panel>
         <store-modal
           id="page-item-store"
           inline
@@ -650,6 +815,16 @@
           inline
           class="hidden w-full h-full page-content relative z-50"
         ></prime-page>
+        <download-page
+          id="page-download"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></download-page>
+        <history-page
+          id="page-history"
+          inline
+          class="hidden w-full h-full page-content relative z-50"
+        ></history-page>
         <guide-page
           id="page-guide"
           inline
@@ -793,6 +968,7 @@
     <task-tracker></task-tracker>
     <immunity-timer></immunity-timer>
     <satellite-blackout-timer></satellite-blackout-timer>
+      <victory-timer></victory-timer>
     <game-info-modal></game-info-modal>
     <alert-frame></alert-frame>
     <chat-modal></chat-modal>
@@ -897,7 +1073,9 @@
     <script>
       (function () {
         try {
-          if (window.self === window.top) return; // не iframe → площадки нет
+          // Площадка = чужой iframe ЛИБО запуск верхним документом из мобильного
+          // приложения ВК/ОК (флаг ставит скрипт в <head>, см. __platformLaunch).
+          if (window.self === window.top && !window.__platformLaunch) return;
           // itch.io — НЕ площадка GamePush: там свой магазин, своя (или никакая)
           // реклама и свои правила. Грузить туда чужой SDK значит крутить его
           // рекламу на чужой витрине, слать их аналитике чужие сессии и ловить
@@ -912,7 +1090,10 @@
           var s = document.createElement("script");
           s.async = true;
           s.src =
-            "https://gamepush.com/sdk/game-score.js?projectId=28774&publicToken=8apF7hsZxFjWfBrsoD3cmf88O0ZPTqG4&callback=onGPInit";
+            // terron 03.09: хост `gs.eponesh.com`, а не `gamepush.com` — просьба модерации
+            // GamePush: домен eponesh.com в белом списке Яндекс.Игр по умолчанию,
+            // gamepush.com — нет (их CSP режет чужие скрипты). Скрипт тот же.
+            "https://gs.eponesh.com/sdk/game-score.js?projectId=28774&publicToken=8apF7hsZxFjWfBrsoD3cmf88O0ZPTqG4&callback=onGPInit";
           document.body.appendChild(s);
         } catch (e) {}
       })();

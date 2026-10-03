@@ -1,0 +1,250 @@
+{
+  "name": "Gulf of St. Lawrence (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        177,
+        329
+      ],
+      "name": "Quebec",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        803,
+        186
+      ],
+      "name": "Nitassinan",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        611,
+        444
+      ],
+      "name": "Anticosti Island",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        357,
+        532
+      ],
+      "name": "Gaspesia",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        349,
+        72
+      ],
+      "name": "Manicouagan",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        574,
+        266
+      ],
+      "name": "Mingan",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        1217,
+        597
+      ],
+      "name": "Newfoundland",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1141,
+        63
+      ],
+      "name": "Labrador",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1161,
+        203
+      ],
+      "name": "Northern Peninsula",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1531,
+        677
+      ],
+      "name": "St Johns",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1438,
+        571
+      ],
+      "name": "Bonavista",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1036,
+        507
+      ],
+      "name": "Corner Brook",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1243,
+        483
+      ],
+      "name": "Grand Falls",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        1042,
+        389
+      ],
+      "name": "Gros Morne",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        929,
+        690
+      ],
+      "name": "Port aux Basques",
+      "flag": "Newfoundland"
+    },
+    {
+      "coordinates": [
+        123,
+        842
+      ],
+      "name": "New Brunswick",
+      "flag": "ca_nb"
+    },
+    {
+      "coordinates": [
+        334,
+        695
+      ],
+      "name": "Acadia",
+      "flag": "ca_nb"
+    },
+    {
+      "coordinates": [
+        216,
+        937
+      ],
+      "name": "Fredericton",
+      "flag": "ca_nb"
+    },
+    {
+      "coordinates": [
+        371,
+        887
+      ],
+      "name": "Moncton",
+      "flag": "ca_nb"
+    },
+    {
+      "coordinates": [
+        68,
+        1034
+      ],
+      "name": "Maine",
+      "flag": "Maine"
+    },
+    {
+      "coordinates": [
+        505,
+        871
+      ],
+      "name": "Prince Edward Island",
+      "flag": "ca_pe"
+    },
+    {
+      "coordinates": [
+        612,
+        1012
+      ],
+      "name": "Nova Scotia",
+      "flag": "ca_ns"
+    },
+    {
+      "coordinates": [
+        749,
+        883
+      ],
+      "name": "Cape Breton Island",
+      "flag": "ca_ns"
+    },
+    {
+      "coordinates": [
+        331,
+        1075
+      ],
+      "name": "Annapolis",
+      "flag": "ca_ns"
+    },
+    {
+      "coordinates": [
+        465,
+        1112
+      ],
+      "name": "Halifax",
+      "flag": "ca_ns"
+    },
+    {
+      "coordinates": [
+        248,
+        1196
+      ],
+      "name": "Yarmouth",
+      "flag": "ca_ns"
+    }
+  ],
+  "teamGameSpawnAreas": {
+    "3": [
+      {
+        "height": 500,
+        "width": 900,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "height": 1348,
+        "width": 720,
+        "x": 900,
+        "y": 0
+      },
+      {
+        "height": 848,
+        "width": 900,
+        "x": 0,
+        "y": 500
+      }
+    ]
+  },
+  "map": {
+    "width": 1664,
+    "height": 1312,
+    "num_land_tiles": 851251
+  },
+  "map4x": {
+    "width": 832,
+    "height": 656,
+    "num_land_tiles": 207555
+  },
+  "map16x": {
+    "width": 416,
+    "height": 328,
+    "num_land_tiles": 49884
+  }
+}

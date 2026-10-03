@@ -1,0 +1,84 @@
+{
+  "name": "Iceland (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        475,
+        1110
+      ],
+      "name": "Southern Peninsula",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        570,
+        1052
+      ],
+      "name": "Capital Region",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        412,
+        810
+      ],
+      "name": "Western Region",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        355,
+        563
+      ],
+      "name": "Westfjords",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        810,
+        580
+      ],
+      "name": "Northwestern Region",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        1050,
+        1241
+      ],
+      "name": "Southern Region",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        1222,
+        681
+      ],
+      "name": "Northeastern Region",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        1685,
+        735
+      ],
+      "name": "Eastern Region",
+      "flag": "is"
+    }
+  ],
+  "map": {
+    "width": 2000,
+    "height": 1496,
+    "num_land_tiles": 963918
+  },
+  "map4x": {
+    "width": 1000,
+    "height": 748,
+    "num_land_tiles": 238408
+  },
+  "map16x": {
+    "width": 500,
+    "height": 374,
+    "num_land_tiles": 58422
+  }
+}

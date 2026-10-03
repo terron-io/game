@@ -1,8 +1,10 @@
-import { toast } from "./Toast";
 import { ClientEnv } from "src/client/ClientEnv";
 import { PublicGames, PublicLobbyMessageSchema } from "../core/Schemas";
 import { reportHealth } from "./Health";
 import { reportNetworkAlive } from "./Offline";
+import { NET_RETRY_EVENT, hideNetTrouble, showNetTrouble } from "./NetTrouble";
+
+declare const __GAME_HOST__: string | undefined;
 
 interface LobbySocketOptions {
   reconnectDelay?: number;
@@ -52,6 +54,9 @@ export class PublicLobbySocket {
     // протухшее лобби («уже стартовало»). online-событие в WKWebView ненадёжно,
     // но на вебе работает; вреда нет.
     window.addEventListener("online", this.handleOnline);
+    // Кнопка «Повторить» на плашке отказа (NetTrouble.ts) — тот же путь, что и
+    // возврат сети: немедленный реконнект со свежим снапшотом.
+    window.addEventListener(NET_RETRY_EVENT, this.handleOnline);
     this.connectWebSocket();
   }
 
@@ -59,6 +64,7 @@ export class PublicLobbySocket {
     this.stopped = true;
     this.lastFull = null;
     window.removeEventListener("online", this.handleOnline);
+    window.removeEventListener(NET_RETRY_EVENT, this.handleOnline);
     this.disconnectWebSocket();
   }
 
@@ -99,7 +105,15 @@ export class PublicLobbySocket {
       this.lastFull = null;
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}${this.workerPath}/lobbies`;
+      // Тот же вшитый хост, что у игрового сокета (см. Transport.resolveRemoteWs):
+      // на чужом хостинге адрес страницы принадлежит площадке, не нам.
+      const baked =
+        typeof __GAME_HOST__ === "string" && __GAME_HOST__.length > 0
+          ? __GAME_HOST__
+          : "";
+      const wsHost = baked || window.location.host;
+      const wsProto = baked ? "wss:" : protocol;
+      const wsUrl = `${wsProto}//${wsHost}${this.workerPath}/lobbies`;
 
       this.ws = new WebSocket(wsUrl);
       this.wsAttemptCounted = false;
@@ -118,12 +132,17 @@ export class PublicLobbySocket {
     // terron: живой сокет = сеть работает, что бы ни думал navigator.onLine
     // (он врёт на Windows с виртуальными адаптерами — см. Offline.ts).
     reportNetworkAlive();
+    hideNetTrouble("lobby"); // витрина ожила — плашка отказа больше не нужна
     if (this.gaveUpAtMs !== 0) {
       const deadMin = Math.round((Date.now() - this.gaveUpAtMs) / 60_000);
       this.gaveUpAtMs = 0;
-      reportHealth("lobby_socket_recovered", `витрина ожила через ~${deadMin} мин`, {
-        deadMin,
-      });
+      reportHealth(
+        "lobby_socket_recovered",
+        `витрина ожила через ~${deadMin} мин`,
+        {
+          deadMin,
+        },
+      );
     }
     this.wsConnectionAttempts = 0;
     if (this.wsReconnectTimeout !== null) {
@@ -228,6 +247,8 @@ export class PublicLobbySocket {
       // протухшее лобби»).
       reportHealth("lobby_socket_gave_up", "close");
       if (this.gaveUpAtMs === 0) this.gaveUpAtMs = Date.now();
+      // Требование модерации 03.09: отказ не молчит — плашка с «Повторить».
+      showNetTrouble("lobby");
       // terron (08.08): РАНЬШЕ ЗДЕСЬ БЫЛА ВЕЧНАЯ СДАЧА — и витрина замирала до
       // перезагрузки страницы. Обе «двери» восстановления оказались условными:
       //   • хук `online` срабатывает лишь при СМЕНЕ состояния сети, а сокет чаще
@@ -260,9 +281,11 @@ export class PublicLobbySocket {
       this.wsConnectionAttempts++;
     }
     if (this.wsConnectionAttempts >= this.maxWsAttempts) {
-      toast("error connecting to game service");
       reportHealth("lobby_socket_gave_up", "connect");
       if (this.gaveUpAtMs === 0) this.gaveUpAtMs = Date.now();
+      // Требование модерации 03.09: вместо английского тоста — плашка с
+      // «Повторить» / «Перезагрузить» (см. NetTrouble.ts).
+      showNetTrouble("lobby");
       // Тот же редкий повтор, что и при close: без него витрина мертва до F5.
       this.scheduleReconnect(PublicLobbySocket.SLOW_RETRY_MS);
     } else {

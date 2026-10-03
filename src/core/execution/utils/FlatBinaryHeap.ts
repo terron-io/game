@@ -43,12 +43,27 @@ export class FlatBinaryHeap {
     this.tiles[i] = tile;
   }
 
+  /**
+   * terron 05.09 ПЕРФ: dequeue БЕЗ кортежа — вызывающему (атака) нужен только
+   * тайл, а кортеж на каждый захваченный тайл = миллионы аллокаций за матч
+   * (аудит performance.md B3). Алгоритм sift-down общий (popTop), порядок
+   * выдачи байт-в-байт прежний.
+   */
+  dequeueTile(): TileRef {
+    if (this.len === 0) throw new Error("heap empty");
+    return this.popTop();
+  }
+
   //remove tiles
   dequeue(): [TileRef, number] {
     if (this.len === 0) throw new Error("heap empty");
-
-    const topTile = this.tiles[0];
     const topPri = this.pri[0];
+    const topTile = this.popTop();
+    return [topTile, topPri];
+  }
+
+  private popTop(): TileRef {
+    const topTile = this.tiles[0];
 
     const lastPri = this.pri[--this.len];
     const lastTile = this.tiles[this.len];
@@ -68,7 +83,7 @@ export class FlatBinaryHeap {
     }
     this.pri[i] = lastPri;
     this.tiles[i] = lastTile;
-    return [topTile, topPri];
+    return topTile;
   }
 
   /** double the underlying storage */

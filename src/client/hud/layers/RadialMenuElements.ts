@@ -4,6 +4,7 @@ import {
   AllPlayers,
   BuildableAttacks,
   CAST_UNLOCKED_BY,
+  Nukes,
   PlayerActions,
   PlayerBuildableUnitType,
   Structures,
@@ -22,16 +23,17 @@ import { BuildUnitIntentEvent } from "../../Transport";
 import { UIState } from "../../UIState";
 import {
   buildUltimateGrid,
-  getUltRefreshOffset,
   bumpUltRefreshOffset,
   effectiveUltSeed,
+  getUltRefreshOffset,
   ultimateMeta,
   ultPrimeUnlocked,
   ultRefreshDisplayPrice,
 } from "../../UltimateGrid";
 import { syncUltRefreshOnce } from "../../UltRefreshSync";
+import { buttonFor, slotIsReplaced } from "../../UltSlots";
 import { ultLockedForMe } from "../../UltUnlocks";
-import { ultStatLines, warshipIconFor } from "../../UnitCatalog";
+import { ultStatLines } from "../../UnitCatalog";
 import { L, renderNumber, translateText } from "../../Utils";
 import { BUILD_DESC_PARAMS } from "../../WikiNumbers";
 import { BuildItemDisplay, BuildMenu, flattenedBuildTable } from "./BuildMenu";
@@ -490,6 +492,9 @@ function createMenuElements(
   params: MenuElementParams,
   filterType: "attack" | "build",
   elementIdPrefix: string,
+  // terron 26.09: касты на СВОЮ землю (ownLandCasts) — по своему тайлу набор
+  // «что можно» обычно берёт стройку, а касты там не нужны; здесь нужны.
+  castsOnOwnLand = false,
 ): MenuElement[] {
   // terron 17.08: СТРОЙКА НА ВОДЕ (репорт владельца: «нефтевышку с телефона
   // не построить — в море в норме нет возможности что-то строить»). На таче
@@ -504,7 +509,7 @@ function createMenuElements(
   const unitTypes: Set<PlayerBuildableUnitType> = isWaterTile
     ? new Set()
     : getAllEnabledUnits(
-        params.selected === params.myPlayer,
+        params.selected === params.myPlayer && !castsOnOwnLand,
         params.game.config(),
       );
 
@@ -515,6 +520,13 @@ function createMenuElements(
   // применить было НЕЛЬЗЯ вообще. Ульты выключены в лобби (здание disabled) →
   // гейт снят, каст показываем сразу (для МИРВ это поведение «как в оригинале»).
   const castHidden = (t: UnitType): boolean => {
+    // terron 25.08: ТЕРРАФОРМИНГ — обратная сторона того же правила. Ульта не
+    // ДОБАВЛЯЕТ касты, а ПОДМЕНЯЕТ ими обычные ядерки; подменённый пункт надо
+    // прятать, иначе рядом с тремя ракетами висят две серые ядерки, которые
+    // ядро всё равно запретило. client/UltSlots.ts
+    if (slotIsReplaced(t, (u: UnitType) => params.myPlayer.hasUltimate(u))) {
+      return true;
+    }
     return castHiddenByGate(
       t,
       (u) => params.game.config().isUnitDisabled(u as never),
@@ -531,11 +543,12 @@ function createMenuElements(
         !castHidden(item.unitType),
     )
     .map((item: BuildItemDisplay) => {
+      const btn = buttonFor(item.unitType as UnitType, (t: UnitType) =>
+        params.myPlayer ? params.myPlayer.hasUltimate(t) : false,
+      );
       return {
         id: `${elementIdPrefix}_${item.unitType}`,
-        name: item.key
-          ? item.key.replace("unit_type.", "")
-          : item.unitType.toString(),
+        name: btn.nameKey.replace("unit_type.", ""),
         disabled: (p: MenuElementParams) =>
           !p.buildMenu.canBuildOrUpgrade(item),
         color: (p: MenuElementParams) =>
@@ -544,16 +557,11 @@ function createMenuElements(
               ? COLORS.attack
               : COLORS.building
             : COLORS.building,
-        // terron: ПОДЛОДКИ — со штабом «Подводный флот» пункт «корабль» в
-        // радиали показывает подлодку (то же, что кнопка 8 в баре).
-        // terron 23.08: подмена юнита ультой — из реестра (`replaces`), а не
-        // хардкодом на Подводный флот: с Пиратством тут пиратская лодка.
-        icon:
-          item.unitType === UnitType.Warship
-            ? warshipIconFor(
-                (t: UnitType) => params.myPlayer?.hasUltimate(t) ?? false,
-              )
-            : item.icon,
+        // terron 01.09: ЧТО ПОКАЗЫВАЕТ ПУНКТ — один ответ на все поверхности
+        // (`client/UltSlots.buttonFor`). Раньше здесь подменялась ТОЛЬКО
+        // иконка и ТОЛЬКО у корабля: с Пиратством в радиале была пиратская
+        // лодка с подписью «Боевой корабль».
+        icon: btn.icon,
         // цена под иконкой (полупрозрачно) — видно без tooltip, важно на мобиле.
         // Убираем хвостовой ".0"/".00" (renderNumber даёт 3 знач. цифры: 50.0K → 50K,
         // 5.00M → 5M; но 1.50M → 1.5M и 750K не трогаем).
@@ -576,7 +584,7 @@ function createMenuElements(
             }
           : undefined,
         tooltipItems: [
-          { text: translateText(item.key ?? ""), className: "title" },
+          { text: translateText(btn.nameKey), className: "title" },
           {
             text: translateText(item.description ?? ""),
             className: "description",
@@ -1007,6 +1015,29 @@ export const deleteUnitElement: MenuElement = {
   },
 };
 
+/**
+ * terron 26.09 (репорт boom871 в бете: «как на телефоне использовать активку
+ * Небо наше?»). Касты ульт живут в подменю АТАКИ, а на СВОЕЙ земле радиал
+ * показывает только стройку — каст, который ставится на свою сушу (носитель
+ * «Неба наше», Индустриальная революция на себя…), с телефона было не
+ * применить вовсе (на ПК он есть в панели). На своей земле добавляем в стройку
+ * касты, которые ядро здесь РАЗРЕШАЕТ (`canBuildOrUpgrade` по этому тайлу) —
+ * серыми не шумим. Ядерки сюда не идут: удар по своей земле — вопрос баланса,
+ * владелец его не решил.
+ */
+function ownLandCasts(params: MenuElementParams): MenuElement[] {
+  if (params.selected !== params.myPlayer) return [];
+  if (!params.game.isLand(params.tile)) return [];
+  const casts = new Set<string>(
+    (Object.keys(CAST_UNLOCKED_BY) as UnitType[]).filter((t) => !Nukes.has(t)),
+  );
+  return createMenuElements(params, "attack", "build_cast", true).filter(
+    (el) =>
+      casts.has(el.id.slice("build_cast_".length)) &&
+      !el.disabled(params),
+  );
+}
+
 export const buildMenuElement: MenuElement = {
   id: Slot.Build,
   name: "build",
@@ -1017,6 +1048,7 @@ export const buildMenuElement: MenuElement = {
   subMenu: (params: MenuElementParams) => {
     if (params === undefined) return [];
     const items = createMenuElements(params, "build", "build");
+    items.push(...ownLandCasts(params));
     // terron: ульта-слот в стройке. ДО фиксации выбора — звезда-чузер (выбери ульту).
     // ПОСЛЕ (первое здание построено → ultimateChoice фиксирован) — ПРЯМОЙ слайс
     // выбранной ульты: её иконка + обычный тап строит/качает (второй храм, уровень
@@ -1080,7 +1112,7 @@ export const centerButtonElement: CenterButtonElement = {
   },
   action: (params: MenuElementParams) => {
     if (params.game.inSpawnPhase()) {
-      params.playerActionHandler.handleSpawn(params.tile);
+      params.playerActionHandler.handleSpawn(params.tile, params.game);
     } else {
       if (isFriendlyTarget(params) && !isDisconnectedTarget(params)) {
         const selectedPlayer = params.selected as PlayerView;

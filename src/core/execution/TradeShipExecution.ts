@@ -1,7 +1,7 @@
-import { fuelSpeedMult } from "../game/FuelSpeed";
 import { renderNumber } from "../../client/Utils";
 import { TERRON_OILRIG_TRADE_MULT } from "../configuration/TerronTuning";
 import { recordEconomyGold } from "../game/EconomyLog";
+import { fuelSpeedMult } from "../game/FuelSpeed";
 import {
   Execution,
   Game,
@@ -182,7 +182,11 @@ export class TradeShipExecution implements Execution {
         if (dst !== this.motionPlanDst) {
           this.motionPlanId++;
           const from = result.node;
-          const path = this.pathFinder.findPath(from, dst) ?? [from];
+          // terron 04.09 ПЕРФ: план строим из хвоста пути, который next() уже
+          // посчитал (по нему лодка и пойдёт), второй A* — только если кэша
+          // нет. См. PathFinderStepper.remainingPath.
+          const path = this.pathFinder.remainingPath(from, dst) ??
+            this.pathFinder.findPath(from, dst) ?? [from];
           if (path.length === 0 || path[0] !== from) {
             path.unshift(from);
           }

@@ -19,7 +19,7 @@ import {
   shouldShowTutorialEntry,
   tutorialButton,
 } from "../../Tutorial";
-import { L, translateText, isDevSite } from "../../Utils";
+import { L, translateText } from "../../Utils";
 import { isMuted, setMutedByUser } from "../../sound/AudioBus";
 import {
   SetBackgroundMusicVolumeEvent,
@@ -199,6 +199,11 @@ export class SettingsModal extends LitElement implements Controller {
 
   private onToggleSkinTrueColors() {
     this.userSettings.toggleSkinTrueColors();
+    this.requestUpdate();
+  }
+
+  private onToggleLightGraphics() {
+    this.userSettings.toggleLightGraphics();
     this.requestUpdate();
   }
 
@@ -535,6 +540,34 @@ export class SettingsModal extends LitElement implements Controller {
               </div>
               <div class="text-sm text-slate-400">
                 ${this.userSettings.skinTrueColors()
+                  ? translateText("user_setting.on")
+                  : translateText("user_setting.off")}
+              </div>
+            </button>
+
+            <button
+              class="flex gap-3 items-center w-full text-left p-3 hover:bg-slate-700 rounded-sm text-white transition-colors"
+              @click="${this.onToggleLightGraphics}"
+            >
+              <img
+                src=${darkModeIcon}
+                alt="lightGraphics"
+                width="20"
+                height="20"
+              />
+              <div class="flex-1">
+                <div class="font-medium">
+                  ${L("Лёгкая графика", "Light graphics")}
+                </div>
+                <div class="text-sm text-slate-400">
+                  ${L(
+                    "Меньше разрешение, без света и свечения — если лагает или сбоит видеокарта. Со следующего матча.",
+                    "Lower resolution, no lighting or glow — if it lags or the GPU fails. From the next match.",
+                  )}
+                </div>
+              </div>
+              <div class="text-sm text-slate-400">
+                ${this.userSettings.lightGraphics()
                   ? translateText("user_setting.on")
                   : translateText("user_setting.off")}
               </div>

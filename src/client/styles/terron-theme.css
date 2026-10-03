@@ -572,8 +572,22 @@ body:not(.in-game) .lobby-tab.gold * {
 }
 /* Гашение неактивных до 0.62 съедало и цвет — событийным хватает лёгкого. */
 body:not(.in-game) .lobby-tab.gold:not(.is-active),
-body:not(.in-game) .lobby-tab.diamond:not(.is-active) {
+body:not(.in-game) .lobby-tab.diamond:not(.is-active),
+body:not(.in-game) .lobby-tab.fair:not(.is-active) {
   opacity: 0.85;
+}
+/* terron 23.09: лобби честных ботов (/fair, только дев) — «античная бронза»,
+   чтобы не путалось ни с золотом, ни со льдом алмазного. */
+body:not(.in-game) .lobby-tab.fair {
+  color: #6b3f1d !important;
+  background: #efe2d0;
+  border-right-color: #a86b3c;
+}
+body:not(.in-game) .lobby-tab.fair.is-active {
+  background: #e3cdb0;
+}
+body:not(.in-game) .lobby-tab.fair * {
+  color: #6b3f1d !important;
 }
 body:not(.in-game) .lobby-sheet-hdr * {
   color: var(--t-ink-soft) !important;
@@ -954,6 +968,36 @@ body:not(.in-game) .terron-sub {
 
 /* тёмное время (класс terron-dim ставит TerronAmbient): тёмный логотип-wordmark
    тонул бы в затемнённом фоне — делаем его светлым, чтоб читался. */
+/* terron 07.09: ВНУТРИ ПЛОЩАДКИ ИМЯ ПИШЕТСЯ КАК ЕСТЬ.
+   Модерация Яндекса требует единообразия с каталогом («ТЕРРОН.ио»), а логотип
+   форсит uppercase — домен превращался в «.ИО». На самом terron.io ничего не
+   меняется: там в словаре «terron» и верхний регистр по-прежнему нужен.
+   ⚠️ Штамп декора (.md-stamp) сюда НЕ входит: его текст подставляется по data-i18n
+   ВСЕГДА, мимо гейта gp-embed, поэтому имя в нём осталось прежним («ТЕРРОН») —
+   иначе домен уехал бы и на сам сайт (поймано живой проверкой). */
+html.gp-embed body:not(.in-game) .terron-logo {
+  text-transform: none;
+}
+/* terron 11.09: «.ио» в wordmark — домен, а не имя (владелец: «название таки
+   террон, ио — домен»). Легче, мельче, приглушённее; появляется только там, где
+   словарь отдаёт домен, то есть внутри площадки (см. brandLogo.ts). */
+/* капс верхней панели живёт ЗДЕСЬ, а не inline: inline-uppercase перебивал
+   снятие капса под площадкой, и домен шёл «.ИО» (поймано скриншотом). */
+body:not(.in-game) .terron-logo-top {
+  text-transform: uppercase;
+}
+html.gp-embed body:not(.in-game) .terron-logo-top {
+  text-transform: none;
+}
+body:not(.in-game) :is(.terron-logo, .terron-logo-top) .terron-logo-tld {
+  text-transform: none;
+  font-weight: 400;
+  font-size: 0.7em;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  margin-left: 0.05em;
+}
+
 body:not(.in-game).terron-dim .terron-logo {
   color: #ece5d2 !important;
   text-shadow: 0 1px 16px rgba(0, 0, 0, 0.55);
@@ -2379,7 +2423,40 @@ html.gp-no-external android-promo {
    главную под лобби. ===== */
 html.gp-embed:not(.itch-embed) .t-external-link,
 html.gp-embed:not(.itch-embed) [data-page="page-propaganda"],
-html.gp-embed:not(.itch-embed) #page-propaganda {
+html.gp-embed:not(.itch-embed) #page-propaganda,
+/* terron 30.08: десктопные сборки — увод игрока наружу, тот же запрет.
+   Ссылка в футере уже помечена .t-external-link; прячем и саму страницу, чтобы
+   на неё нельзя было попасть прямым адресом внутри кадра площадки. Текстовый
+   ответ «ищи на terron.io» рисует сама страница (downloadsHiddenHere) — на
+   случай, если её откроют там, где этот стиль не применился. */
+html.gp-embed:not(.itch-embed) [data-page="page-download"],
+html.gp-embed:not(.itch-embed) #page-download {
+  display: none !important;
+}
+/* terron 10.09: Яндекс, п. 8.4.2 — «зал славы» со ссылками на чужие проекты на
+   этой площадке не показываем вовсе (решение владельца: «выпили из яндекса зал
+   славы», остальные площадки — точечно). Класс gp-platform-<тип> ставит
+   PlatformContext по типу площадки из SDK (и из кэша — синхронно). */
+html.gp-platform-yandex .t-glory-link,
+html.gp-platform-yandex [data-page="page-hall-of-fame"],
+html.gp-platform-yandex #page-hall-of-fame {
+  display: none !important;
+}
+/* terron 17.09: ВКонтакте отклонил билд за «ссылки на сторонние ресурсы» в зале
+   славы (Petri Dish, стример). Раздел прячем и там; ОК — то же приложение и та
+   же модерация. Вернём раздел без ссылок — решение владельца, позже. */
+/* terron 28.09: веб-ВК снова отклонил за этот раздел — класс площадки там не
+   встал. Решение владельца: в ЛЮБОМ кадре площадки (gp-embed, включая itch) ни
+   ссылки в футере, ни страницы; вернём позже версией без ссылок. */
+html.gp-embed .t-glory-link,
+html.gp-embed [data-page="page-hall-of-fame"],
+html.gp-embed #page-hall-of-fame,
+html.gp-platform-vk .t-glory-link,
+html.gp-platform-vk [data-page="page-hall-of-fame"],
+html.gp-platform-vk #page-hall-of-fame,
+html.gp-platform-ok .t-glory-link,
+html.gp-platform-ok [data-page="page-hall-of-fame"],
+html.gp-platform-ok #page-hall-of-fame {
   display: none !important;
 }
 html.gp-no-backend [data-page="page-leaderboard"],
@@ -2428,7 +2505,14 @@ html.gp-no-backend .t-backend-feature {
     display: block !important;
   }
 }
-@media (min-width: 1024px) and (max-height: 730px) {
+/* terron 12.09: и на СРЕДНЕЙ ширине. Панель чата занимает первые 312px слева
+   (left 12 + width 288 + зазор 12). Замерено вживую: окно «Создать игру» — 756px
+   по центру (до 1536px ширины, дальше 907px), окно входа в золотое/алмазное лобби —
+   698px. Перекрытие: 756 + 2×312 = 1380 и 698 + 2×312 = 1322 → порог 1379px.
+   Скрин владельца на ~1228px: левая колонка ульт срезана. Та же кнопка+шторка;
+   шире — панель остаётся развёрнутой, места хватает. */
+@media (min-width: 1024px) and (max-height: 730px),
+  (min-width: 1024px) and (max-width: 1379px) {
   .lobby-chat-desktop {
     display: none !important;
   }

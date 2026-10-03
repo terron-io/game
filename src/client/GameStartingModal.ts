@@ -15,6 +15,13 @@ export class GameStartingModal extends LitElement {
   @state() private quests: TerronDailyQuest[] | null = null;
   @state() private questsLoading = false;
   @state() private mapName: string | null = null;
+  // terron 05.09: стадия загрузки под заголовком. 530 уходов/нед с этого экрана —
+  // на слабых видеокартах сборка графики идёт 3–10 с при полной тишине, и игрок
+  // решает, что всё зависло. Стадию ставит ClientGameRunner по меткам LoadTrace.
+  @state() private stage: string | null = null;
+  setStage(text: string | null): void {
+    this.stage = text;
+  }
 
   createRenderRoot() {
     return this;
@@ -47,7 +54,9 @@ export class GameStartingModal extends LitElement {
       <div
         style="height:7px;background:rgba(0,0,0,.1);overflow:hidden;margin-top:12px"
       >
-        <div style="width:${Math.round(pct * 100)}%;height:100%;background:${c}"></div>
+        <div
+          style="width:${Math.round(pct * 100)}%;height:100%;background:${c}"
+        ></div>
       </div>
     </div>`;
   }
@@ -105,7 +114,11 @@ export class GameStartingModal extends LitElement {
               ${this.mapName}
             </div>`
           : ""}
-
+        ${this.stage
+          ? html`<div style="margin-top:12px;font-size:13px;opacity:.7">
+              ${this.stage}
+            </div>`
+          : ""}
         ${this.questsLoading
           ? html`<div style="margin-top:30px;opacity:.55;font-size:13px">
               ${translateText("game_starting_modal.quests_title")}…
@@ -127,10 +140,7 @@ export class GameStartingModal extends LitElement {
           target="_blank"
           rel="noopener noreferrer"
           style="display:block;margin-top:28px;font-size:11px;opacity:.4;color:inherit;text-decoration:none;letter-spacing:.02em"
-          >${L(
-            "Авторство и лицензии",
-            "Credits & licenses",
-          )}</a
+          >${L("Авторство и лицензии", "Credits & licenses")}</a
         >
       </div>
     `;
@@ -139,6 +149,7 @@ export class GameStartingModal extends LitElement {
   show(mapName?: string | null) {
     this.isVisible = true;
     this.mapName = mapName ?? null;
+    this.stage = null;
     // подтянуть квесты на сегодня (только если ещё не загружены в этой сессии)
     if (this.quests === null && !this.questsLoading) {
       this.questsLoading = true;

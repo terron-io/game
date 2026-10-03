@@ -1,5 +1,18 @@
 import { SAM_CONSTRUCTION_TICKS } from "../core/configuration/Config";
-import { eventRewardPts } from "../core/configuration/TerronTuning";
+import {
+  eveningRewardPts,
+  EveningVariant,
+  eveningVariantAt,
+  eventRewardPts,
+  TERRON_EVENING_TEAM_CAP_PTS,
+  TERRON_EVENING_TEAMS,
+} from "../core/configuration/TerronTuning";
+import {
+  FAIR_BOT_LATEST_VERSION,
+  FAIR_BOTS_PER_MATCH,
+  FairBotVersion,
+  pickFairBots,
+} from "../core/execution/fairbot/FairBotRoster";
 import {
   Difficulty,
   Duos,
@@ -9,25 +22,60 @@ import {
   GameMode,
   GameType,
   HumansVsNations,
+  mapCategories,
   PublicGameModifiers,
   Quads,
   RankedType,
   Trios,
   UnitType,
-  mapCategories,
 } from "../core/game/Game";
 import { PseudoRandom } from "../core/PseudoRandom";
 import { GameConfig, PublicGameType, TeamCountConfig } from "../core/Schemas";
 import { logger } from "./Logger";
 import { getMapLandTiles } from "./MapLandTiles";
 
+/**
+ * terron 23.09: версия мозга честных ботов для новых лобби /fair. Откат на v1
+ * без пересборки: TERRON_FAIRBOT_VERSION=1 в окружении игрового сервера.
+ * Мусор или пусто — последняя версия.
+ */
+export function fairBotVersionFromEnv(
+  raw: string | undefined = process.env.TERRON_FAIRBOT_VERSION,
+): FairBotVersion {
+  const v = Number(raw);
+  return v === 1 || v === 2 ? v : FAIR_BOT_LATEST_VERSION;
+}
+
+/** terron 28.09: сколько честных ботов в событийном матче (золотой/алмазный). */
+export const TERRON_EVENT_FAIR_BOTS_MIN = 1;
+export const TERRON_EVENT_FAIR_BOTS_MAX = 3;
+function eventFairBotCount(rand: () => number = Math.random): number {
+  const span = TERRON_EVENT_FAIR_BOTS_MAX - TERRON_EVENT_FAIR_BOTS_MIN + 1;
+  return TERRON_EVENT_FAIR_BOTS_MIN + Math.floor(rand() * span);
+}
+
 const log = logger.child({});
+
+// terron 02.10: ПЕРЕМИРИЕ В АЛМАЗНОМ. Первая минута после фазы спавна — люди не
+// могут нападать друг на друга (атака, ядерка, дрон), нации и племена — можно.
+// Запрос беты (tomsrn 28.09): «заходят с двух вкладок, ставятся вплотную и съедают в
+// первые секунды». Механизм апстримовый (spawnImmunityDuration), полосу с отсчётом
+// клиент рисует сам. Значение живёт на сервере: конфиг едет всем клиентам одинаково,
+// ядро не меняется. Золотой — прежние 5 с (решение владельца: «в алмазных»).
+export const TERRON_DIAMOND_PVP_TRUCE_SECONDS = 60;
 
 const ARCADE_MAPS = new Set(mapCategories.arcade);
 const SPECIAL_ONLY_MAPS = new Set<GameMapType>([GameMapType.ArchipelagoSea]);
 
 // Hard cap on player count for performance. Applied after compact-map reduction.
 const MAX_PLAYER_COUNT = 125;
+
+/**
+ * terron 28.09: алмазный — только карты, куда влезает много людей, и лимит
+ * лобби всегда КРУПНЫЙ (не случайный). Репорт: Milky Way на 11 мест забилась
+ * за минуту до старта, ушла в матч раньше срока — остальные пролетели.
+ */
+export const TERRON_DIAMOND_MIN_PLAYERS = 30;
 
 // How many times each map should appear in the playlist.
 // Note: The Partial should eventually be removed for better type safety.
@@ -61,6 +109,41 @@ const FREQUENCY: Partial<Record<GameMapName, number>> = {
   DidierFrance: 1,
   Dyslexdria: 8,
   EastAsia: 5,
+  EqualEarth: 20,
+  // terron (26 сентября) равновеликие версии не в публичной ротации, пока не решим
+  WorldEa: 0,
+  NewWorldEa: 0,
+  EuropeEa: 0,
+  EuropeClassicEa: 0,
+  AsiaEa: 0,
+  AfricaEa: 0,
+  NorthAmericaEa: 0,
+  SouthAmericaEa: 0,
+  OceaniaEa: 0,
+  MenaEa: 0,
+  BetweenTwoSeasEa: 0,
+  BalkansEa: 0,
+  IndianSubcontinentEa: 0,
+  SoutheastAsiaEa: 0,
+  EastAsiaEa: 0,
+  AustraliaEa: 0,
+  BeringSeaEa: 0,
+  MareNostrumEa: 0,
+  BritanniaClassicEa: 0,
+  BritanniaEa: 0,
+  BlackSeaEa: 0,
+  GatewayToTheAtlanticEa: 0,
+  IcelandEa: 0,
+  ItaliaEa: 0,
+  GulfOfStLawrenceEa: 0,
+  AegeanEa: 0,
+  GreatLakesEa: 0,
+  CaucasusEa: 0,
+  BajaCaliforniaEa: 0,
+  KoreaEa: 0,
+  MiddleEastEa: 0,
+  DanishStraitsEa: 0,
+  YellowSeaEa: 0,
   Europe: 7,
   FalklandIslands: 4,
   FaroeIslands: 4,
@@ -88,6 +171,7 @@ const FREQUENCY: Partial<Record<GameMapName, number>> = {
   MilkyWay: 8,
   MississippiRiver: 3,
   Montreal: 6,
+  NewWorld: 8,
   NewYorkCity: 3,
   NileDelta: 4,
   NorthAmerica: 5,
@@ -223,6 +307,7 @@ export class MapPlaylist {
     team: [],
     golden: [],
     diamond: [], // terron: алмазный матч — см. TerronTuning TERRON_DIAMOND_*
+    fair: [], // terron: лобби честных ботов (/fair, только дев)
   };
 
   /** terron: событийные типы лобби (награда победителю, своё расписание). */
@@ -230,24 +315,41 @@ export class MapPlaylist {
     return type === "golden" || type === "diamond";
   }
 
-  public async gameConfig(type: PublicGameType): Promise<GameConfig> {
+  // terron 26.09: `eventAt` — слот, под который собирается событийное лобби. У
+  // алмазного по нему решается вечерний вариант (TerronTuning eveningVariantAt):
+  // командный — 2 команды, нации на карте как обычно; соло — обычный ффа.
+  public async gameConfig(
+    type: PublicGameType,
+    opts: { eventAt?: number } = {},
+  ): Promise<GameConfig> {
     if (type === "special") {
       return this.getSpecialConfig();
     }
 
-    const mode = type === "team" ? GameMode.Team : GameMode.FFA;
-    const map = this.getNextMap(type);
+    const evening: EveningVariant | null =
+      type === "diamond" && opts.eventAt !== undefined
+        ? eveningVariantAt(opts.eventAt)
+        : null;
+    const mode =
+      type === "team" || evening === "team" ? GameMode.Team : GameMode.FFA;
+    const map =
+      type === "diamond" ? await this.getBigMap(type) : this.getNextMap(type);
 
     const playerTeams =
-      mode === GameMode.Team ? this.getTeamCount(map) : undefined;
+      evening === "team"
+        ? TERRON_EVENING_TEAMS
+        : mode === GameMode.Team
+          ? this.getTeamCount(map)
+          : undefined;
 
     // terron: СОБЫТИЙНЫЙ МАТЧ (золотой/алмазный) — обычный ффа со своим
     // плейлистом карт, но НИКОГДА не компакт: это главное событие часа (а у
     // алмазного — суток), на него собирается народ, и резать карту с ботами
     // вдвое тут незачем.
-    let isCompact: boolean | undefined = MapPlaylist.isEvent(type)
-      ? undefined
-      : this.playlists[type].length % 3 === 0 || undefined;
+    let isCompact: boolean | undefined =
+      MapPlaylist.isEvent(type) || type === "fair"
+        ? undefined
+        : this.playlists[type].length % 3 === 0 || undefined;
     if (
       isCompact &&
       mode === GameMode.Team &&
@@ -260,7 +362,13 @@ export class MapPlaylist {
       donateGold: mode === GameMode.Team,
       donateTroops: mode === GameMode.Team,
       gameMap: map,
-      maxPlayers: await this.lobbyMaxPlayers(map, mode, playerTeams, isCompact),
+      maxPlayers: await this.lobbyMaxPlayers(
+        map,
+        mode,
+        playerTeams,
+        isCompact,
+        type === "diamond",
+      ),
       gameType: GameType.Public,
       gameMapSize: isCompact ? GameMapSize.Compact : GameMapSize.Normal,
       publicGameModifiers: {
@@ -274,13 +382,23 @@ export class MapPlaylist {
       instantBuild: false,
       randomSpawn: false,
       nations:
-        mode === GameMode.Team && playerTeams !== HumansVsNations
+        mode === GameMode.Team &&
+        playerTeams !== HumansVsNations &&
+        evening !== "team"
           ? "disabled"
           : "default",
       gameMode: mode,
       playerTeams,
       bots: isCompact ? 100 : 400,
-      spawnImmunityDuration: this.getSpawnImmunityDuration(playerTeams),
+      // terron 26.09: в командном вечернем союзы выключены. Свои по команде и так
+      // союзники, а союз с ЧУЖОЙ командой — сговор (репорт беты: мир с вражеской
+      // командой принимали и люди, и её нации — матч не кончался, награду
+      // делить некому).
+      disableAlliances: evening === "team" ? true : undefined,
+      spawnImmunityDuration:
+        type === "diamond"
+          ? TERRON_DIAMOND_PVP_TRUCE_SECONDS * 10
+          : this.getSpawnImmunityDuration(playerTeams),
       disabledUnits: [],
       // terron: показываем клан-теги и в публичных FFA (апстрим их глушил).
       disableClanTags: undefined,
@@ -291,10 +409,50 @@ export class MapPlaylist {
       eventTier: MapPlaylist.isEvent(type)
         ? (type as "golden" | "diamond")
         : undefined,
-      eventRewardPts: MapPlaylist.isEvent(type)
-        ? eventRewardPts(type)
-        : undefined,
+      eventRewardPts: !MapPlaylist.isEvent(type)
+        ? undefined
+        : evening !== null
+          ? eveningRewardPts(evening)
+          : eventRewardPts(type),
+      eventEvening: evening ?? undefined,
+      eventRewardCapPts:
+        evening === "team" ? TERRON_EVENING_TEAM_CAP_PTS : undefined,
+      // terron 23.09: честные боты — лобби /fair. Персоны выбираются здесь, при
+      // создании (и ротации карты), и едут в конфиге всем клиентам.
+      // terron 28.09 (решение владельца): ещё 1–3 бота в золотых и алмазных —
+      // СВЕРХ лимита мест (боты не клиенты, слоты не занимают). В командном
+      // вечернем — нет: в командах боты не обкатаны.
+      fairBots:
+        type === "fair"
+          ? pickFairBots(FAIR_BOTS_PER_MATCH)
+          : MapPlaylist.isEvent(type) && mode === GameMode.FFA
+            ? pickFairBots(eventFairBotCount())
+            : undefined,
+      fairBotVersion:
+        type === "fair" || (MapPlaylist.isEvent(type) && mode === GameMode.FFA)
+          ? fairBotVersionFromEnv()
+          : undefined,
     } satisfies GameConfig;
+  }
+
+  /**
+   * terron 28.09: следующая карта плейлиста, куда влезает не меньше
+   * TERRON_DIAMOND_MIN_PLAYERS. Маленькие пропускаются (они остаются в
+   * плейлисте следующего круга). Не нашлось за круг — самая вместительная.
+   */
+  private async getBigMap(type: PublicGameType): Promise<GameMapType> {
+    let best: GameMapType | null = null;
+    let bestCap = -1;
+    for (let i = 0; i < 40; i++) {
+      const map = this.getNextMap(type);
+      const [cap] = this.calculateMapPlayerCounts(await getMapLandTiles(map));
+      if (cap >= TERRON_DIAMOND_MIN_PLAYERS) return map;
+      if (cap > bestCap) {
+        best = map;
+        bestCap = cap;
+      }
+    }
+    return best!;
   }
 
   private async getSpecialConfig(): Promise<GameConfig> {
@@ -786,11 +944,12 @@ export class MapPlaylist {
     mode: GameMode,
     numPlayerTeams: TeamCountConfig | undefined,
     isCompactMap?: boolean,
+    largest = false,
   ): Promise<number> {
     const landTiles = await getMapLandTiles(map);
     const [l, m, s] = this.calculateMapPlayerCounts(landTiles);
     const r = Math.random();
-    const base = r < 0.3 ? l : r < 0.6 ? m : s;
+    const base = largest ? l : r < 0.3 ? l : r < 0.6 ? m : s;
     let p = Math.min(mode === GameMode.Team ? Math.ceil(base * 1.5) : base, l);
     // Apply compact map 75% player reduction
     if (isCompactMap) {

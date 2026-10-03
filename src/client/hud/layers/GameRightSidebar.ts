@@ -12,8 +12,8 @@ import { GameType } from "../../../core/game/Game";
 import { GameView } from "../../../core/game/GameView";
 import { Controller } from "../../Controller";
 import { crazyGamesSDK } from "../../CrazyGamesSDK";
-import { GamePushSDK } from "../../GamePushSDK";
 import { TogglePauseIntentEvent } from "../../InputHandler";
+import { Host } from "../../PlatformHost";
 import { PauseGameIntentEvent, SendWinnerEvent } from "../../Transport";
 import { translateText } from "../../Utils";
 import { ImmunityBarVisibleEvent } from "./ImmunityTimer";
@@ -109,8 +109,8 @@ export class GameRightSidebar extends LitElement implements Controller {
   private onFullscreenChange = () => {
     // Внутри площадки состояние спрашиваем у SDK: полный экран может включить
     // и она сама, а её событие приходит отдельно (репорт владельца 01.08).
-    this.isFullscreen = GamePushSDK.isOnPlatform()
-      ? GamePushSDK.isFullscreen() || !!document.fullscreenElement
+    this.isFullscreen = Host.fullscreenSupported()
+      ? Host.isFullscreen() || !!document.fullscreenElement
       : !!document.fullscreenElement;
   };
 
@@ -258,7 +258,7 @@ export class GameRightSidebar extends LitElement implements Controller {
     // На площадке — её же API (у SDK свой модуль fullscreen с событиями),
     // чтобы состояние не разъезжалось с игрой. Вернул false — SDK недоступен,
     // работаем браузерным путём.
-    if (GamePushSDK.isOnPlatform() && GamePushSDK.toggleFullscreen()) return;
+    if (Host.toggleFullscreen()) return;
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch((err) => {
         console.warn("Failed to enter fullscreen:", err);

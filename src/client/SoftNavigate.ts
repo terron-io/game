@@ -1,3 +1,4 @@
+import { Host } from "./PlatformHost";
 // terron 30.07: НАВИГАЦИЯ БЕЗ ПЕРЕЗАГРУЗКИ ВНУТРИ ИГРОВОЙ ПЛОЩАДКИ.
 //
 // Требование модерации GamePush дословно: «за всю сессию игрока SDK должен
@@ -16,13 +17,24 @@
 // (событие leave-lobby останавливает матч, адрес правим через history), вне
 // площадки — прежнее поведение, оно проверено годами.
 
-/** Мы внутри iframe площадки? Класс ставит index.html синхронно, ещё до SDK. */
+/**
+ * Мы внутри площадки? Два независимых признака, и оба нужны.
+ *
+ * 1. Класс `gp-embed` — ставит index.html синхронно, ещё до SDK (мы в чужом
+ *    iframe). Работает для GamePush/Яндекса/VK, где грузится ЖИВОЙ terron.io.
+ * 2. Платформенная СБОРКА (`--mode playgama`) — её вообще нет смысла
+ *    перезагружать: это залитый к площадке бандл, внутри которого живёт их
+ *    Bridge, и правило «SDK инициализируется один раз за сессию» у них ровно
+ *    такое же, как у GamePush. ⚠️ Одного iframe-признака тут мало: их QA-инструмент
+ *    и часть витрин открывают бандл ВЕРХНИМ документом, и тогда выход из матча
+ *    делал бы полную перезагрузку — прелоадер, потеря сессии, замечание модерации.
+ */
+export function isPlatformHost(): boolean {
+  return Host.isPlatform();
+}
+
 function onPlatform(): boolean {
-  try {
-    return document.documentElement.classList.contains("gp-embed");
-  } catch {
-    return false;
-  }
+  return Host.isPlatform();
 }
 
 /**
@@ -56,9 +68,7 @@ export function softHome(path = "/"): boolean {
     // Main.handleLeaveLobby, но он выходит раньше, если матч уже остановлен
     // сервером — тогда площадка считала бы раунд идущим. Вызов парный
     // (gameplayActive), повтор безвреден.
-    void import("./GamePushSDK").then(({ GamePushSDK }) =>
-      GamePushSDK.gameplayStop(),
-    );
+    Host.gameplayStop(false);
   } catch (e) {
     console.warn("[soft-nav] мягкий уход не удался:", e);
   }
@@ -148,6 +158,12 @@ export function installSoftLinkInterceptor(): void {
       if (!link) return;
       if (link.target || link.hasAttribute("download")) return;
       if (link.dataset.hardNav !== undefined) return;
+      // terron 25.08: ПУНКТЫ МЕНЮ — не наше дело. С тех пор как они стали
+      // настоящими ссылками (ради cmd+клика), сюда стал долетать каждый клик
+      // по навбару, а softGo шлёт leave-lobby — то есть переход по сайту снова
+      // выбрасывал бы из лобби, теперь уже внутри площадки. Их обрабатывает
+      // Navigation: showPage без перезагрузки, лобби сворачивается.
+      if (link.closest(".nav-menu-item[data-page]")) return;
       const href = link.getAttribute("href");
       if (!href || href.startsWith("#")) return;
       let url: URL;

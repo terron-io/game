@@ -12,38 +12,38 @@ import {
 import { TileRef } from "../game/GameMap";
 import { AirportExecution } from "./AirportExecution";
 import { BlockadeExecution } from "./BlockadeExecution";
-import { CityExecution } from "./CityExecution";
-import { DefensePostExecution } from "./DefensePostExecution";
-import { FactoryExecution } from "./FactoryExecution";
-import { GreensExecution } from "./GreensExecution";
-import { NuclearPlantExecution } from "./NuclearPlantExecution";
+import { CatastropheExecution } from "./CatastropheExecution";
 import { CentralBankExecution } from "./CentralBankExecution";
-import { RailGunExecution } from "./RailGunExecution";
-import { SpaceportExecution } from "./SpaceportExecution";
-import { TreasureExecution } from "./TreasureExecution";
+import { CityExecution } from "./CityExecution";
+import { CityTransferExecution } from "./CityTransferExecution";
+import { DefensePostExecution } from "./DefensePostExecution";
+import { DoomTrainExecution } from "./DoomTrainExecution";
+import { FactoryExecution } from "./FactoryExecution";
 import { FortificationsExecution } from "./FortificationsExecution";
+import { GreensExecution } from "./GreensExecution";
+import { IndustrialRevolutionExecution } from "./IndustrialRevolutionExecution";
 import { MinistryOfTruthExecution } from "./MinistryOfTruthExecution";
 import { MirvExecution } from "./MIRVExecution";
 import { MissileSiloExecution } from "./MissileSiloExecution";
+import { NuclearPlantExecution } from "./NuclearPlantExecution";
 import { NukeExecution } from "./NukeExecution";
+import { PactExecution } from "./PactExecution";
 import { PortExecution } from "./PortExecution";
-import { ReligionExecution } from "./ReligionExecution";
-import { SAMLauncherExecution } from "./SAMLauncherExecution";
-import { SatelliteStrikeExecution } from "./SatelliteStrikeExecution";
-import { SplitExecution } from "./SplitExecution";
-import { SuicideDroneExecution } from "./SuicideDroneExecution";
-import { CatastropheExecution } from "./CatastropheExecution";
-import { IndustrialRevolutionExecution } from "./IndustrialRevolutionExecution";
+import { RailGunExecution } from "./RailGunExecution";
 import { RailGunShellExecution } from "./RailGunShellExecution";
 import { RecultivationExecution } from "./RecultivationExecution";
-import { PactExecution } from "./PactExecution";
+import { ReligionExecution } from "./ReligionExecution";
 import { RespiteExecution } from "./RespiteExecution";
+import { SAMLauncherExecution } from "./SAMLauncherExecution";
+import { SatelliteStrikeExecution } from "./SatelliteStrikeExecution";
+import { SpaceportExecution } from "./SpaceportExecution";
+import { SplitExecution } from "./SplitExecution";
+import { SuicideDroneExecution } from "./SuicideDroneExecution";
 import { TerrorExecution } from "./TerrorExecution";
+import { TrainDepotExecution } from "./TrainDepotExecution";
+import { TreasureExecution } from "./TreasureExecution";
 import { TruceExecution } from "./TruceExecution";
 import { WarshipExecution } from "./WarshipExecution";
-import { TrainDepotExecution } from "./TrainDepotExecution";
-import { DoomTrainExecution } from "./DoomTrainExecution";
-import { CityTransferExecution } from "./CityTransferExecution";
 
 // terron (18.07): РЕЕСТР «структура → исполнитель после стройки» вместо
 // switch-простыни. null = пассивный штаб (эффект через Player.hasUltimate,
@@ -96,6 +96,9 @@ const STRUCTURE_EXECUTIONS: Record<
   // terron: ультимейты — «Реки вспять»: штаб пассивный, вся работа в касте
   // WaterNuke (разблок по CAST_UNLOCKED_BY). TerronTuning §РЕКИ ВСПЯТЬ.
   [UnitType.RiversBack]: null,
+  // terron 01.09: штаб Терраформинга — пассивный, как «Реки вспять»:
+  // вся сила в его кастах, отдельного исполнителя зданию не нужно.
+  [UnitType.Terraforming]: null,
   // terron: ультимейты — ПОДЛОДКИ: пассив, эффект в WarshipExecution/рендере.
   [UnitType.SubmarineBase]: null,
   // terron: ЗАКРЫТАЯ СТРАНА — пассив: скрытие параметров чисто видовое (клиент
@@ -130,7 +133,7 @@ const STRUCTURE_EXECUTIONS: Record<
   [UnitType.SecretTreasure]: (s) => new TreasureExecution(s),
   // terron: МИРНОЕ НЕБО — чистый пассив: скидка на ПВО в Config, а «сбиваем
   // всё, включая союзное» — фильтр целей в SAMLauncherExecution.
-  [UnitType.PeacefulSky]: null,
+  // [UnitType.PeacefulSky]: null, // terron 01.09: ульта в архиве
   // terron: ВЗРЫВНЫЕ ПОЕЗДА — депо считает зону доезда состава.
   [UnitType.TrainDepot]: (s: Unit) => new TrainDepotExecution(s),
   // terron: ЗНАМЯ ПОБЕДЫ — штаб, пассив (CityExecution ×10, UnitImpl захват,
@@ -249,6 +252,13 @@ export class ConstructionExecution implements Execution {
       if (factory !== null) {
         this.mg.addExecution(factory(this.structure));
       }
+      // terron: РЕВАНШИЗМ — новый монумент рождается СРАЗУ прокачанным: очки за
+      // прежние потерянные статуи копятся у игрока и материализуются только
+      // здесь («твой уровень лежит в твоём монументе»). Захваченная чужая
+      // статуя сюда не попадает — её уровень сбрасывает в 1 UnitImpl.setOwner.
+      if (type === UnitType.Revanchism) {
+        this.structure.setLevel(player.nextRevanchismLevel());
+      }
       // terron: СТОЛИЦЫ — первый построенный City игрока (нет живой столицы)
       // становится СТОЛИЦЕЙ: золотой тинт + доход (в CityExecution). Потерял
       // столицу → capital()===null → следующий город снова станет ею. CAPITALS.md
@@ -289,7 +299,11 @@ export class ConstructionExecution implements Execution {
       case UnitType.HydrogenBomb:
       // terron: ультимейты — «Реки вспять»: та же ракета-экзекуция, разница
       // только в типе (NukeExecution топит землю вместо выжигания).
+      // terron 25.08: ТЕРРАФОРМИНГ — «Насыпь» и «Ядерный удар» едут ею же.
       case UnitType.WaterNuke:
+      case UnitType.TerraFlood:
+      case UnitType.LandNuke:
+      case UnitType.BlastNuke:
         this.mg.addExecution(
           new NukeExecution(
             type,
@@ -311,7 +325,7 @@ export class ConstructionExecution implements Execution {
           new SplitExecution(player, this.tile, this.troops ?? 0),
         );
         break;
-      // terron: «Сбить спутники» — ракета Неба нашего: своя экзекуция ставит
+      // terron: «Небо наше» (бывш. «Сбить спутники») — ракета Неба нашего: своя экзекуция ставит
       // носитель на своей земле и ведёт 60с телеграф-сборку. NEBO.md
       case UnitType.SatelliteStrike:
         this.mg.addExecution(new SatelliteStrikeExecution(player, this.tile));

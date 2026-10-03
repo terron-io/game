@@ -1,10 +1,11 @@
 import { EventBus } from "../../../core/EventBus";
 import { TileRef } from "../../../core/game/GameMap";
-import { PlayerView } from "../../../core/game/GameView";
+import { GameView, PlayerView } from "../../../core/game/GameView";
+import { checkSpawnSpacing } from "../../SpawnSpacingHint";
 import {
+  SendAirAssaultIntentEvent,
   SendAllianceExtensionIntentEvent,
   SendAllianceRequestIntentEvent,
-  SendAirAssaultIntentEvent,
   SendAttackIntentEvent,
   SendBoatAttackIntentEvent,
   SendBreakAllianceIntentEvent,
@@ -59,7 +60,9 @@ export class PlayerActionHandler {
     return await player.bestTransportShipSpawn(tile);
   }
 
-  handleSpawn(tile: TileRef) {
+  handleSpawn(tile: TileRef, game?: GameView) {
+    // terron 29.09: не ближе TERRON_SPAWN_HUMAN_GAP к другому человеку.
+    if (game && !checkSpawnSpacing(game, tile)) return;
     this.eventBus.emit(new SendSpawnIntentEvent(tile));
   }
 

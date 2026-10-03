@@ -116,7 +116,7 @@ self.addEventListener("fetch", (event) => {
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
       const cached = await cache.match(req);
-      const network = fetch(req)
+      const network = fetchWithRetry(req)
         .then((res) => {
           if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
           return res;
@@ -126,6 +126,26 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
+
+// terron 02.09: СЕТЕВОЙ СБОЙ НА АССЕТЕ — ПОВТОРИТЬ, А НЕ ОТДАТЬ ОШИБКУ.
+// В WebView мобильных приложений площадок (ВК/ОК) сеть в первые секунды после
+// запуска мертва целиком: словарь, превью карт, флаги — всё падало сразу и
+// навсегда (браузер упавший запрос сам не повторяет). Повторяем ТОЛЬКО сетевые
+// исключения (TypeError: fetch упал), не HTTP-ошибки: 404 по хэшу — это уже
+// другой класс, его повтор ничего не даст.
+const ASSET_RETRY_MS = [700, 1500];
+async function fetchWithRetry(req) {
+  let lastErr;
+  for (let i = 0; i <= ASSET_RETRY_MS.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, ASSET_RETRY_MS[i - 1]));
+    try {
+      return await fetch(req.clone ? req.clone() : req);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
 
 /* ─────────────────────────── ПУШ-УВЕДОМЛЕНИЯ (25.08) ──────────────────────
  *

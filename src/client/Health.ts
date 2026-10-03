@@ -10,8 +10,10 @@
 // Дисциплина: fire-and-forget (никогда не мешаем игре), жёсткие капы на
 // вкладку (не заспамить БД с битого клиента), детали обрезаются.
 
+import { clientPlatform } from "./Analytics";
 import { getApiBase } from "./Api";
 import { loadStageSnapshot } from "./LoadTrace";
+import { glContextStats } from "./render/gl/GlContext";
 
 // Типы событий — вайтлист, дублируется на сервере (clientHealth.ts).
 export type HealthKind =
@@ -28,8 +30,12 @@ export type HealthKind =
   | "start_no_game" // нажал «Старт», 20с спустя ни матча, ни закрытия лобби
   | "game_error_modal" // модалка фатальной ошибки = игрок выбит из матча
   | "desync" // рассинхронизация с сервером (hash mismatch)
+  | "core_mismatch" // terron 28.09: матч начат на другом ядре (выкат посреди матча, игрок перезагрузился)
   | "webgl_error" // WebGL-ошибка в модалке (не поднялся / умер)
   | "webgl_context_lost" // потеря GL-контекста (белый экран, чаще мобилки)
+  | "webgl_context_giveup" // вторая потеря за страницу: GL не пересобираем, зовём перезагрузку (ContextLossPolicy)
+  | "gl_restore" // terron 25.09: как вернулась графика (restored/fresh/failed/giveup) и за сколько мс
+  | "gl_help_choice" // terron 25.09: что игрок выбрал в окне сбоя (light/reload/later/guide:<раздел>)
   | "game_reconnect" // реконнект игрового сокета в матче
   // Выходы в ПЛОХОМ состоянии (pagehide с гейтом по контексту — обычный
   // «зашёл в меню и ушёл» НЕ шлётся, это воронка интереса, не сбой):
@@ -46,6 +52,12 @@ export type HealthKind =
   | "tab_died" // вкладка умерла БЕЗ pagehide в матче/на загрузке (OOM-kill,
   //              краш браузера) — надгробие в localStorage, репорт при
   //              СЛЕДУЮЩЕМ заходе (detail = фаза и давность)
+  | "empty_home" // главная открыта, а витрины лобби НЕТ (репорт владельца
+  //                  30.08: в Яндекс.Браузере пустой экран, в Chrome та же
+  //                  сборка рисуется). Воспроизвести не удалось ничем: ассеты
+  //                  200, 404 в логах нет, js-ошибок в телеметрии ноль. Значит
+  //                  случай надо ЛОВИТЬ, а не угадывать — датчик говорит, у
+  //                  скольких людей это происходит и в каких браузерах.
   | "ui_state_conflict" // в матче, а главное меню ВИДНО (репорт Smart Hunter
   //                       16.07: холодный офлайн-старт на медленном инете —
   //                       HUD и меню поверх друг друга)
@@ -104,6 +116,35 @@ export type HealthKind =
   //                          — у части игроков пропали иконки; detail = сколько
   //                          слоёв не хватило (гард решения «потолок 160»)
   // --- terron 22.08: сводка производительности матча (PerfHud.ts) ---
+  // --- terron 01.09: СТАРТ ЛОББИ (репорт «жму старт, ничего не происходит») ---
+  | "lobby_start_refused" // сервер отказал в старте и НАЗВАЛ причину (detail):
+  //                         not_creator / public / already_started
+  | "lobby_start_silent" // хост нажал старт, и за 6 с не пришло НИ старта, НИ
+  //                        отказа: интент не дошёл (сокет мёртв?). В meta —
+  //                        состояние сокета и тип лобби
+  | "lobby_rejoined" // зависшее лобби вылечено ВОЗВРАТОМ в свежее лобби того же
+  //                    тира, без перезагрузки страницы
+  | "lang_state" // terron 02.09: диагностика «интерфейс сырыми ключами» с устройства:
+  //                 состояние lang-selector + прямой запрос словаря (LangStateProbe.ts)
+  | "lang_load_failed" // terron 02.09: словарь переводов не загрузился после
+  //                       повторов; detail = «ru AbortError: timeout» / «ru Error:
+  //                       … 404» — отличает висящий fetch от мёртвой сети и 404
+  | "gp_ads_caps" // terron 02.09: что из рекламы отдаёт площадка GamePush
+  //                  (detail: «VK sticky=1 fs=0 rw=1 pre=0»). Ответ на «рекламы
+  //                  не вижу» с телефона, где консоли нет: зовём мы или не даёт она
+  | "config_update_storm" // terron 04.09: хост-лобби слал update_game_config
+  //                          десятками в секунду (сервер отбрасывал по лимиту
+  //                          4243 интента/сутки у 77 хостов). Коалесцер это
+  //                          гасит; датчик несёт СТЕК первого вызова в окне —
+  //                          по нему найдём, кто крутит цикл
+  | "atlas_load_failed" // terron 04.09: атлас юнитов/зданий/эффектов не
+  //                        загрузился после повторов — до этого юниты молча
+  //                        пропадали на весь матч (decode() у скрытой вкладки)
+  | "map_stale" // terron 12.09: копия территории в рендере разошлась с симуляцией (потерянные обновления) — TerritoryIntegrity.ts
+  | "map_check" // terron 12.09: итог датчика целостности карты за матч (знаменатель для map_stale)
+  | "storage_denied" // terron 04.09: доступ к localStorage/sessionStorage
+  //                     запрещён (чужой кадр с блокировкой сторонних данных);
+  //                     работаем на хранилище в памяти (шим в index.html)
   | "perf_summary"; // ОДИН отчёт по итогам матча (не поток кадров!): гистограмма
 //                     длительностей кадра, тик/с симуляции, макс. очередь
 //                     воркера, заминки >100мс + контекст (карта, игроки,
@@ -127,6 +168,12 @@ export type HealthKind =
 const MAX_PER_KIND = 5;
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
 const MAX_TOTAL = 40;
+// terron 12.09: датчик карты (TerritoryIntegrity) держит свои лимиты сам — не
+// больше трёх тревог, трёх срезов и одной сводки за матч. Общий кап «пять на
+// тип» терял бы сводки со второго по шестой матч во вкладке площадки, а спам
+// реконнектов съедал бы общий бюджет 40 раньше, чем карта успеет пожаловаться.
+const MAX_MAP_TOTAL = 30;
+let mapSent = 0;
 
 // Случайный id вкладки — чтобы отличать «один битый клиент шумит» от
 // «задело много игроков» (в сводке считаем уникальные сессии).
@@ -149,6 +196,40 @@ export function reportHealth(
   sendHealth(kind, detail, meta, false);
 }
 
+/** То же через sendBeacon — для сводок на pagehide (fetch там ненадёжен). */
+export function reportHealthBeacon(
+  kind: HealthKind,
+  detail = "",
+  meta?: Record<string, unknown>,
+): void {
+  sendHealth(kind, detail, meta, true);
+}
+
+/**
+ * Имя видеокарты живого контекста (UNMASKED_RENDERER). Ставит рендер один раз
+ * при сборке — своей пробы тут НЕ заводим: лишний GL-контекст отъедает слот из
+ * браузерного лимита (~16 на вкладку), а это ровно тот механизм, которым мы уже
+ * ломали игрокам графику ([[webgl-context-leak]]).
+ */
+let gpuName = "";
+/** Имя видеокарты, если рендер его уже снял (окно сбоя графики, код поддержки). */
+export function currentGpuName(): string {
+  return gpuName;
+}
+export function noteGpuName(name: string): void {
+  gpuName = name.slice(0, 90);
+}
+
+/**
+ * ⚠️ 01.09: разбор боевого хелса показал, что отказы шейдеров (211 сессий за
+ * неделю) приходят через ОБЩИЕ приёмники — js_error и render_tick_error, — а
+ * блок про устройство добавляла только модалка ошибки. Итог: по всем 211
+ * сессиям НИ ОДНОЙ записи о железе, то есть чинить нечего и не по чему.
+ * Поэтому железо подмешивается ЗДЕСЬ, в единственной точке отправки: любой
+ * датчик, называющий GPU-беду, теперь несёт имя видеокарты сам.
+ */
+const GPU_CLASS = /webgl|shader|program link|context lost|glError/i;
+
 function sendHealth(
   kind: HealthKind,
   detail: string,
@@ -158,16 +239,34 @@ function sendHealth(
   try {
     const seq = (seenPerKind.get(kind) ?? 0) + 1;
     seenPerKind.set(kind, seq);
-    if (!shouldSend(seq) || totalSent >= MAX_TOTAL) return;
+    const isMap = kind === "map_stale" || kind === "map_check";
+    if (isMap) {
+      if (mapSent >= MAX_MAP_TOTAL) return;
+      mapSent++;
+    } else {
+      if (!shouldSend(seq) || totalSent >= MAX_TOTAL) return;
+      totalSent++;
+    }
     sentPerKind.set(kind, (sentPerKind.get(kind) ?? 0) + 1);
-    totalSent++;
     // Порядковый номер — чтобы «пять событий» больше не читались как «их было
     // пять»: у веховых записей seq покажет настоящий масштаб.
     meta = { ...(meta ?? {}), seq };
+    // terron 04.09: железо кладём и в сводку перфа матча — без этого нельзя
+    // ответить «какая доля сессий на Intel UHD теряет контекст»: имя карты
+    // приходило ТОЛЬКО с ошибками, знаменателя не было (разбор хелса 04.09:
+    // 118 сессий с отказами шейдеров за 3 дня, все — Intel D3D11, и все с
+    // потерей контекста в ту же секунду).
+    if (
+      gpuName !== "" &&
+      meta.gpu === undefined &&
+      (kind === "perf_summary" || isMap || GPU_CLASS.test(detail))
+    ) {
+      meta.gpu = gpuName;
+    }
     const url = `${getApiBase()}/client/health`;
     const body = JSON.stringify({
       kind,
-      detail: String(detail).slice(0, 300),
+      detail: String(detail).slice(0, 600),
       path: window.location.pathname.slice(0, 80),
       isMobile: window.innerWidth < 1024,
       sessionId,
@@ -281,6 +380,32 @@ export function matchContext(): Record<string, unknown> {
     if (typeof hc === "number") ctx.cores = hc;
     ctx.dpr = Math.round((window.devicePixelRatio || 1) * 100) / 100;
     ctx.screen = `${window.screen?.width ?? 0}x${window.screen?.height ?? 0}`;
+    // terron 04.09: ЖЕЛЕЗО В НАДГРОБИЕ. Разбор дропов показал: вкладка умирает
+    // в первую минуту матча у 39% АНДРОИД-сессий против 5% у iOS, при этом ни
+    // размер карты (Italia 1.7 Мпикс мрёт как Giant World Map 8 Мпикс), ни ОЗУ
+    // устройства (8 ГБ мрут чаще 2 ГБ) ни при чём. Похоже на драйвер GPU — тот
+    // же класс, что у апки в Play Vitals (97% крашей Mali/MediaTek). Проверить
+    // это было НЕЧЕМ: имя видеокарты подмешивается только событиям, которые
+    // сами называют GPU-беду, а `tab_died` в их число не входит и приходит уже
+    // со СЛЕДУЮЩЕЙ загрузки. Кладём железо сюда — тогда надгробие само скажет,
+    // на каком чипе умерло.
+    if (gpuName !== "") ctx.gpu = gpuName;
+    // Потери GL-контекста до смерти — подпись падающего GPU-процесса: если
+    // контекст уже терялся, это драйвер, а не нехватка памяти.
+    const gl = glContextStats();
+    if (gl.created > 0) ctx.glCreated = gl.created;
+    if (gl.lost > 0) ctx.glLost = gl.lost;
+    // Браузер это или WebView нашей апки — по `is_mobile` в базе не различить,
+    // а лечится оно по-разному. Берём ЕДИНЫЙ детектор, второго не заводим.
+    ctx.platform = clientPlatform();
+    // Размер кучи отделяет OOM от краха драйвера: у OOM он у потолка.
+    // Только Chromium (у Safari поля нет вовсе) — как раз там, где болит.
+    const mem = (
+      performance as unknown as { memory?: { usedJSHeapSize?: number } }
+    ).memory;
+    if (typeof mem?.usedJSHeapSize === "number") {
+      ctx.heapMb = Math.round(mem.usedJSHeapSize / 1048576);
+    }
   } catch {
     /* контекст — необязательная приправа, без него надгробие всё равно рабочее */
   }
@@ -330,6 +455,16 @@ function installTombstoneSensor(): void {
   } catch {
     /* localStorage может быть недоступен (private mode) */
   }
+  // terron 04.09: ВИДИМОСТЬ В НАДГРОБИЕ. У телефонов вкладка «умирает» в 29 %
+  // загрузок (611 из 2127 за 3 дня) — но надгробие не отличало настоящий
+  // краш от вкладки, которую ОС прибила в фоне через полчаса после того, как
+  // игрок ушёл в другое приложение. Пишем состояние видимости на последнем
+  // пульсе и сколько секунд вкладка уже скрыта: «died visible» = крах,
+  // «died hidden 1800s» = штатная уборка памяти.
+  let hiddenSince = document.visibilityState === "hidden" ? Date.now() : 0;
+  document.addEventListener("visibilitychange", () => {
+    hiddenSince = document.visibilityState === "hidden" ? Date.now() : 0;
+  });
   const write = (clean: boolean): void => {
     try {
       const phase = currentPhase();
@@ -341,7 +476,18 @@ function installTombstoneSensor(): void {
           ts: Date.now(),
           // Контекст собираем только в матче/на загрузке — в меню он не нужен,
           // а смерть на меню мы и так не репортим.
-          ...(phase === "menu" ? {} : { ctx: matchContext() }),
+          ...(phase === "menu"
+            ? {}
+            : {
+                ctx: {
+                  ...matchContext(),
+                  vis: document.visibilityState,
+                  hiddenS:
+                    hiddenSince === 0
+                      ? 0
+                      : Math.round((Date.now() - hiddenSince) / 1000),
+                },
+              }),
         }),
       );
     } catch {
@@ -502,6 +648,47 @@ function installRageClickSensor(): void {
 }
 
 // Глобальные ловушки падений + датчик выхода. Зовётся один раз из Main.
+/**
+ * Человекочитаемое описание причины отвергнутого промиса.
+ *
+ * ⚠️ Заведено 01.09 по факту из боевого хелса: `String(reason)` на событии даёт
+ * «[object Event]», и это был ТОП-1 класс ошибок — 75 сессий в сутки строк, по
+ * которым нельзя понять ровно ничего. Событие приходило, а сказать ему было
+ * нечего: чаще всего это отвалившаяся загрузка ресурса (<img>/<script>/<audio>),
+ * и вся полезная информация лежит в его target.
+ *
+ * ⚠️ У Error берём ещё и ПЕРВЫЙ кадр стека: без него «Cannot read properties of
+ * undefined» одинаков у десятка разных мест.
+ */
+export function describeRejection(r: unknown): string {
+  if (r instanceof Error) {
+    const frame = (r.stack ?? "").split("\n")[1]?.trim();
+    return frame ? `${r.message} :: ${frame}` : r.message;
+  }
+  if (typeof Event !== "undefined" && r instanceof Event) {
+    const t = r.target as
+      | (Element & { src?: string; href?: string; error?: { code?: number } })
+      | null;
+    const tag = t?.tagName?.toLowerCase() ?? "?";
+    const code = t?.error?.code === undefined ? "" : ` code=${t.error.code}`;
+    const raw = t?.src ?? t?.href ?? "";
+    // data:/blob: обрезаем до схемы — их хвост это мегабайты мусора, а не адрес.
+    const src = /^(data|blob):/.test(raw)
+      ? raw.slice(0, raw.indexOf(":") + 1) + "…"
+      : raw.slice(-120);
+    return `Event(${r.type}) <${tag}>${code}${src === "" ? "" : " " + src}`;
+  }
+  if (r !== null && typeof r === "object") {
+    try {
+      const j = JSON.stringify(r);
+      if (j !== undefined && j !== "{}") return j.slice(0, 200);
+    } catch {
+      // циклическая ссылка — падаем на String() ниже
+    }
+  }
+  return String(r);
+}
+
 export function installGlobalHealthHandlers(): void {
   installExitContextSensor();
   installRageClickSensor();
@@ -545,7 +732,7 @@ export function installGlobalHealthHandlers(): void {
     // стека указывает точное место (разбор «small id undefined» 17.07).
     const stack =
       e.error instanceof Error && e.error.stack
-        ? ` :: ${e.error.stack.split("\n").slice(1, 3).join(" | ").replace(/\s+/g, " ").slice(0, 140)}`
+        ? ` :: ${e.error.stack.split("\n").slice(1, 6).join(" | ").replace(/\s+/g, " ").slice(0, 380)}`
         : "";
     reportHealth(
       "js_error",
@@ -554,10 +741,27 @@ export function installGlobalHealthHandlers(): void {
   });
   window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
     const r: unknown = e.reason;
-    const msg = r instanceof Error ? r.message : String(r);
+    const msg = describeRejection(r);
     // Сетевой шум (офлайн, блокировщики, недоступный API у RU-провайдеров) —
     // не баги кода, для него есть отдельные датчики/ru-ban трекер.
     if (/failed to fetch|networkerror|load failed|abort/i.test(msg)) return;
+    // terron 04.09: не загрузился ЧУЖОЙ скрипт (Метрика под блокировщиком —
+    // 402 сессии за 3 дня, крупнейший «класс» трубы) — это не наш баг. Свои
+    // чанки (адрес с нашим хостом) по-прежнему считаем: их отказ — реальная
+    // поломка загрузки.
+    if (
+      /^Event\(error\) <(script|link)>/.test(msg) &&
+      !msg.includes(window.location.host)
+    ) {
+      return;
+    }
     reportHealth("unhandled_rejection", msg.slice(0, 200));
   });
+  // terron 04.09: хранилище браузера недоступно, работаем на шиме в памяти
+  // (см. index.html). Считаем такие сессии, чтобы знать масштаб.
+  const memStorage = (window as { __terronMemStorage?: string })
+    .__terronMemStorage;
+  if (typeof memStorage === "string" && memStorage !== "") {
+    reportHealth("storage_denied", memStorage.trim());
+  }
 }

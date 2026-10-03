@@ -34,6 +34,7 @@ import { replacer } from "../core/Util";
 import { getPlayToken } from "./Auth";
 import { LobbyConfig } from "./ClientGameRunner";
 import { currentInputMode } from "./InputMode";
+import { IntentOutbox, RELIABLE_INTENT_TYPES } from "./IntentOutbox";
 import { LocalServer } from "./LocalServer";
 import { syncStatus } from "./SyncStatus";
 
@@ -43,7 +44,14 @@ import { syncStatus } from "./SyncStatus";
 // wss. Пока приложение грузит ЖИВОЙ сайт (host уже terron.io) — ветка не
 // срабатывает, поведение 1:1 как раньше. Активируется само, когда webDir
 // переключим на локальный бандл.
+declare const __GAME_HOST__: string | undefined;
+
 function resolveRemoteWs(): { host: string; protocol: string } {
+  // Бандл на ЧУЖОМ хостинге (Playgama и подобные): хост игры вшит при сборке,
+  // потому что в адресе — домен площадки, а не наш.
+  if (typeof __GAME_HOST__ === "string" && __GAME_HOST__.length > 0) {
+    return { host: __GAME_HOST__, protocol: "wss:" };
+  }
   const host = window.location.host;
   const isNative = !!(
     window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
@@ -263,6 +271,70 @@ export class Transport {
   private localServer: LocalServer;
 
   private buffer: string[] = [];
+  /** terron 04.09: слить буфер интентов после первого сообщения сервера (см. onopen). */
+  private flushBufferOnAck = false;
+  private flushBufferAfterAck(): void {
+    this.flushBufferOnAck = false;
+    const s = this.socket;
+    if (s === null || s.readyState !== WebSocket.OPEN) return;
+    while (this.buffer.length > 0) {
+      const msg = this.buffer.shift();
+      if (msg === undefined) continue;
+      s.send(msg);
+    }
+    // Приказы, отданные, пока (re)join ждал ответа, — на ТОМ ЖЕ сокете их
+    // можно слать сразу. На новом сокете ждём первого хода после start
+    // (см. noteServerMessage), чтобы сохранить исходный порядок с досылкой.
+    if (!this.resendPending && !this.resendOnNextTurn) this.sendOutbox(false);
+  }
+
+  /** terron 12.09: приказы ждут ЭХА сервера в ходах (см. IntentOutbox). */
+  private outbox = new IntentOutbox();
+  private myClientID: string | null = null;
+  /** Открыт новый сокет: досылка «под вопросом» — после его start-сообщения. */
+  private resendPending = false;
+  /** start на новом сокете пришёл: досылаем на первом ходе после него. */
+  private resendOnNextTurn = false;
+
+  private noteServerMessage(msg: ServerMessage): void {
+    if (msg.type === "lobby_info") {
+      this.myClientID = msg.myClientID;
+      return;
+    }
+    if (msg.type === "start") {
+      if (msg.myClientID) this.myClientID = msg.myClientID;
+      if (this.outbox.size > 0) {
+        for (const t of msg.turns) this.outbox.ack(t.intents, this.myClientID);
+      }
+      if (this.resendPending) {
+        this.resendPending = false;
+        this.resendOnNextTurn = true;
+      }
+      return;
+    }
+    if (msg.type === "turn") {
+      if (this.outbox.size > 0) {
+        this.outbox.ack(msg.turn.intents, this.myClientID);
+      }
+      if (this.resendOnNextTurn) {
+        this.resendOnNextTurn = false;
+        this.sendOutbox(true);
+      }
+    }
+  }
+
+  private sendOutbox(withStale: boolean): void {
+    const s = this.socket;
+    if (s === null || s.readyState !== WebSocket.OPEN) return;
+    if (this.outbox.size === 0) return;
+    const { wires, dropped } = this.outbox.take(Date.now(), withStale);
+    for (const w of wires) s.send(w);
+    if (wires.length > 0 || dropped > 0) {
+      console.info(
+        `[outbox] дослано приказов после обрыва: ${wires.length}, просрочено: ${dropped}`,
+      );
+    }
+  }
 
   private onconnect: () => void;
   private onmessage: (msg: ServerMessage) => void;
@@ -307,36 +379,24 @@ export class Transport {
     this.sub(SendBreakAllianceIntentEvent, (e) =>
       this.onBreakAllianceRequestUIEvent(e),
     );
-    this.sub(SendSpawnIntentEvent, (e) =>
-      this.onSendSpawnIntentEvent(e),
-    );
+    this.sub(SendSpawnIntentEvent, (e) => this.onSendSpawnIntentEvent(e));
     this.sub(SendAttackIntentEvent, (e) => this.onSendAttackIntent(e));
     this.sub(SendUpgradeStructureIntentEvent, (e) =>
       this.onSendUpgradeStructureIntent(e),
     );
-    this.sub(SendBoatAttackIntentEvent, (e) =>
-      this.onSendBoatAttackIntent(e),
-    );
-    this.sub(SendAirAssaultIntentEvent, (e) =>
-      this.onSendAirAssaultIntent(e),
-    );
+    this.sub(SendBoatAttackIntentEvent, (e) => this.onSendBoatAttackIntent(e));
+    this.sub(SendAirAssaultIntentEvent, (e) => this.onSendAirAssaultIntent(e));
     this.sub(SendTargetPlayerIntentEvent, (e) =>
       this.onSendTargetPlayerIntent(e),
     );
     this.sub(SendEmojiIntentEvent, (e) => this.onSendEmojiIntent(e));
-    this.sub(SendDonateGoldIntentEvent, (e) =>
-      this.onSendDonateGoldIntent(e),
-    );
+    this.sub(SendDonateGoldIntentEvent, (e) => this.onSendDonateGoldIntent(e));
     this.sub(SendDonateTroopsIntentEvent, (e) =>
       this.onSendDonateTroopIntent(e),
     );
     this.sub(SendQuickChatEvent, (e) => this.onSendQuickChatIntent(e));
-    this.sub(SendEmbargoIntentEvent, (e) =>
-      this.onSendEmbargoIntent(e),
-    );
-    this.sub(SendEmbargoAllIntentEvent, (e) =>
-      this.onSendEmbargoAllIntent(e),
-    );
+    this.sub(SendEmbargoIntentEvent, (e) => this.onSendEmbargoIntent(e));
+    this.sub(SendEmbargoAllIntentEvent, (e) => this.onSendEmbargoAllIntent(e));
     this.sub(BuildUnitIntentEvent, (e) => this.onBuildUnitIntent(e));
     this.sub(SendChooseUltimateIntentEvent, (e) =>
       this.onSendChooseUltimate(e),
@@ -348,37 +408,25 @@ export class Transport {
       this.sendDeath(e.eatenNations, e.eatenPlayers),
     );
     this.sub(SendHashEvent, (e) => this.onSendHashEvent(e));
-    this.sub(CancelAttackIntentEvent, (e) =>
-      this.onCancelAttackIntentEvent(e),
-    );
-    this.sub(CancelBoatIntentEvent, (e) =>
-      this.onCancelBoatIntentEvent(e),
-    );
+    this.sub(CancelAttackIntentEvent, (e) => this.onCancelAttackIntentEvent(e));
+    this.sub(CancelBoatIntentEvent, (e) => this.onCancelBoatIntentEvent(e));
 
     this.sub(MoveWarshipIntentEvent, (e) => {
       this.onMoveWarshipEvent(e);
     });
 
-    this.sub(SendDeleteUnitIntentEvent, (e) =>
-      this.onSendDeleteUnitIntent(e),
-    );
+    this.sub(SendDeleteUnitIntentEvent, (e) => this.onSendDeleteUnitIntent(e));
 
-    this.sub(SendKickPlayerIntentEvent, (e) =>
-      this.onSendKickPlayerIntent(e),
-    );
+    this.sub(SendKickPlayerIntentEvent, (e) => this.onSendKickPlayerIntent(e));
 
-    this.sub(SendClanInviteIntentEvent, (e) =>
-      this.onSendClanInviteIntent(e),
-    );
+    this.sub(SendClanInviteIntentEvent, (e) => this.onSendClanInviteIntent(e));
     this.sub(SendFriendRequestIntentEvent, (e) =>
       this.onSendFriendRequestIntent(e),
     );
     this.sub(SendPlayerReportIntentEvent, (e) =>
       this.onSendPlayerReportIntent(e),
     );
-    this.sub(SendGetProfileIntentEvent, (e) =>
-      this.onSendGetProfileIntent(e),
-    );
+    this.sub(SendGetProfileIntentEvent, (e) => this.onSendGetProfileIntent(e));
 
     this.sub(SendUpdateGameConfigIntentEvent, (e) =>
       this.onSendUpdateGameConfigIntent(e),
@@ -394,15 +442,60 @@ export class Transport {
     );
   }
 
+  // terron 16.09: СВЁРНУТАЯ ВКЛАДКА ВЫЛЕТАЛА ИЗ ЛОББИ МОЛЧА (жалоба беты:
+  // KDaniilW в алмазном лобби). Пинг шёл только таймером раз в 5 с, а Chrome
+  // у вкладки, скрытой дольше 5 минут, будит такие таймеры раз в МИНУТУ —
+  // ровно порог сервера «60 с без пинга» (GameServer.phase). Сервер закрывал
+  // сокет кодом 1000, а onclose считал 1000 штатным закрытием и НЕ
+  // переподключался: игрок исчезал из лобби, вкладка показывала лобби дальше,
+  // старт матча проходил мимо. За сутки на проде так осиротели 10 из 11
+  // лобби-обрывов. Лечим тремя рубежами:
+  //  1) пинг ещё и на ПРИХОД сообщения сервера (lobby_info-keepalive раз в 5 с,
+  //     ходы в матче) — события сокета таймерным троттлингом не режутся;
+  //  2) серверное «no heartbeats» (1000) — это обрыв, переподключаемся;
+  //  3) вернулся на вкладку, а сокет уже закрыт — переподключаемся сразу.
+  private static readonly PING_EVERY_MS = 5 * 1000;
+  private lastPingSentAt = 0;
+  /** Сервер закрыл сокет НАМЕРЕННО (матч кончился, кик, игры нет) — возврат
+   *  на вкладку не должен переподключать в чужое/закрытое. */
+  private closedOnPurpose = false;
+  private onVisibilityPing: (() => void) | null = null;
+
+  private sendPingIfDue(): void {
+    if (this.socket === null || this.socket.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    if (now - this.lastPingSentAt < Transport.PING_EVERY_MS) return;
+    this.lastPingSentAt = now;
+    this.sendMsg({
+      type: "ping",
+    } satisfies ClientPingMessage);
+  }
+
   private startPing() {
     if (this.isLocal) return;
-    this.pingInterval ??= window.setInterval(() => {
-      if (this.socket !== null && this.socket.readyState === WebSocket.OPEN) {
-        this.sendMsg({
-          type: "ping",
-        } satisfies ClientPingMessage);
-      }
-    }, 5 * 1000);
+    this.pingInterval ??= window.setInterval(
+      () => this.sendPingIfDue(),
+      Transport.PING_EVERY_MS,
+    );
+    if (this.onVisibilityPing === null && typeof document !== "undefined") {
+      this.onVisibilityPing = () => {
+        if (document.visibilityState !== "visible") return;
+        const sock = this.socket;
+        if (
+          sock !== null &&
+          !this.closedOnPurpose &&
+          (sock.readyState === WebSocket.CLOSED ||
+            sock.readyState === WebSocket.CLOSING)
+        ) {
+          this.lastCloseCode = 4900;
+          this.lastCloseReason = "closed while hidden";
+          this.scheduleReconnect();
+          return;
+        }
+        this.sendPingIfDue();
+      };
+      document.addEventListener("visibilitychange", this.onVisibilityPing);
+    }
   }
 
   private stopPing() {
@@ -410,6 +503,17 @@ export class Transport {
       window.clearInterval(this.pingInterval);
       this.pingInterval = null;
     }
+    if (this.onVisibilityPing !== null) {
+      document.removeEventListener("visibilitychange", this.onVisibilityPing);
+      this.onVisibilityPing = null;
+    }
+  }
+
+  /** Сервер закрыл нас за молчание (GameServer.phase, код 1000) — это обрыв,
+   *  а не штатный выход: переподключаться. Прочие 1000 («game has ended»,
+   *  кики с ключом причины) — штатные. */
+  static isHeartbeatDrop(code: number, reason: string): boolean {
+    return code === 1000 && /heartbeat/i.test(reason || "");
   }
 
   public connect(
@@ -455,6 +559,8 @@ export class Transport {
   ) {
     this.startPing();
     this.killExistingSocket();
+    // Всё, что ушло в прежний сокет и не вернулось эхом, теперь под вопросом.
+    this.outbox.newSocket();
     const { host: wsHost, protocol: wsProtocol } = resolveRemoteWs();
     const workerPath = ClientEnv.workerPath(this.lobbyConfig.gameID);
     this.socket = new WebSocket(`${wsProtocol}//${wsHost}/${workerPath}`);
@@ -462,22 +568,25 @@ export class Transport {
     this.onmessage = onmessage;
     this.socket.onopen = () => {
       console.log("Connected to game server!");
+      // Сокет открылся — серия обрывов кончилась, следующий обрыв снова
+      // получит быструю первую попытку.
+      this.reconnectAttempts = 0;
+      this.closedOnPurpose = false;
       if (this.socket === null) {
         console.error("socket is null");
         return;
       }
-      // terron A1-фикс: буфер копится push()-ем (FIFO), сливать надо тем же
-      // порядком — shift(), а не pop() (LIFO). Иначе интенты, накопленные за
-      // обрыв связи, переигрывались в ОБРАТНОМ порядке → рассинхрон при реконнекте.
-      while (this.buffer.length > 0) {
-        console.log("sending dropped message");
-        const msg = this.buffer.shift();
-        if (msg === undefined) {
-          console.warn("msg is undefined");
-          continue;
-        }
-        this.socket.send(msg);
-      }
+      // terron 04.09: БУФЕР — ПОСЛЕ ПОДТВЕРЖДЕНИЯ ДЖОЙНА, А НЕ ДО НЕГО.
+      // Раньше накопленные за обрыв интенты уходили в сокет ЗДЕСЬ, раньше
+      // rejoin из onconnect(), и сервер отбрасывал их с «Invalid message
+      // before join» (39 раз за двое суток в логе прода) — то есть действия
+      // игрока, сделанные во время обрыва, терялись молча. Сливаем на первом
+      // разобранном сообщении сервера после открытия: это и есть доказательство,
+      // что (re)join принят (см. flushBufferOnAck в onmessage).
+      // (Порядок слива по-прежнему FIFO — A1-фикс, shift() а не pop().)
+      this.flushBufferOnAck = this.buffer.length > 0;
+      this.resendPending = true;
+      this.resendOnNextTurn = false;
       onconnect();
     };
     this.socket.onmessage = (event: MessageEvent) => {
@@ -503,6 +612,9 @@ export class Transport {
         // уже принимает, матч из снимка ещё не поднял), закрыт по-прежнему —
         // там сервер отвечает штатно и счётчик обнуляется.
         this.goneRetries = 0;
+        this.sendPingIfDue();
+        if (this.flushBufferOnAck) this.flushBufferAfterAck();
+        this.noteServerMessage(result.data);
         this.onmessage(result.data);
       } catch (e) {
         console.error("Error in onmessage handler:", e, event.data);
@@ -518,6 +630,8 @@ export class Transport {
       console.log(
         `WebSocket closed. Code: ${event.code}, Reason: ${event.reason}`,
       );
+      // по умолчанию закрытие считаем намеренным; ветка обрыва ниже снимает флаг
+      this.closedOnPurpose = true;
       if (event.code === 1002 && this.retryGameGone(event.reason)) {
         return;
       }
@@ -566,9 +680,17 @@ export class Transport {
         // разобрать (checkArchivedGame → реплей/итоги). softHome только правит
         // адрес — игрок остался бы в меню, а ссылка вела бы в никуда.
         void import("./SoftNavigate").then(({ softGo }) => softGo(target));
-      } else if (event.code !== 1000) {
+      } else if (
+        event.code !== 1000 ||
+        Transport.isHeartbeatDrop(event.code, event.reason)
+      ) {
+        this.closedOnPurpose = false;
         console.log(`received error code ${event.code}, reconnecting`);
-        this.reconnect();
+        // terron 04.09: код и причина закрытия — в датчик game_reconnect, иначе
+        // «обрывы» не разделить на сеть (1006), сервер (1008/1011) и наши коды.
+        this.lastCloseCode = event.code;
+        this.lastCloseReason = (event.reason || "").slice(0, 60);
+        this.scheduleReconnect();
       }
     };
   }
@@ -589,6 +711,48 @@ export class Transport {
    *  Только для ИДУЩЕГО матча: в лобби возвращаться некуда. */
   private goneRetries = 0;
   private static readonly GONE_RETRY_DELAYS_MS = [2000, 5000, 10000];
+
+  /** terron 04.09: РЕКОННЕКТ С ПАУЗОЙ, А НЕ В УПОР.
+   *
+   *  Обрыв сокета (код ≠ 1000/1002) звал reconnect() НЕМЕДЛЕННО, и любой
+   *  отказ на рукопожатии (502 от прокси при пересоздании контейнера, отбитый
+   *  апгрейд, мёртвая сеть) давал петлю без единой паузы: за 3 дня 1999 пар
+   *  реконнектов быстрее 0.5 с, у 393 сессий ровно шесть за три секунды.
+   *  При выкате все открытые вкладки долбили сервер разом, а на телефоне с
+   *  провалившейся сетью батарея уходила в попытки.
+   *
+   *  Первая попытка по-прежнему сразу (одиночный обрыв лечится за миг), дальше
+   *  250 мс × 2ⁿ с разбросом ±50 %, потолок 8 с. Счётчик сбрасывает успешное
+   *  открытие сокета. Таймер гасится вместе с транспортом (leaveGame). */
+  private reconnectAttempts = 0;
+  private reconnectTimer: number | null = null;
+  private lastCloseCode = 0;
+  private lastCloseReason = "";
+  private static readonly RECONNECT_BASE_MS = 250;
+  private static readonly RECONNECT_MAX_MS = 8000;
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer !== null) return;
+    const n = this.reconnectAttempts++;
+    if (n === 0) {
+      this.reconnect();
+      return;
+    }
+    const base = Math.min(
+      Transport.RECONNECT_MAX_MS,
+      Transport.RECONNECT_BASE_MS * 2 ** (n - 1),
+    );
+    const delay = Math.round(base * (0.5 + Math.random()));
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnect();
+    }, delay);
+  }
+  private cancelScheduledReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
   private retryGameGone(reason: string): boolean {
     if (this.isLocal) return false;
     if (!/not found/i.test(reason || "")) return false;
@@ -615,8 +779,15 @@ export class Transport {
       syncStatus("reconnecting");
       // Телеметрия: реконнекты в матче (обрыв игрового сокета). Кап на тип
       // внутри reportHealth (≤5/вкладку) — реконнект-шторм не зальёт БД.
+      const code = this.lastCloseCode;
+      const reason = this.lastCloseReason;
+      const attempt = this.reconnectAttempts;
       void import("./Health").then(({ reportHealth }) =>
-        reportHealth("game_reconnect", "", { gameID: this.lobbyConfig.gameID }),
+        reportHealth("game_reconnect", code === 0 ? "" : `${code} ${reason}`, {
+          gameID: this.lobbyConfig.gameID,
+          code,
+          attempt,
+        }),
       );
     }
     this.connect(this.onconnect, this.onmessage);
@@ -639,6 +810,8 @@ export class Transport {
       turnstileToken: this.lobbyConfig.turnstileToken,
       token: await getPlayToken(),
     } satisfies ClientJoinMessage);
+    // Как и у rejoin: до первого ответа сервера всё копится в буфер.
+    if (!this.isLocal) this.flushBufferOnAck = true;
   }
 
   async rejoinGame(lastTurn: number) {
@@ -649,6 +822,10 @@ export class Transport {
       lastTurn: lastTurn,
       token: await getPlayToken(),
     } satisfies ClientRejoinMessage);
+    // Всё, что уйдёт до первого ответа сервера, копится в буфер (см. onopen):
+    // rejoin обрабатывается асинхронно, и сообщение сразу за ним сервер
+    // считал «до джойна».
+    if (!this.isLocal) this.flushBufferOnAck = true;
     // terron: повторяем «палец/мышь» — сервер мог перезапуститься и потерять
     // сигнал, а сам клиент шлёт его только при СМЕНЕ классификации.
     const mode = currentInputMode();
@@ -656,6 +833,8 @@ export class Transport {
   }
 
   leaveGame() {
+    // terron 04.09: отложенный реконнект не должен пережить транспорт.
+    this.cancelScheduledReconnect();
     // terron ПЕРФ (07.08): СНЯТЬ ПОДПИСКИ С ШИНЫ. Transport вешал 35
     // обработчиков на ОБЩУЮ шину (одна на всю сессию, Main.eventBus) и не
     // снимал ни одного: после K матчей каждый интент игрока обрабатывался K
@@ -833,8 +1012,8 @@ export class Transport {
     // Сообщаем площадке (их дока: gp.pause()/gp.resume() — точка управления
     // рекламой и аналитикой). Их собственные pause/resume мы уже слушаем,
     // так что канал теперь двусторонний.
-    void import("./GamePushSDK").then(({ GamePushSDK }) =>
-      GamePushSDK.reportPause(event.paused),
+    void import("./PlatformHost").then(({ Host }) =>
+      Host.reportPause(event.paused),
     );
     this.sendIntent({
       type: "toggle_pause",
@@ -888,11 +1067,16 @@ export class Transport {
   // готов — молча пропускаем: сигнал справочный, реконнект-буфер им забивать
   // незачем, следующая смена (или следующий матч) донесёт.
   public sendInputMode(mode: InputMode) {
+    const msg = { type: "input_mode", mode } satisfies ClientInputModeMessage;
+    // terron 04.09: пока (re)join не подтверждён сервером, сообщение ждёт в
+    // буфере — иначе оно обгоняло проверку токена на сервере и падало в лог
+    // «Invalid message before join» (47 раз за 3 часа на проде, всё input_mode).
+    if (!this.isLocal && this.flushBufferOnAck) {
+      this.buffer.push(JSON.stringify(msg, replacer));
+      return;
+    }
     if (this.isLocal || this.socket?.readyState === WebSocket.OPEN) {
-      this.sendMsg({
-        type: "input_mode",
-        mode,
-      } satisfies ClientInputModeMessage);
+      this.sendMsg(msg);
     }
   }
 
@@ -978,7 +1162,20 @@ export class Transport {
     });
   }
 
+  // terron 04.09: второй рубеж от шторма конфига (первый — коалесцер в
+  // HostLobbyModal.putGameConfig). Тот же конфиг, что ушёл меньше секунды назад,
+  // повторно не шлём: сервер всё равно ничего не поменял бы, а лимит интентов
+  // (10/с) он тратит и режет им НАСТОЯЩИЕ действия хоста.
+  private lastConfigJson = "";
+  private lastConfigSentAt = 0;
   private onSendUpdateGameConfigIntent(event: SendUpdateGameConfigIntentEvent) {
+    const json = JSON.stringify(event.config, replacer);
+    const now = Date.now();
+    if (json === this.lastConfigJson && now - this.lastConfigSentAt < 1000) {
+      return;
+    }
+    this.lastConfigJson = json;
+    this.lastConfigSentAt = now;
     this.sendIntent({
       type: "update_game_config",
       config: event.config,
@@ -990,6 +1187,40 @@ export class Transport {
   }
 
   private sendIntent(intent: Intent) {
+    // terron 12.09: ИГРОВОЙ ПРИКАЗ БЕЗ СВЯЗИ НЕ ВЫБРАСЫВАЕМ. Раньше при закрытом
+    // сокете эта функция печатала «WebSocket is not open» и теряла приказ —
+    // буфер до подтверждения джойна (04.09) жил в sendMsg, куда приказы не
+    // доходили. Теперь каждый игровой приказ ждёт эха сервера в ходах, а без
+    // связи — переподключения (см. IntentOutbox). Проверено тестом владельца
+    // на деве 12.09: атака, отданная без Wi-Fi, пропадала.
+    if (!this.isLocal && RELIABLE_INTENT_TYPES.has(intent.type)) {
+      const wire = JSON.stringify(
+        { type: "intent", intent } satisfies ClientIntentMessage,
+        replacer,
+      );
+      const s = this.socket;
+      const live =
+        s !== null &&
+        s.readyState === WebSocket.OPEN &&
+        !this.flushBufferOnAck &&
+        !this.resendOnNextTurn;
+      this.outbox.track(intent, wire, Date.now(), live);
+      if (live) {
+        s.send(wire);
+        return;
+      }
+      console.info(
+        `[outbox] нет связи — приказ ${intent.type} ждёт переподключения`,
+      );
+      if (
+        s === null ||
+        s.readyState === WebSocket.CLOSED ||
+        s.readyState === WebSocket.CLOSING
+      ) {
+        this.scheduleReconnect();
+      }
+      return;
+    }
     if (this.isLocal || this.socket?.readyState === WebSocket.OPEN) {
       const msg = {
         type: "intent",
@@ -1015,12 +1246,38 @@ export class Transport {
       return;
     }
     const str = JSON.stringify(msg, replacer);
-    if (this.socket.readyState === WebSocket.CLOSED) {
+    // terron 04.09: CONNECTING/CLOSING — тоже «не открыт»: send() на таком
+    // сокете бросает InvalidStateError. Копим в буфер, он сольётся после (re)join.
+    if (this.socket.readyState === WebSocket.CONNECTING) {
+      this.buffer.push(str);
+      return;
+    }
+    if (
+      this.socket.readyState === WebSocket.CLOSED ||
+      this.socket.readyState === WebSocket.CLOSING
+    ) {
       // Buffer message
       console.warn("socket not ready, closing and trying later");
       this.socket.close();
       this.socket = null;
-      this.connectRemote(this.onconnect, this.onmessage);
+      // terron 04.09: раньше КАЖДОЕ сообщение на закрытом сокете само звало
+      // connectRemote — вторая петля рядом с onclose. Теперь через тот же
+      // планировщик с паузой; буфер сольётся на открытии.
+      this.buffer.push(str);
+      this.scheduleReconnect();
+    } else if (
+      this.flushBufferOnAck &&
+      msg.type !== "join" &&
+      msg.type !== "rejoin" &&
+      msg.type !== "ping"
+    ) {
+      // terron 28.09: сокет открыт, но (re)join ещё не подтверждён сервером —
+      // всё, кроме самого джойна, ждёт в буфере (сольётся на первом ответе,
+      // flushBufferAfterAck). Раньше сюда проскакивали hash и неигровые
+      // приказы (старт и пауза хоста, кик): сервер отбрасывал их с «Invalid
+      // message before join» — 105 hash и 8 «старт» за сутки на проде, то есть
+      // нажатие хоста во время переподключения терялось молча. input_mode
+      // буферился так же ещё с 04.09, теперь правило общее.
       this.buffer.push(str);
     } else {
       // Send the message directly

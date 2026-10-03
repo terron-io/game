@@ -108,6 +108,7 @@ const VIOLATION_LABEL = (code: string): string => {
 const EPOCH_RU: Record<string, string> = {
   Ultimates: "Ультимейты",
   Capitals: "Столицы",
+  Trains: "Поезда",
 };
 const EPOCH_NAME = (e: { epoch: number; label: string | null }): string => {
   if (!e.label) return `#${e.epoch}`;

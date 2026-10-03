@@ -1,3 +1,4 @@
+import { TERRON_SPAWN_GRACE_SECONDS } from "../configuration/TerronTuning";
 import {
   Execution,
   Game,
@@ -7,8 +8,8 @@ import {
   PlayerType,
   SpawnArea,
 } from "../game/Game";
-import { TERRON_SPAWN_GRACE_SECONDS } from "../configuration/TerronTuning";
 import { TileRef } from "../game/GameMap";
+import { spawnBlocker } from "../game/SpawnSpacing";
 import { PseudoRandom } from "../PseudoRandom";
 import { GameID } from "../Schemas";
 import { simpleHash } from "../Util";
@@ -70,6 +71,31 @@ export class SpawnExecution implements Execution {
 
     // Security: If random spawn is enabled, prevent players from re-rolling their spawn location
     if (this.mg.config().isRandomSpawn() && player.hasSpawned()) {
+      return;
+    }
+
+    // terron 29.09: человек не ставит флаг вплотную к другому человеку (кроме
+    // своей команды). Проверка ДО снятия прежних тайлов: отказ оставляет игрока
+    // там, где он уже стоял. Только ПУБЛИЧНЫЕ матчи: жалобы — на чужих, которые
+    // «липнут» в открытых лобби; в приватном хозяин сам решает, с кем играет.
+    if (
+      this.tile !== undefined &&
+      this.mg.config().gameConfig().gameType === GameType.Public &&
+      this.playerInfo.playerType === PlayerType.Human &&
+      spawnBlocker(
+        this.tile,
+        this.mg
+          .allPlayers()
+          .filter(
+            (p) =>
+              p.id() !== player.id() &&
+              p.type() === PlayerType.Human &&
+              !player.isOnSameTeam(p),
+          )
+          .map((p) => ({ spawnTile: p.spawnTile() })),
+        (a, b) => this.mg.manhattanDist(a, b),
+      ) !== null
+    ) {
       return;
     }
 

@@ -7,6 +7,12 @@ import {
   GameMapType,
   mapCategories,
 } from "../../../core/game/Game";
+import {
+  displayMap,
+  EQUAL_AREA_EVENT,
+  equalAreaOn,
+} from "../../EqualAreaMaps";
+import { mapHasAssets } from "../../utilities/GameConfigHelpers";
 import { translateText } from "../../Utils";
 import "./MapDisplay";
 const randomMap = assetUrl("images/RandomMap.webp");
@@ -32,9 +38,32 @@ export class MapPicker extends LitElement {
   @property({ attribute: false }) onSelectMap?: (map: GameMapType) => void;
   @property({ attribute: false }) onSelectRandom?: () => void;
   @state() private showAllMaps = false;
+  // terron 26.09: «Честные размеры» — карточки подменяются равновеликой парой.
+  @state() private equalArea = equalAreaOn();
 
   createRenderRoot() {
     return this;
+  }
+
+  private onEqualArea = (e: Event) => {
+    this.equalArea = (e as CustomEvent<boolean>).detail;
+    // Выбранная карта переезжает в свою пару, иначе матч уйдёт на другую версию,
+    // чем подсвечена в пикере.
+    if (!this.useRandomMap) {
+      const next = displayMap(this.selectedMap, this.equalArea);
+      if (next !== this.selectedMap) this.onSelectMap?.(next);
+    }
+  };
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.equalArea = equalAreaOn();
+    window.addEventListener(EQUAL_AREA_EVENT, this.onEqualArea);
+  }
+
+  disconnectedCallback(): void {
+    window.removeEventListener(EQUAL_AREA_EVENT, this.onEqualArea);
+    super.disconnectedCallback();
   }
 
   private handleMapSelection(mapValue: GameMapType) {
@@ -53,7 +82,8 @@ export class MapPicker extends LitElement {
     return this.mapWins?.get(mapValue) ?? new Set();
   }
 
-  private renderMapCard(mapValue: GameMapType) {
+  private renderMapCard(baseMap: GameMapType) {
+    const mapValue = displayMap(baseMap, this.equalArea);
     const mapKey = Object.entries(GameMapType).find(
       ([_, value]) => value === mapValue,
     )?.[0];
@@ -74,7 +104,13 @@ export class MapPicker extends LitElement {
   }
 
   private renderAllMaps() {
-    const mapCategoryEntries = Object.entries(mapCategories);
+    // terron 17.09: карты без файлов в манифесте не предлагаем (mapHasAssets).
+    // Группа равновеликих версий отдельными карточками не показывается — их
+    // подставляет переключатель «Честные размеры».
+    const mapCategoryEntries = Object.entries(mapCategories)
+      .filter(([k]) => k !== "equalArea")
+      .map(([k, maps]) => [k, maps.filter(mapHasAssets)] as const)
+      .filter(([, maps]) => maps.length > 0);
     return html`<div class="space-y-8">
       ${mapCategoryEntries.map(
         ([categoryKey, maps], idx) => html`
@@ -99,9 +135,10 @@ export class MapPicker extends LitElement {
   }
 
   private renderFeaturedMaps() {
-    let featuredMapList = featuredMaps;
-    if (!this.useRandomMap && !featuredMapList.includes(this.selectedMap)) {
-      featuredMapList = [this.selectedMap, ...featuredMaps];
+    let featuredMapList = featuredMaps.filter(mapHasAssets);
+    const selectedBase = displayMap(this.selectedMap, false);
+    if (!this.useRandomMap && !featuredMapList.includes(selectedBase)) {
+      featuredMapList = [selectedBase, ...featuredMapList];
     }
     return html`<div class="w-full">
       <h4

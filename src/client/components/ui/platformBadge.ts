@@ -79,6 +79,13 @@ function badges(): Record<string, PlatformBadge> {
  * «Яндекс Игры» / «VK Play» / … Незнакомая площадка (они их добавляют) —
  * общее слово, чтобы фраза «Войти через …» осталась грамотной.
  */
+/** Все площадки, которые знает значок, — ими же кормится переключатель
+ *  тест-режима (`?embed=1&platform=…`). Новая площадка GamePush = строка в
+ *  `badges()`, второй список не заводим. */
+export function platformTypes(): string[] {
+  return Object.keys(badges());
+}
+
 export function platformLabel(type: string | undefined): string {
   return badges()[type ?? ""]?.name ?? L("площадку", "the platform");
 }

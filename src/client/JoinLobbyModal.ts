@@ -13,6 +13,7 @@ import {
   renderDuration,
   translateText,
 } from "../client/Utils";
+import { unitNameI18nKey } from "./UnitCatalog";
 import { assetUrl } from "../core/AssetUrls";
 import { EventBus } from "../core/EventBus";
 import {
@@ -25,6 +26,8 @@ import {
   PublicGameInfo,
 } from "../core/Schemas";
 import {
+  eveningOf,
+  eventPerPersonOf,
   eventRewardOf,
   nextDiamondMatchAt,
   nextGoldenMatchAt,
@@ -40,6 +43,11 @@ import { UserSettings } from "../core/game/UserSettings";
 import { getApiBase } from "./Api";
 import { avatarFallback, avatarSrc } from "./Avatar";
 import { crazyGamesSDK } from "./CrazyGamesSDK";
+import { gameOrigin, publicSiteOrigin } from "./GameHost";
+import {
+  GOLDEN_BASE_PTS,
+  GOLDEN_MAX_PTS,
+} from "./GoldenReward";
 import { reportHealth } from "./Health";
 import type { LobbyChatPanel } from "./LobbyChatPanel";
 import { JoinLobbyEvent } from "./Main";
@@ -151,6 +159,9 @@ export class JoinLobbyModal extends BaseModal {
   private countdownTimerId: number | null = null;
   private countdownTimerPeriod = 0;
   private handledJoinTimeout = false;
+  // terron 04.09: момент джойна по ЛОКАЛЬНЫМ часам — грейс таймаута считается и
+  // от него (см. checkForJoinTimeout).
+  private joinStartedAt = 0;
   // terron: серверный отсчёт старта приватного лобби (из lobby_info). null = нет.
   @state() private startCountdownEndsAt: number | null = null;
   @state() private startCountdownByHost = false;
@@ -188,7 +199,30 @@ export class JoinLobbyModal extends BaseModal {
       ...lobby,
       startsAt: lobby.startsAt ?? undefined,
     });
+    this.maybeHandOffToHost(lobby, event.myClientID);
   };
+
+  // terron 26.09 (репорт владельца: «создал лобби, F5 — попадаю как обычный
+  // клиент, лобби мёртвое»). Сервер узнаёт создателя по persistentID, и после F5
+  // права у него остаются, а клиент открывал обычное окно входа. Теперь: сервер
+  // назвал нас создателем ПРИВАТНОГО лобби → закрываем окно входа БЕЗ выхода из
+  // лобби (уход хоста закрыл бы его всем) и открываем хост-окно на том же лобби.
+  private hostHandoff = false;
+  private maybeHandOffToHost(
+    lobby: { gameID: string; lobbyCreatorClientID?: string | null },
+    myClientID: string | undefined,
+  ): void {
+    if (this.hostHandoff || !myClientID) return;
+    if (lobby.lobbyCreatorClientID !== myClientID) return;
+    if (this.gameConfig?.gameType !== GameType.Private) return;
+    this.hostHandoff = true;
+    const gameID = lobby.gameID;
+    this.leaveLobbyOnClose = false;
+    this.close();
+    document.dispatchEvent(
+      new CustomEvent("resume-host-lobby", { detail: { gameID } }),
+    );
+  }
 
   protected renderHeaderSlot() {
     if (!this.currentLobbyId) {
@@ -296,15 +330,29 @@ export class JoinLobbyModal extends BaseModal {
       minute: "2-digit",
     });
     const reward = eventRewardOf(this.gameConfig);
-    const link = `${window.location.origin}/${diamond ? "diamond" : "gold"}`;
+    const link = `${publicSiteOrigin()}/${diamond ? "diamond" : "gold"}`;
+    const evening = eveningOf(this.gameConfig);
+    if (diamond && evening === "team") {
+      const cap = eventPerPersonOf(this.gameConfig);
+      return L(
+        `💎 Вечерний алмазный, командный, в ${at}: победившая команда делит +${reward} алмазов (до ${cap} каждому) → ${link}`,
+        `💎 Evening diamond match, teams, at ${at}: the winning team splits +${reward} diamonds (up to ${cap} each) → ${link}`,
+      );
+    }
+    if (diamond && evening === "solo") {
+      return L(
+        `💎 Вечерний алмазный, соло, в ${at}: победителю +${reward} алмазов → ${link}`,
+        `💎 Evening diamond match, solo, at ${at}: winner gets +${reward} diamonds → ${link}`,
+      );
+    }
     return diamond
       ? L(
           `💎 Алмазный матч в ${at}, победителю +${reward} алмазов → ${link}`,
           `💎 Diamond match at ${at}, winner gets +${reward} diamonds → ${link}`,
         )
       : L(
-          `⭐ Золотой матч в ${at}, победителю +${reward} алмазов → ${link}`,
-          `⭐ Golden match at ${at}, winner gets +${reward} diamonds → ${link}`,
+          `⭐ Золотой матч в ${at}, победителю ${GOLDEN_BASE_PTS} алмазов + 1 за каждого соперника, до ${GOLDEN_MAX_PTS} → ${link}`,
+          `⭐ Golden match at ${at}, winner gets ${GOLDEN_BASE_PTS} diamonds + 1 per rival, up to ${GOLDEN_MAX_PTS} → ${link}`,
         );
   }
 
@@ -787,14 +835,33 @@ export class JoinLobbyModal extends BaseModal {
               >`}
         </div>
         <div class="text-xs" style="color:#6b6759">
-          ${this.eventStartLabel()} · ${L("победителю", "winner gets")}
-          +${eventRewardOf(this.gameConfig)}
+          ${this.eventStartLabel()} ·
+          ${eveningOf(this.gameConfig) === "team"
+            ? L(
+                `командный матч: победившая команда делит +${eventRewardOf(this.gameConfig)}, до ${eventPerPersonOf(this.gameConfig)} каждому; погиб или ливнул — без награды`,
+                `team match: the winning team splits +${eventRewardOf(this.gameConfig)}, up to ${eventPerPersonOf(this.gameConfig)} each; die or leave and you get nothing`,
+              )
+            : eveningOf(this.gameConfig) === "solo"
+              ? L(
+                  `соло: победителю +${eventRewardOf(this.gameConfig)}; ливнул — без награды`,
+                  `solo: winner gets +${eventRewardOf(this.gameConfig)}; leave and you get nothing`,
+                )
+              : html`${L("победителю", "winner gets")}
+                +${eventRewardOf(this.gameConfig)}`}
           <img
             src=${bloodDiamondIcon}
             alt=""
             style="display:inline-block;width:13px;height:13px;vertical-align:-2px;object-fit:contain"
           />
         </div>
+        ${eveningOf(this.gameConfig) !== null
+          ? html`<div class="text-xs mt-1" style="color:#6b6759">
+              ${L(
+                "Вечерний алмазный — каждый день, два матча подряд: командный и соло (порядок меняется через день).",
+                "The evening diamond runs every day, two matches in a row: teams and solo (the order swaps daily).",
+              )}
+            </div>`
+          : ""}
         <div class="mt-3">
           <copy-button
             .copyText=${this.eventInviteText()}
@@ -1070,6 +1137,7 @@ export class JoinLobbyModal extends BaseModal {
   }
 
   protected onOpen(args?: Record<string, unknown>): void {
+    this.hostHandoff = false;
     const lobbyId = typeof args?.lobbyId === "string" ? args.lobbyId : "";
     const lobbyInfo = args?.lobbyInfo as GameInfo | PublicGameInfo | undefined;
     if (lobbyId) {
@@ -1135,6 +1203,7 @@ export class JoinLobbyModal extends BaseModal {
     this.lobbyCreatorClientID = null;
     this.isConnecting = true;
     this.handledJoinTimeout = false;
+    this.joinStartedAt = Date.now();
     this.startLobbyUpdates();
     if (lobbyInfo) {
       this.updateFromLobby(lobbyInfo);
@@ -1432,6 +1501,14 @@ export class JoinLobbyModal extends BaseModal {
             ${L("за победу", "for the win")}`}
         ></lobby-config-item>`,
       );
+    // terron 23.09: лобби честных ботов (/fair) — сколько ботов будет в матче.
+    if ((c.fairBots?.length ?? 0) > 0)
+      cards.push(
+        html`<lobby-config-item
+          .label=${L("⚔ Честные боты", "⚔ Fair bots")}
+          .value=${`×${c.fairBots!.length}${c.fairBotVersion ? ` · v${c.fairBotVersion}` : ""}`}
+        ></lobby-config-item>`,
+      );
     if (c.maxTimerValue)
       cards.push(
         html`<lobby-config-item
@@ -1587,21 +1664,6 @@ export class JoinLobbyModal extends BaseModal {
       return html``;
     }
 
-    const unitKeys: Record<string, string> = {
-      City: "unit_type.city",
-      Port: "unit_type.port",
-      "Defense Post": "unit_type.defense_post",
-      "SAM Launcher": "unit_type.sam_launcher",
-      "Missile Silo": "unit_type.missile_silo",
-      Warship: "unit_type.warship",
-      Factory: "unit_type.factory",
-      "Atom Bomb": "unit_type.atom_bomb",
-      "Hydrogen Bomb": "unit_type.hydrogen_bomb",
-      MIRV: "unit_type.mirv",
-      "Trade Ship": "player_stats_table.unit.trade",
-      Transport: "player_stats_table.unit.trans",
-      "MIRV Warhead": "player_stats_table.unit.mirvw",
-    };
 
     return html`
       <div
@@ -1614,11 +1676,16 @@ export class JoinLobbyModal extends BaseModal {
         </div>
         <div class="flex flex-wrap gap-2">
           ${this.gameConfig.disabledUnits.map((unit) => {
-            const key = unitKeys[unit];
-            const name = key ? translateText(key) : unit;
+            // terron 30.09: имя из общего реестра (ручная таблица знала
+            // 13 апстримовых типов, ульты шли сырым enum'ом «Walking City»).
+            const key = unitNameI18nKey(unit);
+            const tr = key ? translateText(key) : unit;
+            const name = tr === key ? unit : tr;
+            // ⚠️ text-red-200 — из тёмной темы апстрима: на светлом листе
+            // лобби подписи сливались с розовым фоном (скрин tomsrn 30.09).
             return html`
               <span
-                class="px-2 py-1 bg-red-500/20 text-red-200 text-xs rounded font-bold border border-red-500/30"
+                class="px-2 py-1 bg-red-500/10 text-red-800 text-xs rounded font-bold border border-red-500/30"
               >
                 ${name}
               </span>
@@ -1640,7 +1707,7 @@ export class JoinLobbyModal extends BaseModal {
     if (hc.infiniteGold)
       items.push(
         html`<span
-          class="px-2 py-1 bg-yellow-500/20 text-yellow-200 text-xs rounded font-bold border border-yellow-500/30"
+          class="px-2 py-1 bg-yellow-500/20 text-yellow-800 text-xs rounded font-bold border border-yellow-500/30"
         >
           ${translateText("host_modal.infinite_gold")}
         </span>`,
@@ -1648,7 +1715,7 @@ export class JoinLobbyModal extends BaseModal {
     if (hc.infiniteTroops)
       items.push(
         html`<span
-          class="px-2 py-1 bg-yellow-500/20 text-yellow-200 text-xs rounded font-bold border border-yellow-500/30"
+          class="px-2 py-1 bg-yellow-500/20 text-yellow-800 text-xs rounded font-bold border border-yellow-500/30"
         >
           ${translateText("host_modal.infinite_troops")}
         </span>`,
@@ -1656,7 +1723,7 @@ export class JoinLobbyModal extends BaseModal {
     if (hc.goldMultiplier)
       items.push(
         html`<span
-          class="px-2 py-1 bg-yellow-500/20 text-yellow-200 text-xs rounded font-bold border border-yellow-500/30"
+          class="px-2 py-1 bg-yellow-500/20 text-yellow-800 text-xs rounded font-bold border border-yellow-500/30"
         >
           ${translateText("host_modal.gold_multiplier")}: x${hc.goldMultiplier}
         </span>`,
@@ -1664,7 +1731,7 @@ export class JoinLobbyModal extends BaseModal {
     if (hc.startingGold)
       items.push(
         html`<span
-          class="px-2 py-1 bg-yellow-500/20 text-yellow-200 text-xs rounded font-bold border border-yellow-500/30"
+          class="px-2 py-1 bg-yellow-500/20 text-yellow-800 text-xs rounded font-bold border border-yellow-500/30"
         >
           ${translateText("private_lobby.starting_gold")}:
           ${parseFloat((hc.startingGold / 1_000_000).toPrecision(12))}M
@@ -1833,10 +1900,14 @@ export class JoinLobbyModal extends BaseModal {
     if (this.gameConfig?.gameType !== GameType.Public) return;
     // Старт уже идёт (грузится карта / матч поднялся) — не наше дело.
     if (document.body.classList.contains("in-game")) return;
-    const loading = document.querySelector(
-      "game-starting-modal",
-    ) as HTMLElement | null;
-    if (loading !== null && loading.style.display !== "none") return;
+    // ⚠️ terron 28.09: окно загрузки прячется СВОИМ свойством isVisible, а
+    // style.display у него всегда пустой — прежняя проверка `display !== "none"`
+    // считала загрузку идущей ВСЕГДА, и сторож молча выходил: за 3 дня ни
+    // одного срабатывания при ежедневных вылетах из лобби (репорт tomsrn 28.09).
+    const loading = document.querySelector("game-starting-modal") as
+      | (HTMLElement & { isVisible?: boolean })
+      | null;
+    if (loading?.isVisible === true) return;
     const past = getServerNow(this.serverTimeOffset) - this.lobbyStartAt;
     if (past < JoinLobbyModal.STALE_AFTER_MS) return;
     this.staleHandled = true;
@@ -1850,7 +1921,34 @@ export class JoinLobbyModal extends BaseModal {
         hidden: document.visibilityState === "hidden",
       },
     );
-    // Петля перезагрузок исключена: на лобби разрешаем ровно одну попытку.
+    // ⚠️ terron 01.09: СНАЧАЛА пробуем вернуть игрока в ЖИВОЕ лобби того же
+    // тира. Мастер пересоздаёт событийное лобби сам (после выката, рестарта или
+    // пропущенного слота), и оно уже лежит в живом фиде витрины. Перезагрузка
+    // же просила СТАРЫЙ id, которого больше нет, — и заканчивалась «Game not
+    // found» на главной (репорт владельца 01.09).
+    const tier = this.eventTier();
+    if (tier !== null) {
+      const sel = document.querySelector("game-mode-selector") as {
+        currentLobbyIdFor?: (k: "golden" | "diamond") => string | null;
+      } | null;
+      const fresh = sel?.currentLobbyIdFor?.(tier) ?? null;
+      if (fresh !== null && fresh !== this.currentLobbyId) {
+        reportHealth("lobby_rejoined", tier, {
+          from: this.currentLobbyId,
+          to: fresh,
+        });
+        this.closeAndLeave();
+        document.dispatchEvent(
+          new CustomEvent("join-lobby", {
+            detail: { gameID: fresh, source: "public" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        return;
+      }
+    }
+    // Свежего лобби не нашли — прежний путь: РОВНО одна перезагрузка.
     try {
       const key = `terron-stuck-${this.currentLobbyId}`;
       if (sessionStorage.getItem(key)) return;
@@ -1891,15 +1989,25 @@ export class JoinLobbyModal extends BaseModal {
     ) {
       return;
     }
+    // terron 04.09: ГРЕЙС — ЕЩЁ И ОТ МОМЕНТА ДЖОЙНА. Раньше он шёл только от
+    // startsAt лобби: если витрина отдала устаревший startsAt (лобби уже
+    // стартовало минуту назад) или часы клиента спешат (serverTimeOffset у
+    // публичной карточки нулевой — сравниваем с ЛОКАЛЬНЫМ временем), таймаут
+    // срабатывал В ТУ ЖЕ СЕКУНДУ после клика «играть»: тост «не успели», выброс
+    // из лобби, rage-клики — 89 сессий за 3 дня, по 50 срабатываний подряд у
+    // одного игрока. Джойну положены свои 60 с по монотонным для этой вкладки
+    // часам, что бы ни думала витрина про старт.
+    if (Date.now() - this.joinStartedAt < JOIN_START_GRACE_MS) return;
     this.handledJoinTimeout = true;
     // Телеметрия: «не присоединились к игре вовремя» — сервер не стартовал нас
     // спустя грейс. Серия у ОДНОГО игрока (total≫sessions в сводке) = его
     // клиент системно не может войти в онлайн (жалоба NaG 16.07). Динамический
     // импорт — Health не в критическом пути джойна.
+    // id снимаем ДО отложенного импорта: closeAndLeave ниже обнуляет его
+    // синхронно, и в базу уезжало gameID:"" (все 300 событий за 3 дня).
+    const gameID = this.currentLobbyId;
     void import("./Health").then(({ reportHealth }) =>
-      reportHealth("join_timeout", "grace_expired", {
-        gameID: this.currentLobbyId,
-      }),
+      reportHealth("join_timeout", "grace_expired", { gameID }),
     );
     window.dispatchEvent(
       new CustomEvent("show-message", {
@@ -2057,18 +2165,18 @@ export class JoinLobbyModal extends BaseModal {
     const ctl = new AbortController();
     const timer = window.setTimeout(() => ctl.abort(), ms);
     try {
-      return await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        signal: ctl.signal,
-      });
+      // ⚠️ БЕЗ Content-Type: у GET нет тела, а этот заголовок делает запрос
+      // «непростым» → браузер шлёт preflight, и на чужом origin (бандл у
+      // площадки) проверка лобби рушилась о CORS, а за ней и вход в матч.
+      // Та же грабля, что была у `/me/presence/leave` 26.08.
+      return await fetch(url, { method: "GET", signal: ctl.signal });
     } finally {
       clearTimeout(timer);
     }
   }
 
   private async checkActiveLobby(lobbyId: string): Promise<boolean> {
-    const url = `/${ClientEnv.workerPath(lobbyId)}/api/game/${lobbyId}/exists`;
+    const url = `${gameOrigin()}/${ClientEnv.workerPath(lobbyId)}/api/game/${lobbyId}/exists`;
 
     const response = await this.fetchWithTimeout(url);
 

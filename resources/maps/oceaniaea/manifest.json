@@ -1,0 +1,196 @@
+{
+  "name": "Oceania (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        489,
+        809
+      ],
+      "name": "Australia",
+      "flag": "au"
+    },
+    {
+      "coordinates": [
+        901,
+        964
+      ],
+      "name": "New Zealand",
+      "flag": "nz"
+    },
+    {
+      "coordinates": [
+        392,
+        484
+      ],
+      "name": "Timor Leste",
+      "flag": "tl"
+    },
+    {
+      "coordinates": [
+        211,
+        397
+      ],
+      "name": "Indonesia",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        262,
+        285
+      ],
+      "name": "Brunei",
+      "flag": "bn"
+    },
+    {
+      "coordinates": [
+        136,
+        332
+      ],
+      "name": "Singapore",
+      "flag": "sg"
+    },
+    {
+      "coordinates": [
+        105,
+        268
+      ],
+      "name": "Malaysia",
+      "flag": "my"
+    },
+    {
+      "coordinates": [
+        113,
+        131
+      ],
+      "name": "Thailand",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        61,
+        26
+      ],
+      "name": "Myanmar",
+      "flag": "mm"
+    },
+    {
+      "coordinates": [
+        160,
+        178
+      ],
+      "name": "Cambodia",
+      "flag": "kh"
+    },
+    {
+      "coordinates": [
+        194,
+        122
+      ],
+      "name": "Vietnam",
+      "flag": "vn"
+    },
+    {
+      "coordinates": [
+        137,
+        48
+      ],
+      "name": "Laos",
+      "flag": "la"
+    },
+    {
+      "coordinates": [
+        272,
+        21
+      ],
+      "name": "Hong Kong",
+      "flag": "hk"
+    },
+    {
+      "coordinates": [
+        346,
+        10
+      ],
+      "name": "Taiwan",
+      "flag": "tw"
+    },
+    {
+      "coordinates": [
+        382,
+        227
+      ],
+      "name": "Philippines",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        564,
+        454
+      ],
+      "name": "Papua New Guinea",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        764,
+        502
+      ],
+      "name": "Solomon Islands",
+      "flag": "sb"
+    },
+    {
+      "coordinates": [
+        828,
+        678
+      ],
+      "name": "New Caledonia",
+      "flag": "nc"
+    },
+    {
+      "coordinates": [
+        963,
+        624
+      ],
+      "name": "Fiji",
+      "flag": "fj"
+    },
+    {
+      "coordinates": [
+        1072,
+        561
+      ],
+      "name": "Samoa",
+      "flag": "ws"
+    },
+    {
+      "coordinates": [
+        1321,
+        620
+      ],
+      "name": "Cook Islands",
+      "flag": "ck"
+    },
+    {
+      "coordinates": [
+        1252,
+        65
+      ],
+      "name": "Hawaii",
+      "flag": "Hawaii"
+    }
+  ],
+  "map": {
+    "width": 1784,
+    "height": 1116,
+    "num_land_tiles": 193025
+  },
+  "map4x": {
+    "width": 892,
+    "height": 558,
+    "num_land_tiles": 45895
+  },
+  "map16x": {
+    "width": 446,
+    "height": 279,
+    "num_land_tiles": 10756
+  }
+}

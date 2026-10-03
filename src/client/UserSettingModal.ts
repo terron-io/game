@@ -1,6 +1,12 @@
 import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { formatKeyForDisplay, L, translateText } from "../client/Utils";
+import {
+  formatKeyForDisplay,
+  L,
+  onPlatformSurface,
+  translateText,
+} from "../client/Utils";
+import { ALL_BUILD_KEYS } from "../core/game/BuildSlots";
 import { getDefaultKeybinds, UserSettings } from "../core/game/UserSettings";
 import "./AccountSettings";
 import "./components/baseComponents/setting/SettingKeybind";
@@ -178,7 +184,10 @@ export class UserSettingModal extends BaseModal {
       return;
     }
 
-    const key = e.key.toLowerCase();
+    // terron 04.09: у синтетических keydown (IME, автозаполнение, некоторые
+    // Android-клавиатуры) e.key отсутствует — падало необработанным.
+    const key = (e.key ?? "").toLowerCase();
+    if (key === "") return;
     const nextSequence = [...this.keySequence, key].slice(-4);
     this.keySequence = nextSequence;
 
@@ -311,7 +320,13 @@ export class UserSettingModal extends BaseModal {
     // должно. На сайте в браузере вкладка остаётся.
     const tabs = [
       { key: "account", label: L("Аккаунт", "Account") },
-      { key: "petridish", label: L("Чашка Петри", "Petri Dish") },
+      // terron 08.09: ВНУТРИ ПЛОЩАДКИ ВКЛАДКИ «ЧАШКА ПЕТРИ» НЕТ. Это привязка к
+      // ЧУЖОЙ игре (petridish.pw) — модерация ВК прямо спросила «о какой игре
+      // идёт речь?», а упоминание стороннего проекта на витрине площадки
+      // читается как реклама. На сайте вкладка остаётся.
+      ...(onPlatformSurface()
+        ? []
+        : [{ key: "petridish", label: L("Чашка Петри", "Petri Dish") }]),
       { key: "basic", label: translateText("user_setting.tab_basic") },
       ...(isNativeApp()
         ? []
@@ -408,126 +423,19 @@ export class UserSettingModal extends BaseModal {
         ${translateText("user_setting.build_controls")}
       </h2>
 
-      <setting-keybind
-        action="buildCity"
-        label=${translateText("user_setting.build_city")}
-        description=${translateText("user_setting.build_city_desc")}
-        defaultKey=${this.defaultKeybinds.buildCity}
-        .value=${this.getKeyValue("buildCity")}
-        .display=${this.getKeyChar("buildCity")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildFactory"
-        label=${translateText("user_setting.build_factory")}
-        description=${translateText("user_setting.build_factory_desc")}
-        defaultKey=${this.defaultKeybinds.buildFactory}
-        .value=${this.getKeyValue("buildFactory")}
-        .display=${this.getKeyChar("buildFactory")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildPort"
-        label=${translateText("user_setting.build_port")}
-        description=${translateText("user_setting.build_port_desc")}
-        defaultKey=${this.defaultKeybinds.buildPort}
-        .value=${this.getKeyValue("buildPort")}
-        .display=${this.getKeyChar("buildPort")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildDefensePost"
-        label=${translateText("user_setting.build_defense_post")}
-        description=${translateText("user_setting.build_defense_post_desc")}
-        defaultKey=${this.defaultKeybinds.buildDefensePost}
-        .value=${this.getKeyValue("buildDefensePost")}
-        .display=${this.getKeyChar("buildDefensePost")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildMissileSilo"
-        label=${translateText("user_setting.build_missile_silo")}
-        description=${translateText("user_setting.build_missile_silo_desc")}
-        defaultKey=${this.defaultKeybinds.buildMissileSilo}
-        .value=${this.getKeyValue("buildMissileSilo")}
-        .display=${this.getKeyChar("buildMissileSilo")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildSamLauncher"
-        label=${translateText("user_setting.build_sam_launcher")}
-        description=${translateText("user_setting.build_sam_launcher_desc")}
-        defaultKey=${this.defaultKeybinds.buildSamLauncher}
-        .value=${this.getKeyValue("buildSamLauncher")}
-        .display=${this.getKeyChar("buildSamLauncher")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildWarship"
-        label=${translateText("user_setting.build_warship")}
-        description=${translateText("user_setting.build_warship_desc")}
-        defaultKey=${this.defaultKeybinds.buildWarship}
-        .value=${this.getKeyValue("buildWarship")}
-        .display=${this.getKeyChar("buildWarship")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildAtomBomb"
-        label=${translateText("user_setting.build_atom_bomb")}
-        description=${translateText("user_setting.build_atom_bomb_desc")}
-        defaultKey=${this.defaultKeybinds.buildAtomBomb}
-        .value=${this.getKeyValue("buildAtomBomb")}
-        .display=${this.getKeyChar("buildAtomBomb")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildHydrogenBomb"
-        label=${translateText("user_setting.build_hydrogen_bomb")}
-        description=${translateText("user_setting.build_hydrogen_bomb_desc")}
-        defaultKey=${this.defaultKeybinds.buildHydrogenBomb}
-        .value=${this.getKeyValue("buildHydrogenBomb")}
-        .display=${this.getKeyChar("buildHydrogenBomb")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildAirport"
-        label=${translateText("user_setting.build_airport")}
-        description=${translateText("user_setting.build_airport_desc")}
-        defaultKey=${this.defaultKeybinds.buildAirport}
-        .value=${this.getKeyValue("buildAirport")}
-        .display=${this.getKeyChar("buildAirport")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <!-- terron: НЕФТЯНАЯ ВЫШКА — цифры по умолчанию нет, бинд назначается тут. -->
-      <setting-keybind
-        action="buildOilRig"
-        label=${translateText("user_setting.build_oil_rig")}
-        description=${translateText("user_setting.build_oil_rig_desc")}
-        defaultKey=${this.defaultKeybinds.buildOilRig}
-        .value=${this.getKeyValue("buildOilRig")}
-        .display=${this.getKeyChar("buildOilRig")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
-
-      <setting-keybind
-        action="buildMIRV"
-        label=${translateText("user_setting.build_mirv")}
-        description=${translateText("user_setting.build_mirv_desc")}
-        defaultKey=${this.defaultKeybinds.buildMIRV}
-        .value=${this.getKeyValue("buildMIRV")}
-        .display=${this.getKeyChar("buildMIRV")}
-        @change=${this.handleKeybindChange}
-      ></setting-keybind>
+      ${ALL_BUILD_KEYS.map(
+        (b) => html`
+          <setting-keybind
+            action=${b.keybind}
+            label=${translateText(`user_setting.${b.i18n}`)}
+            description=${translateText(`user_setting.${b.i18n}_desc`)}
+            defaultKey=${this.defaultKeybinds[b.keybind]}
+            .value=${this.getKeyValue(b.keybind)}
+            .display=${this.getKeyChar(b.keybind)}
+            @change=${this.handleKeybindChange}
+          ></setting-keybind>
+        `,
+      )}
 
       <h2
         class="text-blue-200 text-xl font-bold mt-8 mb-3 border-b border-white/10 pb-2"

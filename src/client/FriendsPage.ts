@@ -2,8 +2,9 @@ import { html, type TemplateResult } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
 import { getUserMe } from "./Api";
 import { avatarFallback, avatarSrc } from "./Avatar";
-import "./IdentifierInput";
-import type { IdentifierInput } from "./IdentifierInput";
+import { BaseModal } from "./components/BaseModal";
+import { chatIcon } from "./components/ui/ChatIcon";
+import { modalHeader } from "./components/ui/ModalHeader";
 import {
   acceptFriendRequest,
   claimFriendRequests,
@@ -17,8 +18,10 @@ import {
   setFriendMuted,
   withdrawFriendRequest,
 } from "./FriendsApi";
-import { BaseModal } from "./components/BaseModal";
-import { modalHeader } from "./components/ui/ModalHeader";
+import "./IdentifierInput";
+import type { IdentifierInput } from "./IdentifierInput";
+import { siteChatAllowed } from "./SiteChatGate";
+import { siteChat } from "./SiteChatPanel";
 import { confirmDialog, toast } from "./Toast";
 import { L, translateText } from "./Utils";
 
@@ -61,10 +64,7 @@ export class FriendsPage extends BaseModal {
   }
 
   private async reload() {
-    const [f, r] = await Promise.all([
-      fetchFriends(),
-      fetchFriendRequests(),
-    ]);
+    const [f, r] = await Promise.all([fetchFriends(), fetchFriendRequests()]);
     this.friends = f ?? [];
     this.incoming = r?.incoming ?? [];
     this.outgoing = r?.outgoing ?? [];
@@ -149,7 +149,8 @@ export class FriendsPage extends BaseModal {
       class="t-btn"
       style="padding:5px 12px;background:#16a34a;color:#fff;text-decoration:none"
       href="/game/${p.gameID}"
-      title=${(inGame ? L("В игре", "In game") : L("В лобби", "In lobby")) + where}
+      title=${(inGame ? L("В игре", "In game") : L("В лобби", "In lobby")) +
+      where}
       >${label}</a
     >`;
   }
@@ -180,19 +181,33 @@ export class FriendsPage extends BaseModal {
           alt=""
           style="width:34px;height:34px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(0,0,0,.12)"
           @error=${avatarFallback(f.slug ?? f.id, 64)}
-      />
+        />
         <div style="min-width:0">
-          <div style="font-weight:700;color:var(--t-ink,#2b2a24);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <div
+            style="font-weight:700;color:var(--t-ink,#2b2a24);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          >
             ${f.name}
           </div>
           <div style="font-size:12px;color:#6b7280">${handle}</div>
         </div>
       </a>
       ${this.presenceBtn(f)}
+      ${siteChatAllowed()
+        ? html`<button
+            class="t-btn ghost friend-write-btn"
+            style="padding:5px 10px"
+            title=${L("Написать", "Message")}
+            @click=${() => siteChat()?.openDmWith(f.slug ?? f.id)}
+          >
+            ${chatIcon(16)}
+          </button>`
+        : ""}
       <button
         class="t-btn ghost"
         style="padding:5px 10px"
-        title=${f.muted ? L("Включить уведомления", "Unmute") : L("Заглушить уведомления", "Mute")}
+        title=${f.muted
+          ? L("Включить уведомления", "Unmute")
+          : L("Заглушить уведомления", "Mute")}
         @click=${() => this.toggleMute(f)}
       >
         ${f.muted ? "🔕" : "🔔"}
@@ -237,7 +252,10 @@ export class FriendsPage extends BaseModal {
       <!-- добавить друга (общий компонент, см. friends.md) -->
       <div style="margin-bottom:16px">
         <identifier-input
-          .placeholder=${L("Ник, @slug, id или ссылка…", "Name, @slug, id or link…")}
+          .placeholder=${L(
+            "Ник, @slug, id или ссылка…",
+            "Name, @slug, id or link…",
+          )}
           .buttonLabel=${L("Добавить", "Add")}
           ?disabled=${this.adding}
           @submit=${(e: CustomEvent) => this.add(e.detail.value)}
@@ -315,27 +333,38 @@ export class FriendsPage extends BaseModal {
             </h3>
             <div style="margin-bottom:18px">
               ${this.incoming.map(
-                (r) => html`<div
-                  style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--t-line,rgba(0,0,0,.12));border-radius:10px;margin-bottom:8px;background:var(--t-sheet,#fff)"
-                >
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:700;color:var(--t-ink,#2b2a24)">
-                      ${r.from.name}
-                      <span style="font-weight:400;color:#6b7280;font-size:12px">
-                        ${r.from.slug ? `@${r.from.slug}` : ""}</span
-                      >
+                (r) =>
+                  html`<div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--t-line,rgba(0,0,0,.12));border-radius:10px;margin-bottom:8px;background:var(--t-sheet,#fff)"
+                  >
+                    <div style="flex:1;min-width:0">
+                      <div style="font-weight:700;color:var(--t-ink,#2b2a24)">
+                        ${r.from.name}
+                        <span
+                          style="font-weight:400;color:#6b7280;font-size:12px"
+                        >
+                          ${r.from.slug ? `@${r.from.slug}` : ""}</span
+                        >
+                      </div>
+                      <div style="font-size:12px;color:#9ca3af">
+                        ${this.fmtDate(r.created_at)}
+                      </div>
                     </div>
-                    <div style="font-size:12px;color:#9ca3af">
-                      ${this.fmtDate(r.created_at)}
-                    </div>
-                  </div>
-                  <button class="t-btn" style="padding:5px 12px" @click=${() => this.accept(r.id)}>
-                    ${L("Принять", "Accept")}
-                  </button>
-                  <button class="t-btn ghost" style="padding:5px 12px" @click=${() => this.decline(r.id)}>
-                    ${L("Отклонить", "Decline")}
-                  </button>
-                </div>`,
+                    <button
+                      class="t-btn"
+                      style="padding:5px 12px"
+                      @click=${() => this.accept(r.id)}
+                    >
+                      ${L("Принять", "Accept")}
+                    </button>
+                    <button
+                      class="t-btn ghost"
+                      style="padding:5px 12px"
+                      @click=${() => this.decline(r.id)}
+                    >
+                      ${L("Отклонить", "Decline")}
+                    </button>
+                  </div>`,
               )}
             </div>`
         : ""}
@@ -345,28 +374,32 @@ export class FriendsPage extends BaseModal {
             </h3>
             <div>
               ${this.outgoing.map(
-                (r) => html`<div
-                  style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--t-line,rgba(0,0,0,.12));border-radius:10px;margin-bottom:8px;background:var(--t-sheet,#fff)"
-                >
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:700;color:var(--t-ink,#2b2a24)">
-                      ${r.from.name}
-                      <span style="font-weight:400;color:#6b7280;font-size:12px">
-                        ${r.from.slug ? `@${r.from.slug}` : ""}</span
-                      >
-                    </div>
-                    <div style="font-size:12px;color:#9ca3af">
-                      ${L("Отправлено", "Sent")} · ${this.fmtDate(r.created_at)}
-                    </div>
-                  </div>
-                  <button
-                    class="t-btn ghost"
-                    style="padding:5px 12px;white-space:nowrap"
-                    @click=${() => this.withdraw(r.id)}
+                (r) =>
+                  html`<div
+                    style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--t-line,rgba(0,0,0,.12));border-radius:10px;margin-bottom:8px;background:var(--t-sheet,#fff)"
                   >
-                    ${L("Отозвать", "Withdraw")}
-                  </button>
-                </div>`,
+                    <div style="flex:1;min-width:0">
+                      <div style="font-weight:700;color:var(--t-ink,#2b2a24)">
+                        ${r.from.name}
+                        <span
+                          style="font-weight:400;color:#6b7280;font-size:12px"
+                        >
+                          ${r.from.slug ? `@${r.from.slug}` : ""}</span
+                        >
+                      </div>
+                      <div style="font-size:12px;color:#9ca3af">
+                        ${L("Отправлено", "Sent")} ·
+                        ${this.fmtDate(r.created_at)}
+                      </div>
+                    </div>
+                    <button
+                      class="t-btn ghost"
+                      style="padding:5px 12px;white-space:nowrap"
+                      @click=${() => this.withdraw(r.id)}
+                    >
+                      ${L("Отозвать", "Withdraw")}
+                    </button>
+                  </div>`,
               )}
             </div>`
         : ""}

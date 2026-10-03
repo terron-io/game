@@ -254,6 +254,15 @@ export class DefenseCoveragePass {
 
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    // terron 12.09: прикрепляем заново — под ANGLE Metal FBO может молча
+    // перестать писать (см. TileScatterPass.flush).
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.coverageTex,
+      0,
+    );
     gl.viewport(0, 0, this.mapW, this.mapH);
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 0);

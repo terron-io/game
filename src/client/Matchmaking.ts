@@ -2,11 +2,12 @@ import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { ClientEnv } from "src/client/ClientEnv";
 import { UserMeResponse } from "../core/ApiSchemas";
-import { getUserMe, hasLinkedAccount } from "./Api";
+import { getUserMe, isSignedIn } from "./Api";
 import { getPlayToken } from "./Auth";
 import { BaseModal } from "./components/BaseModal";
 import "./components/Difficulties";
 import { modalHeader } from "./components/ui/ModalHeader";
+import { gameOrigin } from "./GameHost";
 import { JoinLobbyEvent } from "./Main";
 import { translateText } from "./Utils";
 
@@ -164,12 +165,11 @@ export class MatchmakingModal extends BaseModal {
     if (this.gameID === null) {
       return;
     }
-    const url = `/${ClientEnv.workerPath(this.gameID)}/api/game/${this.gameID}/exists`;
+    const url = `${gameOrigin()}/${ClientEnv.workerPath(this.gameID)}/api/game/${this.gameID}/exists`;
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
+    // ⚠️ Без Content-Type — на GET он лишний и включает preflight (см.
+    // JoinLobbyModal.fetchWithTimeout).
+    const response = await fetch(url, { method: "GET" });
 
     const gameInfo = await response.json();
 
@@ -216,7 +216,7 @@ export class MatchmakingButton extends LitElement {
       const customEvent = event as CustomEvent;
       if (customEvent.detail) {
         const userMeResponse = customEvent.detail as UserMeResponse | false;
-        this.isLoggedIn = hasLinkedAccount(userMeResponse);
+        this.isLoggedIn = isSignedIn(userMeResponse);
       }
     });
   }

@@ -5,12 +5,20 @@ import { decodePatternData } from "../core/PatternDecoder";
 import { PlayerType, UnitType } from "../core/game/Game";
 import { GameView } from "../core/game/GameView";
 import { flagImageUrl, flagImageUrlSync } from "./Cosmetics";
+import { fairBotCosmetics } from "./FairBotCosmetics";
+import { perfHud } from "./PerfHud";
+import { currentVisualStyleId } from "./VisualStyleStore";
 import { uploadFrameData } from "./render/frame/Upload";
 import {
   PlayerStatic,
   SpawnCenter,
   GameView as WebGLGameView,
 } from "./render/gl";
+import {
+  gradePlayerRgb,
+  visualStyleById,
+  type VisualStyleId,
+} from "./render/gl/VisualStyles";
 
 const PALETTE_SIZE = 4096;
 
@@ -53,6 +61,14 @@ export class WebGLFrameBuilder {
   private localPlayerSmallID = 0;
   // Scratch buffer for terrain-delta uploads (parallel to the refs list).
   private terrainDeltaBytes: Uint8Array = new Uint8Array(0);
+  /**
+   * terron (визуальные стили): стиль красит НЕ ТОЛЬКО землю. Цвета игроков —
+   * общий источник для территории, границ, юнитов, зданий и ников: без грейда
+   * стилизованная карта соседствовала бы с родными кислотными юнитами, и стиль
+   * разваливался бы надвое. Смена стиля на лету = перезапись ВСЕЙ палитры
+   * (у игроков цвет уже записан, задним числом его никто не тронет).
+   */
+  private paletteStyleId: VisualStyleId = currentVisualStyleId();
 
   constructor(private readonly view: WebGLGameView) {
     this.palette = new Float32Array(PALETTE_SIZE * 2 * 4);
@@ -64,6 +80,17 @@ export class WebGLFrameBuilder {
    * Дособрать ленивые GL-пассы в простое (зовётся после первого хода).
    * Пробрасывает вызов в GL-вид — раннер держит билдер, а не вид напрямую.
    */
+  /**
+   * terron 12.09: полная перезаливка территории после сбоя ингеста. Тайлы
+   * уезжают в рендер только ДЕЛЬТОЙ хода: упал ингест — дельта этого хода
+   * потеряна навсегда, «пересинхронизации от полного состояния» для них нет.
+   * Зовётся раннером один раз на первом удачном ходе после сбоя.
+   */
+  resyncTiles(gameView: GameView): void {
+    const f = gameView.frameData();
+    this.view.uploadTileAndTrailState(f.tileState, f.trailState);
+  }
+
   warmLazyPasses(): void {
     this.view.warmLazyPasses();
   }
@@ -116,16 +143,42 @@ export class WebGLFrameBuilder {
 
   update(gameView: GameView): void {
     const t0 = performance.now();
+    // terron 04.09: каждый шаг замеряем — худший за матч уезжает в perf_summary
+    // (поле wi), иначе «медленный ингест» не называет виновника. Десять
+    // performance.now() на тик — копейки.
+    let tStep = t0;
+    let worstMs = 0;
+    let worstStep = "";
+    const lap = (name: string): void => {
+      const now = performance.now();
+      const d = now - tStep;
+      tStep = now;
+      if (d > worstMs) {
+        worstMs = d;
+        worstStep = name;
+      }
+    };
     this.syncPlayers(gameView);
+    lap("players");
     this.syncPlayerSpawns(gameView);
+    lap("spawns");
     this.syncLocalPlayer(gameView);
+    lap("local");
     this.syncSpawnOverlay(gameView);
+    lap("spawnOverlay");
     this.syncTerrainDeltas(gameView);
+    lap("terrain");
     this.syncFog(gameView);
+    lap("fog");
     this.syncSatCastPings(gameView);
+    lap("satPings");
     this.syncFortShots(gameView);
+    lap("fortShots");
     this.syncClosedCountries(gameView);
+    lap("closed");
     uploadFrameData(this.view, gameView.frameData());
+    lap("upload");
+    perfHud.noteIngest(worstStep, worstMs, gameView.ticks());
     const ms = Math.round(performance.now() - t0);
     if (ms > 800 && !this.slowIngestReported) {
       this.slowIngestReported = true;
@@ -172,7 +225,7 @@ export class WebGLFrameBuilder {
   }
 
   /**
-   * terron: «Небо наше» — пульс-кольца на СОБИРАЮЩЕЙСЯ ракете «Сбить спутники»
+   * terron: «Небо наше» — пульс-кольца на СОБИРАЮЩЕЙСЯ ракете «Небо наше» (бывш. «Сбить спутники»)
    * (реворк 21.08: телеграф переехал со штаба на носитель-каст): маркер «вот
    * кого сносить» всем. Носитель весь свой век в underConstruction, поэтому
    * пингуем любой живой — маркер горит всю сборку, до запуска.
@@ -328,6 +381,7 @@ export class WebGLFrameBuilder {
   }
 
   private syncPlayers(gameView: GameView): void {
+    this.repaintPaletteIfStyleChanged(gameView);
     if (!this.skinsInitialized) {
       this.skinsInitialized = true;
       const urls = new Set<string>();
@@ -352,6 +406,17 @@ export class WebGLFrameBuilder {
           urls.add(r);
           classify(r, cs.mode);
         }
+      }
+      // terron 23.09: скины честных ботов — из конфига, а не из списка игроков:
+      // ботов в матч добавляет их исполнение на первом тике, и к моменту сборки
+      // атласа их может ещё не быть (скин вне атласа setPlayerSkin игнорирует).
+      for (const [, c] of fairBotCosmetics(
+        gameView.config().gameConfig().fairBots,
+      )) {
+        if (!c.customSkin) continue;
+        const r = resolveSkinUrl(c.customSkin.url);
+        urls.add(r);
+        classify(r, c.customSkin.mode);
       }
       // terron: зарегистрировать URL активного/dev-скина в атласе (фиксируется тут).
       const dev = this.getDevSkin();
@@ -463,18 +528,46 @@ export class WebGLFrameBuilder {
     fill: Colord,
     border: Colord,
   ): void {
+    const style = visualStyleById(this.paletteStyleId);
     const fillRgba = fill.toRgb();
+    const [fr, fg, fb] = gradePlayerRgb(
+      fillRgba.r,
+      fillRgba.g,
+      fillRgba.b,
+      style.players,
+    );
     const fillOff = smallID * 4;
-    this.palette[fillOff] = fillRgba.r / 255;
-    this.palette[fillOff + 1] = fillRgba.g / 255;
-    this.palette[fillOff + 2] = fillRgba.b / 255;
-    this.palette[fillOff + 3] = 150 / 255;
+    this.palette[fillOff] = fr / 255;
+    this.palette[fillOff + 1] = fg / 255;
+    this.palette[fillOff + 2] = fb / 255;
+    this.palette[fillOff + 3] = style.territoryAlpha;
 
     const borderRgba = border.toRgb();
+    const [br, bg, bb] = gradePlayerRgb(
+      borderRgba.r,
+      borderRgba.g,
+      borderRgba.b,
+      style.players,
+    );
     const borderOff = PALETTE_SIZE * 4 + smallID * 4;
-    this.palette[borderOff] = borderRgba.r / 255;
-    this.palette[borderOff + 1] = borderRgba.g / 255;
-    this.palette[borderOff + 2] = borderRgba.b / 255;
+    this.palette[borderOff] = br / 255;
+    this.palette[borderOff + 1] = bg / 255;
+    this.palette[borderOff + 2] = bb / 255;
     this.palette[borderOff + 3] = 1.0;
+  }
+
+  /**
+   * Стиль сменился — перекрасить ВСЮ палитру и залить её на GPU.
+   * Зовётся из тика: список игроков есть только тут, а хранить их цвета
+   * второй копией значило бы завести второй источник правды.
+   */
+  private repaintPaletteIfStyleChanged(gameView: GameView): void {
+    const id = currentVisualStyleId();
+    if (id === this.paletteStyleId) return;
+    this.paletteStyleId = id;
+    for (const p of gameView.players()) {
+      this.writePaletteEntry(p.smallID(), p.territoryColor(), p.borderColor());
+    }
+    this.view.updatePalette(this.palette);
   }
 }

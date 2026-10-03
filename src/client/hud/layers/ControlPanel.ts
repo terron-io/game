@@ -16,6 +16,43 @@ const goldCoinIcon = assetUrl("images/GoldCoinIcon.svg");
 const soldierIcon = assetUrl("images/SoldierIcon.svg");
 const swordIcon = assetUrl("images/SwordIcon.svg");
 
+/**
+ * terron 12.09: доля атаки подкрашивается по риску — решение владельца после
+ * теста, где он две минуты атаковал на 1 % и решил, что «не может расти»:
+ *  • меньше 5 % — красный: атака почти ничего не отправляет;
+ *  • больше 50 % — жёлтый: заметно оголяешь тыл;
+ *  • больше 70 % — красный, как было.
+ * Одна функция на обе раскладки (десктоп и телефон) — раньше порог «> 0.7» был
+ * записан в пяти местах.
+ */
+export type AttackRatioTone = "low" | "normal" | "high" | "max";
+export function attackRatioTone(ratio: number): AttackRatioTone {
+  if (ratio > 0.7) return "max";
+  if (ratio > 0.5) return "high";
+  // 5 % включительно (владелец 13.09). Ползунок шагает целыми процентами,
+  // сравниваем по ним — 0.05 в float мог прийти как 0.05000000000000001.
+  if (Math.round(ratio * 100) <= 5) return "low";
+  return "normal";
+}
+const ATTACK_TONE_BADGE: Record<AttackRatioTone, string> = {
+  low: "border-red-500 text-red-400",
+  normal: "border-gray-600 text-white",
+  high: "border-yellow-400 text-yellow-300",
+  max: "border-red-500 text-red-400",
+};
+const ATTACK_TONE_ACCENT: Record<AttackRatioTone, string> = {
+  low: "accent-red-500",
+  normal: "accent-aquarius",
+  high: "accent-yellow-400",
+  max: "accent-red-500",
+};
+const ATTACK_TONE_TEXT: Record<AttackRatioTone, string> = {
+  low: "text-red-400",
+  normal: "text-white",
+  high: "text-yellow-300",
+  max: "text-red-400",
+};
+
 @customElement("control-panel")
 export class ControlPanel extends LitElement implements Controller {
   public game: GameView;
@@ -209,11 +246,17 @@ export class ControlPanel extends LitElement implements Controller {
     }
     const first = this._stolenHist[0];
     const span = (now - first.t) / 1000;
-    this._ministryRate = span > 0.5 ? Math.max(0, (stolen - first.v) / span) : 0;
+    this._ministryRate =
+      span > 0.5 ? Math.max(0, (stolen - first.v) / span) : 0;
   }
 
   onAttackRatioChange(newRatio: number) {
-    this.uiState.attackRatio = newRatio;
+    // ⚠️ 01.09 (боевой хелс, «this.uiState is undefined» у ползунка атаки):
+    // элемент живёт в index.html и может принять ввод РАНЬШЕ, чем GameRenderer
+    // раздал слоям uiState. Раньше это роняло обработчик — ползунок замирал
+    // прямо под пальцем. Потерять тут нечего: доля хранится и в самом слое, и в
+    // настройках, а init() перепишет uiState, как только он появится.
+    if (this.uiState !== undefined) this.uiState.attackRatio = newRatio;
     // terron: запоминаем последний выбранный % атаки → дефолт следующей игры/вкладки.
     this.userSettings.setAttackRatio(newRatio);
   }
@@ -408,13 +451,12 @@ export class ControlPanel extends LitElement implements Controller {
           <span class="tabular-nums">${renderNumber(this._gold)}</span>
         </div>
       </div>
-      <!-- Row 2: attack ratio | slider. terron: >70% — красным (риск оголить тыл). -->
+      <!-- Row 2: attack ratio | slider. terron: цвет по риску — attackRatioTone(). -->
       <div class="flex items-center gap-1.5" translate="no">
         <div
-          class="flex items-center gap-1 shrink-0 border rounded-md px-1 py-0.5 text-sm font-bold cursor-pointer w-[8rem] ${this
-            .attackRatio > 0.7
-            ? "border-red-500 text-red-400"
-            : "border-gray-600 text-white"}"
+          class="flex items-center gap-1 shrink-0 border rounded-md px-1 py-0.5 text-sm font-bold cursor-pointer w-[8rem] ${ATTACK_TONE_BADGE[
+            attackRatioTone(this.attackRatio)
+          ]}"
         >
           <img
             src=${swordIcon}
@@ -438,9 +480,9 @@ export class ControlPanel extends LitElement implements Controller {
           .value=${String(Math.round(this.attackRatio * 100))}
           @input=${(e: Event) => this.handleRatioSliderInput(e)}
           @pointerup=${(e: Event) => this.handleRatioSliderPointerUp(e)}
-          class="flex-1 h-1.5 cursor-pointer ${this.attackRatio > 0.7
-            ? "accent-red-500"
-            : "accent-aquarius"}"
+          class="flex-1 h-1.5 cursor-pointer ${ATTACK_TONE_ACCENT[
+            attackRatioTone(this.attackRatio)
+          ]}"
         />
       </div>
     `;
@@ -484,13 +526,13 @@ export class ControlPanel extends LitElement implements Controller {
             style="filter: brightness(0) invert(1);"
           />
           <span
-            class="text-xs font-bold tabular-nums ${this.attackRatio > 0.7
-              ? "text-red-400"
-              : "text-white"}"
+            class="text-xs font-bold tabular-nums ${ATTACK_TONE_TEXT[
+              attackRatioTone(this.attackRatio)
+            ]}"
             >${(this.attackRatio * 100).toFixed(0)}%</span
           >
         </div>
-        <!-- Attack ratio slider. terron: >70% — красным. -->
+        <!-- Attack ratio slider. terron: цвет по риску — attackRatioTone(). -->
         <div class="flex-1" translate="no">
           <input
             type="range"
@@ -499,9 +541,9 @@ export class ControlPanel extends LitElement implements Controller {
             .value=${String(Math.round(this.attackRatio * 100))}
             @input=${(e: Event) => this.handleRatioSliderInput(e)}
             @pointerup=${(e: Event) => this.handleRatioSliderPointerUp(e)}
-            class="w-full h-1.5 cursor-pointer ${this.attackRatio > 0.7
-              ? "accent-red-500"
-              : "accent-aquarius"}"
+            class="w-full h-1.5 cursor-pointer ${ATTACK_TONE_ACCENT[
+              attackRatioTone(this.attackRatio)
+            ]}"
           />
         </div>
       </div>

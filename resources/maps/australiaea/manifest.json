@@ -1,0 +1,76 @@
+{
+  "name": "Australia (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        431,
+        843
+      ],
+      "name": "Western Australia",
+      "flag": "aus_wesaus"
+    },
+    {
+      "coordinates": [
+        860,
+        403
+      ],
+      "name": "Northern Territory",
+      "flag": "aus_norter"
+    },
+    {
+      "coordinates": [
+        824,
+        1063
+      ],
+      "name": "South Australia",
+      "flag": "aus_souaus"
+    },
+    {
+      "coordinates": [
+        1242,
+        1394
+      ],
+      "name": "Victoria",
+      "flag": "aus_vic"
+    },
+    {
+      "coordinates": [
+        1315,
+        654
+      ],
+      "name": "Queensland",
+      "flag": "aus_quelan"
+    },
+    {
+      "coordinates": [
+        1391,
+        1184
+      ],
+      "name": "New South Wales",
+      "flag": "aus_nsw"
+    },
+    {
+      "coordinates": [
+        1360,
+        1561
+      ],
+      "name": "Tasmania",
+      "flag": "aus_tas"
+    }
+  ],
+  "map": {
+    "width": 1780,
+    "height": 1680,
+    "num_land_tiles": 1277320
+  },
+  "map4x": {
+    "width": 890,
+    "height": 840,
+    "num_land_tiles": 317575
+  },
+  "map16x": {
+    "width": 445,
+    "height": 420,
+    "num_land_tiles": 78641
+  }
+}

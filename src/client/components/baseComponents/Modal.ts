@@ -83,9 +83,15 @@ export class OModal extends LitElement {
 
   private renderTabs() {
     return html`
+      <!-- terron 08.09: полоса вкладок ОБЯЗАНА скроллиться. Было flex
+           justify-center без overflow: на узком экране (мобильный ВК) вкладки
+           вылезали за ОБА края и до крайних было не добраться — «заголовки
+           обрезаются и не скроллятся» (модерация ВК). Внешний слой скроллит,
+           внутренний w-max mx-auto центрирует, пока вкладки влезают. -->
+      <div class="overflow-x-auto border-b border-white/10 shrink-0">
       <div
         role="tablist"
-        class="flex justify-center border-b border-white/10 px-4 lg:px-6 gap-1 shrink-0"
+        class="flex w-max mx-auto px-4 lg:px-6 gap-1"
       >
         ${this.tabs.map((tab) => {
           const active = this.activeTab === tab.key;
@@ -95,7 +101,7 @@ export class OModal extends LitElement {
               role="tab"
               data-key=${tab.key}
               aria-selected=${active}
-              class="px-4 py-3 text-sm font-bold uppercase tracking-wider transition-all relative cursor-pointer ${active
+              class="px-4 py-3 text-sm font-bold uppercase tracking-wider transition-all relative cursor-pointer shrink-0 whitespace-nowrap ${active
                 ? "text-aquarius"
                 : ""}"
               style=${active
@@ -112,6 +118,7 @@ export class OModal extends LitElement {
             </button>
           `;
         })}
+      </div>
       </div>
     `;
   }

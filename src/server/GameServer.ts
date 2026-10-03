@@ -4,8 +4,13 @@ import WebSocket from "ws";
 import { z } from "zod";
 import { isAdminRole } from "../core/ApiSchemas";
 import { GameEnv } from "../core/configuration/Config";
-import { eventRewardPts } from "../core/configuration/TerronTuning";
 import {
+  eveningRewardPts,
+  eventRewardPts,
+  TERRON_EVENING_TEAM_CAP_PTS,
+} from "../core/configuration/TerronTuning";
+import {
+  GameMode,
   GameType,
   isLockedUltimate,
   LOCKED_ULTIMATES,
@@ -40,6 +45,7 @@ import {
   profileByPid,
   removePublicLobby,
   reportDeath,
+  reportMatchClients,
   reportPlayerByPid,
 } from "./Archive";
 import { Client } from "./Client";
@@ -52,7 +58,13 @@ import {
   persistMeta,
   persistTurn,
 } from "./GamePersistence";
-import { disabledUltsFromEnv, ServerEnv } from "./ServerEnv";
+import { goldenRewardFor } from "../client/GoldenReward";
+import {
+  capEventReward,
+  disabledUltsFromEnv,
+  eventRewardMax,
+  ServerEnv,
+} from "./ServerEnv";
 export enum GamePhase {
   Lobby = "LOBBY",
   Active = "ACTIVE",
@@ -210,6 +222,10 @@ export class GameServer {
   // gameStartInfo unless disableClanTags is set, in which case clan tags
   // are stripped from players. Archive uses the original gameStartInfo.
   private wireGameStartInfo!: GameStartInfo;
+  // terron 28.09: отпечаток ядра симуляции, на котором матч создан. Живёт в
+  // снимке и переживает рестарт — после выката новой сборки сервер по-прежнему
+  // знает, на КАКОЙ версии идёт этот матч (см. coreHashJson).
+  private coreHash: string | null = ServerEnv.coreHash();
 
   private log: Logger;
 
@@ -268,17 +284,89 @@ export class GameServer {
     if (this.gameConfig.golden && !isEventLobby) {
       this.gameConfig.golden = false;
     }
-    // Тир — производная от типа лобби, а не то, что пришло снаружи: иначе
-    // «золотое» лобби с подсунутым eventTier:"diamond" платило бы по алмазной
-    // ставке.
+    this.applyEventFields();
+    // terron 23.09: честные боты — только от мастера, в лобби /fair, а с 28.09
+    // ещё в золотых и алмазных (плейлист). Пришли откуда-то ещё (хост
+    // приватного лобби, снимок чужой сборки) — снимаем.
+    if (
+      publicGameType !== "fair" &&
+      publicGameType !== "golden" &&
+      publicGameType !== "diamond"
+    ) {
+      this.gameConfig.fairBots = undefined;
+      this.gameConfig.fairBotVersion = undefined;
+    }
+  }
+
+  /**
+   * Тир, вариант и награда события — ПРОИЗВОДНЫЕ от типа лобби, а не то, что
+   * пришло снаружи: иначе «золотое» лобби с подсунутым eventTier:"diamond»
+   * платило бы по алмазной ставке, а подсунутое поле награды — сколько угодно.
+   * terron 26.09: вечерний вариант (eventEvening) ставит мастер под слот; тут
+   * он живёт только у алмазного лобби и только если режим матча ему совпадает.
+   */
+  private applyEventFields(): void {
+    const t = this.publicGameType;
+    const isEventLobby = t === "golden" || t === "diamond";
     this.gameConfig.eventTier = isEventLobby
-      ? (publicGameType as "golden" | "diamond")
+      ? (t as "golden" | "diamond")
       : undefined;
-    // Награда — тоже производная: иначе подсунутым полем обещали бы (и платили)
-    // сколько угодно. Значение берём из тюнинга/окружения этого же сервера.
-    this.gameConfig.eventRewardPts = isEventLobby
-      ? eventRewardPts(publicGameType)
-      : undefined;
+    let evening =
+      t === "diamond" ? (this.gameConfig.eventEvening ?? null) : null;
+    if (evening === "team" && this.gameConfig.gameMode !== GameMode.Team) {
+      evening = null;
+    }
+    if (evening === "solo" && this.gameConfig.gameMode !== GameMode.FFA) {
+      evening = null;
+    }
+    this.gameConfig.eventEvening = evening ?? undefined;
+    const max = eventRewardMax(); // потолок дева (ServerEnv), на проде null
+    // terron 30.09: золотой обещает ТОЧНУЮ сумму по пику лобби (5 + 1 за
+    // соперника с другого IP, до 10); лив её не уменьшает (noteEventPeak).
+    const golden =
+      t === "golden"
+        ? goldenRewardFor(this.eventPeakHumans, eventRewardPts(t))
+        : undefined;
+    this.gameConfig.eventRewardPts = capEventReward(
+      !isEventLobby
+        ? undefined
+        : evening !== null
+          ? eveningRewardPts(evening)
+          : (golden ?? eventRewardPts(t)),
+      max,
+    );
+    // У золотого потолок на человека = то же точное число: по нему API узнаёт
+    // запись нового сервера и платит обещанное, а не пересчитывает по игравшим
+    // (старые записи без поля идут по прежней формуле).
+    this.gameConfig.eventRewardCapPts = capEventReward(
+      evening === "team" ? TERRON_EVENING_TEAM_CAP_PTS : golden,
+      max,
+    );
+  }
+
+  /**
+   * terron 30.09 (владелец): награда золотого — «сколько получит сейчас», а не
+   * вилка 5–10. Считаем ПИК разных IP в лобби (второе окно того же человека не
+   * соперник — то же правило, что у выплаты), и он только растёт: «дошли до 8 —
+   * пусть будет 8», лив не уменьшает. После старта число заморожено в конфиге
+   * матча — его показывает клиент и по нему же платит API.
+   */
+  private eventPeakHumans = 0;
+  private noteEventPeak(): void {
+    if (this.publicGameType !== "golden" || this.hasStarted()) return;
+    const n = new Set(this.activeClients.map((c) => c.ip)).size;
+    if (n <= this.eventPeakHumans) return;
+    this.eventPeakHumans = n;
+    this.applyEventFields();
+  }
+
+  /**
+   * terron 23.09: лобби ПО РАСПИСАНИЮ — событийное (золотое/алмазное) или
+   * лобби честных ботов. У всех них время старта двигает только мастер, а карту
+   * в ожидании не крутим. Награда — отдельный вопрос: её даёт только isGolden().
+   */
+  private isScheduled(): boolean {
+    return this.isGolden() || this.publicGameType === "fair";
   }
 
   /**
@@ -483,6 +571,7 @@ export class GameServer {
     this.websockets.add(client.ws);
     this.persistentIdToClientId.set(client.persistentID, client.clientID);
     this.activeClients.push(client);
+    this.noteEventPeak();
     client.lastPing = Date.now();
     this.markClientDisconnected(client.clientID, false);
     this.allClients.set(client.clientID, client);
@@ -534,6 +623,7 @@ export class GameServer {
       (c) => c.clientID !== client.clientID,
     );
     this.activeClients.push(client);
+    this.noteEventPeak();
     if (identityUpdate && !this.hasStarted()) {
       client.username = identityUpdate.username;
       client.clanTag = identityUpdate.clanTag;
@@ -888,18 +978,39 @@ export class GameServer {
                 return;
               }
               case "start_game": {
+                // ⚠️ terron 01.09 (репорт «жму старт, а лобби не стартует;
+                // говорят, какие-то настройки не дают»): все три отказа ниже
+                // раньше писались ТОЛЬКО в серверный лог, а хосту не уходило
+                // ничего — кнопка нажата, на экране тишина, причина неизвестна
+                // ни игроку, ни нам. Теперь причина едет клиенту тем же
+                // каналом `error`, что и «лобби заполнено»: он покажет тост и
+                // отправит датчик здоровья.
+                const refuseStart = (why: string) => {
+                  try {
+                    client.ws.send(
+                      JSON.stringify({
+                        type: "error",
+                        error: `start_refused.${why}`,
+                      }),
+                    );
+                  } catch {
+                    /* ws закрыт — тогда игрок и так уже отвалился */
+                  }
+                };
                 if (!this.canControlLobby(client)) {
                   this.log.warn(`Only lobby creator can start game`, {
                     clientID: client.clientID,
                     creatorID: this.lobbyCreatorID,
                     gameID: this.id,
                   });
+                  refuseStart("not_creator");
                   return;
                 }
                 if (this.isPublic()) {
                   this.log.warn(`Cannot start public game via WebSocket`, {
                     gameID: this.id,
                   });
+                  refuseStart("public");
                   return;
                 }
                 if (this.hasStarted()) {
@@ -907,6 +1018,7 @@ export class GameServer {
                     gameID: this.id,
                     clientID: client.clientID,
                   });
+                  refuseStart("already_started");
                   return;
                 }
                 this.log.info(`Lobby creator starting game via WebSocket`, {
@@ -1154,7 +1266,9 @@ export class GameServer {
     this.rotationHoldUntil = Math.max(this.rotationHoldUntil, Date.now() + ms);
   }
 
-  public rotateLobbyConfig(gameConfig: GameConfig) {
+  // `force` — мастер меняет конфиг событийного лобби под ДРУГОЙ слот (вечерний
+  // алмазный: командный ↔ соло ↔ обычный). Гарды «пусто и не стартовало» те же.
+  public rotateLobbyConfig(gameConfig: GameConfig, force = false) {
     if (this.hasStarted() || this.activeClients.length > 0) return;
     if (Date.now() < this.rotationHoldUntil) return;
     // terron: событийное лобби ЖДЁТ своего времени — карту не крутим (иначе игроки,
@@ -1163,14 +1277,13 @@ export class GameServer {
     // карта. Сравнивать со startsAt тут нельзя — мастер шлёт новое время И
     // конфиг одним сообщением, время применяется первым и всегда оказывается
     // в будущем, из-за чего карта не менялась НИКОГДА.
-    if (this.isGolden() && !this._wantsMapRotation) return;
+    if (this.isScheduled() && !this._wantsMapRotation && !force) return;
     this._wantsMapRotation = false;
     this.gameConfig = gameConfig;
     // Флаг события и его тир — свойство ЛОББИ, а не карты: пережидают ротацию.
     if (this.publicGameType === "golden" || this.publicGameType === "diamond") {
       this.gameConfig.golden = true;
-      this.gameConfig.eventTier = this.publicGameType;
-      this.gameConfig.eventRewardPts = eventRewardPts(this.publicGameType);
+      this.applyEventFields();
     }
     this.log.info("lobby map rotated", {
       gameID: this.id,
@@ -1458,6 +1571,24 @@ export class GameServer {
       return;
     }
     this.gameStartInfo = result.data satisfies GameStartInfo;
+    // terron 29.09: журнал мультиокон — кто с какого IP/браузера начал матч.
+    void reportMatchClients(
+      this.id,
+      {
+        gameType: String(this.gameConfig.gameType),
+        eventTier: this.gameConfig.golden
+          ? (this.gameConfig.eventTier ?? "golden")
+          : null,
+      },
+      this.activeClients.map((c) => ({
+        clientID: c.clientID,
+        persistentID: c.persistentID,
+        ip: c.ip,
+        ua: c.userAgent,
+        device: c.device,
+        username: c.username,
+      })),
+    );
     this.wireGameStartInfo = this.gameConfig.disableClanTags
       ? {
           ...this.gameStartInfo,
@@ -1488,6 +1619,7 @@ export class GameServer {
       JSON.stringify(this.wireGameStartInfo) +
       ',"lobbyCreatedAt":' +
       JSON.stringify(this.createdAt) +
+      this.coreHashJson() +
       ',"myClientID":';
     this.activeClients.forEach((c) => {
       this.log.info("sending start message", {
@@ -1527,6 +1659,7 @@ export class GameServer {
         inputMode: c.inputMode,
       })),
       kickedPersistentIds: [...this.kickedPersistentIds],
+      coreHash: this.coreHash ?? undefined,
     };
   }
 
@@ -1549,6 +1682,9 @@ export class GameServer {
     // один раз на резюме (не в хендлере) — дальше только конкатенация.
     this.turnJson = turns.map((t) => JSON.stringify(t));
     this.kickedPersistentIds = new Set(meta.kickedPersistentIds);
+    // Отпечаток ядра — тот, на котором матч НАЧАЛСЯ, а не текущий образ: ради
+    // этого его и храним (снимок старее 28.09 — поля нет, предупреждать не о чем).
+    this.coreHash = meta.coreHash ?? null;
     // роутинг реконнекта: pid→clientID + стабы Client (ws заменится на rejoin).
     const deadWs = {
       readyState: 3,
@@ -1633,6 +1769,7 @@ export class GameServer {
           JSON.stringify(this.wireGameStartInfo) +
           ',"lobbyCreatedAt":' +
           JSON.stringify(this.createdAt) +
+          this.coreHashJson() +
           ',"myClientID":' +
           JSON.stringify(client.clientID) +
           "}",
@@ -1643,6 +1780,24 @@ export class GameServer {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /**
+   * terron 28.09: отпечаток ядра матча в старт-сообщении (см. ServerEnv.coreHash).
+   * Нет отпечатка — поля нет вовсе, текст сообщения прежний.
+   */
+  private coreHashJson(): string {
+    if (!this.coreHash) return "";
+    // Текущий отпечаток сервера — только если он УЖЕ другой (выкат посреди
+    // матча): клиенты со старой вкладкой получат «не перезагружай до конца».
+    const now = ServerEnv.coreHash();
+    return (
+      ',"coreHash":' +
+      JSON.stringify(this.coreHash) +
+      (now && now !== this.coreHash
+        ? ',"serverCoreHash":' + JSON.stringify(now)
+        : "")
+    );
   }
 
   /** JSON-массив ходов начиная с lastTurn — склейка готовых строк turnJson.
@@ -1856,7 +2011,7 @@ export class GameServer {
       // пропущенный слот превращал золотой матч в обычную карусель и он
       // стартовал в произвольную минуту (репорт владельца 28.07).
       if (
-        !this.isGolden() &&
+        !this.isScheduled() &&
         now - this._rotationAskedAt > GameServer.ROTATION_WAIT_MS
       ) {
         this.startsAt = now + ServerEnv.gameCreationRate();

@@ -6,7 +6,9 @@ extend([lchPlugin]);
 extend([labPlugin]);
 
 export const red = colord("rgb(235,51,51)");
-export const blue = colord("rgb(41,98,255)");
+// terron 28.09: синий команды уведён в индиго и чуть темнее — прежний
+// rgb(41,98,255) сливался с прибрежной водой rgb(100,143,255) (репорт беты).
+export const blue = colord("rgb(44,50,204)");
 export const teal = colord("rgb(43,212,189)");
 export const purple = colord("rgb(146,52,234)");
 export const yellow = colord("rgb(231,176,8)");

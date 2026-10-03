@@ -104,7 +104,7 @@ export class WorkerLobbyService {
           // terron: ротация карты пустого лобби (см. IPCBridgeSchema); внутри
           // свой гард «0 клиентов» — занятому лобби карту не меняем.
           if (msg.gameConfig) {
-            game.rotateLobbyConfig(msg.gameConfig);
+            game.rotateLobbyConfig(msg.gameConfig, msg.forceConfig === true);
             // Новая карта уже применена — отдаём её мастеру немедленно, иначе
             // витрина ждёт очередного lobbyList (+до 500мс к «Запуск…»).
             this.sendMyLobbiesToMaster();
@@ -227,7 +227,7 @@ export class WorkerLobbyService {
       for (const lobby of list) {
         const c = lobby.gameConfig;
         parts.push(
-          `${lobby.gameID}:${c?.gameMap}:${c?.gameMapSize}:${c?.gameMode}:${c?.maxPlayers}:${c?.golden === true ? (c?.eventTier ?? "G") : ""}:${lobby.startsAt}`,
+          `${lobby.gameID}:${c?.gameMap}:${c?.gameMapSize}:${c?.gameMode}:${c?.maxPlayers}:${c?.golden === true ? (c?.eventTier ?? "G") : ""}:${c?.eventRewardPts ?? ""}:${lobby.startsAt}`,
         );
       }
     }

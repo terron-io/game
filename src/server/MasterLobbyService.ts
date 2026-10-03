@@ -1,7 +1,9 @@
 import { Worker } from "cluster";
 import winston from "winston";
 import {
+  eveningVariantAt,
   nextDiamondMatchAt,
+  nextFairMatchAt,
   nextGoldenMatchAt,
   TERRON_DIAMOND_ENABLED,
   TERRON_GOLDEN_ENABLED,
@@ -14,6 +16,7 @@ import {
   MasterUpdateGame,
   WorkerMessageSchema,
 } from "./IPCBridgeSchema";
+import { goldenAvoidingOverflow, slotAfterEarlyStart } from "./EventOverflow";
 import { logger } from "./Logger";
 import { MapPlaylist } from "./MapPlaylist";
 import { startPolling } from "./PollingLoop";
@@ -98,6 +101,7 @@ export class MasterLobbyService {
       special: [],
       golden: [], // terron: золотой матч — свой тип, см. maintainEventLobby
       diamond: [], // terron: алмазный матч (раз в сутки), там же
+      fair: [], // terron: лобби честных ботов (только дев), там же
     };
 
     for (const lobby of lobbies) {
@@ -211,21 +215,49 @@ export class MasterLobbyService {
   // создаём следующее. Слот прошёл впустую (никого не было) → лобби живёт
   // дальше, ждёт следующего слота и меняет карту (заявка ротации от воркера).
   private static isEvent(type: PublicGameType): boolean {
-    return type === "golden" || type === "diamond";
+    return type === "golden" || type === "diamond" || type === "fair";
+  }
+
+  // terron 23.09: лобби честных ботов (/fair) — ТОЛЬКО на дев-контейнере
+  // (TERRON_ENV=dev стоит лишь в compose у terron-game-dev). Устройство то же,
+  // что у золотого, но награды нет: флаг golden у него НЕ ставится.
+  private static fairEnabled(): boolean {
+    return process.env.TERRON_ENV === "dev";
   }
 
   private readonly lastEventSentAt = new Map<PublicGameType, number>();
   private readonly lastEventCreatedAt = new Map<PublicGameType, number>();
+  // terron 28.09: слот, на который смотрело последнее увиденное событийное
+  // лобби, и «вне сетки» время дубль-лобби (см. EventOverflow.ts).
+  private readonly lastEventSlot = new Map<PublicGameType, number>();
+  private readonly eventSlotOverride = new Map<PublicGameType, number>();
 
   private async maintainEventLobby(
-    type: "golden" | "diamond",
+    type: "golden" | "diamond" | "fair",
     lobbies: PublicGameInfo[],
   ) {
     if (type === "golden" && !TERRON_GOLDEN_ENABLED) return;
     if (type === "diamond" && !TERRON_DIAMOND_ENABLED) return;
+    if (type === "fair" && !MasterLobbyService.fairEnabled()) return;
     const now = Date.now();
-    const eventAt =
-      type === "diamond" ? nextDiamondMatchAt(now) : nextGoldenMatchAt(now);
+    let eventAt =
+      type === "diamond"
+        ? nextDiamondMatchAt(now)
+        : type === "fair"
+          ? nextFairMatchAt(now)
+          : nextGoldenMatchAt(now);
+    // Дубль-лобби живёт на своём времени, пока оно не наступило.
+    const override = this.eventSlotOverride.get(type);
+    if (override !== undefined) {
+      if (override > now) eventAt = override;
+      else this.eventSlotOverride.delete(type);
+    }
+    if (type === "golden") {
+      eventAt = goldenAvoidingOverflow(
+        eventAt,
+        this.eventSlotOverride.get("diamond"),
+      );
+    }
     const lobby = lobbies[0];
     if (!lobby) {
       // Вью мастера отстаёт на такт lobbyList (~0.5-1с), а планировщик тикает
@@ -233,10 +265,26 @@ export class MasterLobbyService {
       // дождавшись первого. Их должно быть ровно по одному на тип.
       if (now - (this.lastEventCreatedAt.get(type) ?? 0) < 5_000) return;
       this.lastEventCreatedAt.set(type, now);
+      // terron 28.09: прежнее лобби ушло в матч РАНЬШЕ своего слота (забилось
+      // до отказа) — новое на тот же слот стартовало бы через секунды пустым.
+      const early = slotAfterEarlyStart(
+        type,
+        this.lastEventSlot.get(type),
+        now,
+        nextFairMatchAt,
+      );
+      this.lastEventSlot.delete(type);
+      if (early !== null) {
+        eventAt = early;
+        this.eventSlotOverride.set(type, early);
+        this.log.info(`${type} lobby started early, next one moved`, {
+          startsAt: new Date(early).toISOString(),
+        });
+      }
       this.sendMessageToWorker({
         type: "createGame",
         gameID: generateID(),
-        gameConfig: await this.playlist.gameConfig(type),
+        gameConfig: await this.playlist.gameConfig(type, { eventAt }),
         publicGameType: type,
       } satisfies MasterCreateGame);
       this.log.info(`created ${type} match lobby`, {
@@ -244,6 +292,7 @@ export class MasterLobbyService {
       });
       return;
     }
+    if (lobby.startsAt !== undefined) this.lastEventSlot.set(type, lobby.startsAt);
     // Пустое лобби на просроченном слоте просит новую карту — отдаём её вместе
     // с новым временем (иначе воркер сам поставит now + отсчёт лобби, как карусели).
     const wantsRotation =
@@ -255,7 +304,16 @@ export class MasterLobbyService {
     // Гонка была ровно на секунду и потому ловилась через раз.
     const expired = lobby.startsAt !== undefined && lobby.startsAt <= now;
     if (expired && !wantsRotation) return;
-    if (lobby.startsAt === eventAt && !wantsRotation) return;
+    // terron 26.09: ВЕЧЕРНИЙ АЛМАЗНЫЙ — вариант (командный/соло/обычный) задаёт
+    // слот. Пустое лобби, собранное под другой вариант (сменилось расписание
+    // или слот ушёл вперёд), пересобираем под текущий.
+    const variantMismatch =
+      type === "diamond" &&
+      lobby.numClients === 0 &&
+      (lobby.gameConfig?.eventEvening ?? null) !== eveningVariantAt(eventAt);
+    if (lobby.startsAt === eventAt && !wantsRotation && !variantMismatch) {
+      return;
+    }
     // Троттл, а НЕ «отправили один раз»: вью мастера отстаёт на такт lobbyList,
     // и по разовой отправке startsAt мог остаться сбитым навсегда (воркер тоже
     // двигает таймер пустым лобби) — событийный матч уезжал с сетки часов.
@@ -265,9 +323,11 @@ export class MasterLobbyService {
       type: "updateLobby",
       gameID: lobby.gameID,
       startsAt: eventAt,
-      gameConfig: wantsRotation
-        ? await this.playlist.gameConfig(type)
-        : undefined,
+      gameConfig:
+        wantsRotation || variantMismatch
+          ? await this.playlist.gameConfig(type, { eventAt })
+          : undefined,
+      forceConfig: variantMismatch || undefined,
     });
   }
 
@@ -300,7 +360,10 @@ export class MasterLobbyService {
       // terron: у событийных лобби своё расписание и ровно один экземпляр —
       // общий конвейер (таймер отсчёта лобби, две штуки в очереди) к ним не применяем.
       if (MasterLobbyService.isEvent(type)) {
-        await this.maintainEventLobby(type as "golden" | "diamond", lobbies);
+        await this.maintainEventLobby(
+          type as "golden" | "diamond" | "fair",
+          lobbies,
+        );
         continue;
       }
 

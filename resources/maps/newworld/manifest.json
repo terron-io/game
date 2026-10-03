@@ -1,0 +1,284 @@
+{
+  "name": "New World",
+  "nations": [
+    {
+      "coordinates": [
+        1418,
+        1167
+      ],
+      "name": "Brazil",
+      "flag": "br"
+    },
+    {
+      "coordinates": [
+        1225,
+        1065
+      ],
+      "name": "Amazonas",
+      "flag": "amazonas"
+    },
+    {
+      "coordinates": [
+        1243,
+        1428
+      ],
+      "name": "Argentina",
+      "flag": "ar"
+    },
+    {
+      "coordinates": [
+        1125,
+        1356
+      ],
+      "name": "Chile",
+      "flag": "cl"
+    },
+    {
+      "coordinates": [
+        1064,
+        1111
+      ],
+      "name": "Peru",
+      "flag": "pe"
+    },
+    {
+      "coordinates": [
+        1083,
+        938
+      ],
+      "name": "Colombia",
+      "flag": "co"
+    },
+    {
+      "coordinates": [
+        1183,
+        921
+      ],
+      "name": "Venezuela",
+      "flag": "ve"
+    },
+    {
+      "coordinates": [
+        913,
+        833
+      ],
+      "name": "Nicaragua",
+      "flag": "ni"
+    },
+    {
+      "coordinates": [
+        764,
+        743
+      ],
+      "name": "Mexico",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        1034,
+        556
+      ],
+      "name": "United States",
+      "flag": "us"
+    },
+    {
+      "coordinates": [
+        766,
+        623
+      ],
+      "name": "Texas",
+      "flag": "Texas"
+    },
+    {
+      "coordinates": [
+        551,
+        564
+      ],
+      "name": "California",
+      "flag": "California"
+    },
+    {
+      "coordinates": [
+        654,
+        530
+      ],
+      "name": "Utah",
+      "flag": "Utah"
+    },
+    {
+      "coordinates": [
+        1079,
+        385
+      ],
+      "name": "Quebec",
+      "flag": "Quebec"
+    },
+    {
+      "coordinates": [
+        1211,
+        364
+      ],
+      "name": "Newfoundland and Labrador",
+      "flag": "newfoundlandandlabrador"
+    },
+    {
+      "coordinates": [
+        957,
+        406
+      ],
+      "name": "Canada",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        170,
+        244
+      ],
+      "name": "Alaska",
+      "flag": "Alaska"
+    },
+    {
+      "coordinates": [
+        857,
+        232
+      ],
+      "name": "Nunavut",
+      "flag": "Nunavut"
+    },
+    {
+      "coordinates": [
+        475,
+        254
+      ],
+      "name": "Yukon",
+      "flag": "Yukon"
+    },
+    {
+      "coordinates": [
+        1448,
+        137
+      ],
+      "name": "Greenland",
+      "flag": "gl"
+    },
+    {
+      "coordinates": [
+        550,
+        438
+      ],
+      "name": "Washington",
+      "flag": "Washington"
+    },
+    {
+      "coordinates": [
+        778,
+        518
+      ],
+      "name": "Kansas",
+      "flag": "Kansas"
+    },
+    {
+      "coordinates": [
+        912,
+        613
+      ],
+      "name": "Mississippi",
+      "flag": "Mississippi"
+    },
+    {
+      "coordinates": [
+        1208,
+        1219
+      ],
+      "name": "Bolivia",
+      "flag": "bo"
+    },
+    {
+      "coordinates": [
+        689,
+        437
+      ],
+      "name": "Montana",
+      "flag": "Montana"
+    },
+    {
+      "coordinates": [
+        517,
+        357
+      ],
+      "name": "British Columbia",
+      "flag": "britishcolumbia"
+    },
+    {
+      "coordinates": [
+        618,
+        358
+      ],
+      "name": "Alberta",
+      "flag": "alberta"
+    },
+    {
+      "coordinates": [
+        732,
+        360
+      ],
+      "name": "Saskatchewan",
+      "flag": "saskatchewan"
+    },
+    {
+      "coordinates": [
+        834,
+        367
+      ],
+      "name": "Manitoba",
+      "flag": "manitoba"
+    },
+    {
+      "coordinates": [
+        1108,
+        500
+      ],
+      "name": "Massachusetts",
+      "flag": "Massachusetts"
+    },
+    {
+      "coordinates": [
+        845,
+        465
+      ],
+      "name": "Minnesota",
+      "flag": "Minnesota"
+    },
+    {
+      "coordinates": [
+        960,
+        500
+      ],
+      "name": "Michigan",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        655,
+        247
+      ],
+      "name": "Northwest Territories",
+      "flag": "northwestterritories"
+    }
+  ],
+  "map": {
+    "width": 1648,
+    "height": 1704,
+    "num_land_tiles": 652890
+  },
+  "map4x": {
+    "width": 824,
+    "height": 852,
+    "num_land_tiles": 155661
+  },
+  "map16x": {
+    "width": 412,
+    "height": 426,
+    "num_land_tiles": 35981
+  }
+}

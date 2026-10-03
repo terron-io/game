@@ -3,6 +3,7 @@ import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { getApiBase } from "./Api";
 import { getAuthHeader } from "./Auth";
+import { chatDeviceId, deviceTraceHeaders } from "./DeviceTrace";
 import { L } from "./Utils";
 
 interface ChatMsg {
@@ -107,7 +108,10 @@ export class ChatPanel extends LitElement {
 
   private async fetchToken(): Promise<string> {
     const res = await fetch(`${getApiBase()}/realtime/token`, {
-      headers: { authorization: await getAuthHeader() },
+      headers: {
+        authorization: await getAuthHeader(),
+        ...deviceTraceHeaders(),
+      },
     });
     if (!res.ok) throw new Error("realtime token failed");
     const j = (await res.json()) as {
@@ -123,8 +127,7 @@ export class ChatPanel extends LitElement {
 
   private async connect() {
     if (this.centrifuge) return;
-    const wsUrl =
-      getApiBase().replace(/^http/, "ws") + "/connection/websocket";
+    const wsUrl = getApiBase().replace(/^http/, "ws") + "/connection/websocket";
     const centrifuge = new Centrifuge(wsUrl, {
       getToken: () => this.fetchToken(),
     });
@@ -190,7 +193,7 @@ export class ChatPanel extends LitElement {
       ts: Date.now(),
     });
     this.startCooldown();
-    this.sub.publish({ text }).catch(() => {
+    this.sub.publish({ text, did: chatDeviceId() }).catch(() => {
       // 429/409/413 — отправитель уже видит сообщение локально, молча глотаем.
     });
   }
@@ -250,14 +253,18 @@ export class ChatPanel extends LitElement {
         </div>
         <div id="chat-feed" class="flex-1 overflow-y-auto px-3 py-2 space-y-1">
           ${this.messages.length === 0
-            ? html`<div class="text-slate-500 text-xs">${L("Сообщений пока нет…", "No messages yet…")}</div>`
+            ? html`<div class="text-slate-500 text-xs">
+                ${L("Сообщений пока нет…", "No messages yet…")}
+              </div>`
             : this.messages.map(
-                (m) => html`<div>
-                  <span class="text-blue-300 font-semibold"
-                    >${m.from?.name ?? "?"}</span
-                  ><span class="text-slate-400 text-xs">@${m.from?.slug ??
-                  ""}</span>: <span>${m.text}</span>
-                </div>`,
+                (m) =>
+                  html`<div>
+                    <span class="text-blue-300 font-semibold"
+                      >${m.from?.name ?? "?"}</span
+                    ><span class="text-slate-400 text-xs"
+                      >@${m.from?.slug ?? ""}</span
+                    >: <span>${m.text}</span>
+                  </div>`,
               )}
         </div>
         <div class="flex gap-2 p-2 border-t border-slate-700">
@@ -277,7 +284,10 @@ export class ChatPanel extends LitElement {
               : "bg-blue-600 hover:bg-blue-500"}"
             ?disabled=${this.cooldownLeft > 0}
             title=${this.cooldownLeft > 0
-              ? L(`Подождите ${this.cooldownLeft} с`, `Wait ${this.cooldownLeft}s`)
+              ? L(
+                  `Подождите ${this.cooldownLeft} с`,
+                  `Wait ${this.cooldownLeft}s`,
+                )
               : L("Отправить", "Send")}
             @click=${() => this.send()}
           >

@@ -41,6 +41,43 @@ export async function fetchUnlockedUlts(
   }
 }
 
+// terron 29.09: МУЛЬТИОКНА — на старте матча шлём в API, кто с какого IP и
+// браузера зашёл (platform-api/src/multibox.ts). По журналу API считает людей
+// для награды золотого по РАЗНЫМ IP и показывает совпадения в даше.
+// Fire-and-forget: сбой отчёта матчу не мешает (API тогда считает по записи).
+export async function reportMatchClients(
+  gameId: GameID,
+  meta: { gameType: string; eventTier: string | null },
+  clients: {
+    clientID: string;
+    persistentID: string;
+    ip: string;
+    ua?: string;
+    device?: string;
+    username: string;
+  }[],
+): Promise<void> {
+  try {
+    const url = `${ServerEnv.jwtIssuer()}/game/${encodeURIComponent(gameId)}/clients`;
+    const response = await fetch(url, {
+      method: "POST",
+      body: JSON.stringify({ ...meta, clients }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ServerEnv.apiKey(),
+        "x-terron-env": process.env.TERRON_ENV ?? "prod",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok)
+      log.warn(`match clients report failed: ${response.status}`, {
+        gameID: gameId,
+      });
+  } catch (e) {
+    log.warn(`match clients report error: ${String(e)}`, { gameID: gameId });
+  }
+}
+
 // terron: in-game приглашение в клан. Гейм-сервер знает persistentID игроков
 // (клиенты — нет), поэтому зовёт platform-api он, по persistentID. Лидерство
 // и анон-pending проверяет platform-api. Fire-and-forget.

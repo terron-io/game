@@ -1,0 +1,204 @@
+{
+  "name": "Britannia Classic (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        765,
+        1584
+      ],
+      "name": "Dumnonia",
+      "flag": "1_Dumnonia"
+    },
+    {
+      "coordinates": [
+        733,
+        1374
+      ],
+      "name": "Dyfed",
+      "flag": "1_Dyfed"
+    },
+    {
+      "coordinates": [
+        883,
+        1398
+      ],
+      "name": "Gwent",
+      "flag": "1_Gwent"
+    },
+    {
+      "coordinates": [
+        832,
+        1186
+      ],
+      "name": "Gwynedd",
+      "flag": "1_Gwynedd"
+    },
+    {
+      "coordinates": [
+        877,
+        1248
+      ],
+      "name": "Powys",
+      "flag": "1_Powys"
+    },
+    {
+      "coordinates": [
+        763,
+        693
+      ],
+      "name": "Strathclyde",
+      "flag": "1_Strathclyde"
+    },
+    {
+      "coordinates": [
+        620,
+        715
+      ],
+      "name": "Dalriata",
+      "flag": "1_Dalriata"
+    },
+    {
+      "coordinates": [
+        972,
+        1481
+      ],
+      "name": "Wessex",
+      "flag": "1_Wessex"
+    },
+    {
+      "coordinates": [
+        1139,
+        1537
+      ],
+      "name": "Sussex",
+      "flag": "1_Sussex"
+    },
+    {
+      "coordinates": [
+        1259,
+        1484
+      ],
+      "name": "Kent",
+      "flag": "1_Kent"
+    },
+    {
+      "coordinates": [
+        1268,
+        1356
+      ],
+      "name": "Essex",
+      "flag": "1_Essex"
+    },
+    {
+      "coordinates": [
+        1328,
+        1269
+      ],
+      "name": "East Anglia",
+      "flag": "1_East Anglia"
+    },
+    {
+      "coordinates": [
+        1074,
+        1263
+      ],
+      "name": "Mercia",
+      "flag": "1_Mercia"
+    },
+    {
+      "coordinates": [
+        1010,
+        922
+      ],
+      "name": "Northumbria",
+      "flag": "1_Northumbria"
+    },
+    {
+      "coordinates": [
+        770,
+        483
+      ],
+      "name": "Fortriu",
+      "flag": "1_Fortriu"
+    },
+    {
+      "coordinates": [
+        246,
+        1296
+      ],
+      "name": "Munster",
+      "flag": "1_Munster"
+    },
+    {
+      "coordinates": [
+        259,
+        1036
+      ],
+      "name": "Connacht",
+      "flag": "1_Connacht"
+    },
+    {
+      "coordinates": [
+        503,
+        1229
+      ],
+      "name": "Laigin",
+      "flag": "1_Laigin"
+    },
+    {
+      "coordinates": [
+        477,
+        1067
+      ],
+      "name": "Southern Uí Néill",
+      "flag": "1_Southern Ui Neill"
+    },
+    {
+      "coordinates": [
+        539,
+        866
+      ],
+      "name": "Ulaid",
+      "flag": "1_Ulaid"
+    },
+    {
+      "coordinates": [
+        442,
+        959
+      ],
+      "name": "Airgialla",
+      "flag": "1_Airgialla"
+    },
+    {
+      "coordinates": [
+        380,
+        856
+      ],
+      "name": "Northern Uí Néill",
+      "flag": "1_Northern Ui Neill"
+    },
+    {
+      "coordinates": [
+        1479,
+        1616
+      ],
+      "name": "Franks",
+      "flag": "1_Franks"
+    }
+  ],
+  "map": {
+    "width": 1592,
+    "height": 1752,
+    "num_land_tiles": 854781
+  },
+  "map4x": {
+    "width": 796,
+    "height": 876,
+    "num_land_tiles": 210212
+  },
+  "map16x": {
+    "width": 398,
+    "height": 438,
+    "num_land_tiles": 50950
+  }
+}

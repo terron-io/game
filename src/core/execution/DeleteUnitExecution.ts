@@ -76,6 +76,10 @@ export class DeleteUnitExecution implements Execution {
       return;
     }
     if (this.unit.isOverdueDeletion()) {
+      // terron: РЕВАНШИЗМ — единственное место, которое ЗНАЕТ, что снос ручной.
+      // Ниже по течению (UnitImpl.delete) отличить его от «забрали землю под
+      // зданием» уже нечем: там тоже delete() без разрушителя.
+      this.unit.markSelfDemolished();
       this.unit.delete(false);
 
       this.mg.displayMessage(

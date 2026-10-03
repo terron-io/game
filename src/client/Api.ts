@@ -11,7 +11,8 @@ import {
   UserMeResponseSchema,
 } from "../core/ApiSchemas";
 import { AnalyticsRecord, AnalyticsRecordSchema } from "../core/Schemas";
-import { getPersistentID, getAuthHeader, logOut, userAuth } from "./Auth";
+import { getAuthHeader, getDeviceID, logOut, userAuth } from "./Auth";
+import { apiAudienceHost } from "./GameHost";
 import { payHostHeaders } from "./PayGate";
 import { platformAuthHeaders } from "./PlatformContext";
 
@@ -309,13 +310,27 @@ export interface EconomyRules {
 }
 
 export async function getWallet(): Promise<WalletBalances | null> {
+  return (await getWalletStatus()).wallet;
+}
+
+/**
+ * terron 20.09: кошелёк + признак «мы разлогинены». `null` у getWallet значит и
+ * «сеть упала», и «сессии нет» — а это разные вещи: при сбое сети баланс на
+ * экране трогать нельзя, а у вышедшего из аккаунта он обязан обнулиться
+ * (репорт владельца: вышел на площадке, в шапке магазина остались 6 560).
+ */
+export async function getWalletStatus(): Promise<{
+  wallet: WalletBalances | null;
+  signedOut: boolean;
+}> {
   try {
     const r = await fetch(getApiBase() + "/me/wallet", {
       headers: { Authorization: await getAuthHeader() },
     });
-    return r.ok ? ((await r.json()) as WalletBalances) : null;
+    if (r.status === 401 || r.status === 403) return { wallet: null, signedOut: true };
+    return { wallet: r.ok ? ((await r.json()) as WalletBalances) : null, signedOut: false };
   } catch {
-    return null;
+    return { wallet: null, signedOut: false };
   }
 }
 
@@ -394,6 +409,77 @@ export interface PayPacks {
   multiplier: number;
   bonus: boolean;
   packs: PtsPack[];
+  /** terron 12.09: чем платить в этом хосте: своя платёжка, площадка (GamePush,
+   *  рубильник на сервере включён) или ничем. Старые ответы поля не имеют. */
+  provider?: "own" | "gamepush" | null;
+}
+
+/**
+ * terron 12.09: после purchase() у площадки — попросить сервер проверить
+ * покупку у GamePush и начислить. Ответ сервера — единственный факт оплаты.
+ */
+/**
+ * terron 20.09: добрать оплаченные, но не погашенные покупки площадки (claim
+ * не дошёл: сеть, закрытая вкладка, наш API лежал). Сервер сам находит их у
+ * GamePush и начисляет идемпотентно; клиенту остаётся погасить теги.
+ */
+export async function recoverPlatformPurchases(): Promise<
+  { tag: string; pts: number; credited: boolean }[] | null
+> {
+  try {
+    const r = await fetch(getApiBase() + "/gp/purchase/recover", {
+      method: "POST",
+      headers: {
+        Authorization: await getAuthHeader(),
+        ...payHostHeaders(),
+        ...platformAuthHeaders(),
+      },
+      credentials: "include",
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as {
+      items?: { tag: string; pts: number; credited: boolean }[];
+    };
+    return Array.isArray(j.items) ? j.items : [];
+  } catch {
+    return null;
+  }
+}
+
+export async function claimPlatformPurchase(
+  purchaseId: string,
+): Promise<{
+  credited: boolean;
+  reason: string | null;
+  pts: number;
+  /** terron 17.09: отказ сервера (код + текст) — показываем только на деве. */
+  refused?: string;
+} | null> {
+  try {
+    const r = await fetch(getApiBase() + "/gp/purchase/claim", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: await getAuthHeader(),
+        ...payHostHeaders(),
+        ...platformAuthHeaders(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ purchaseId }),
+    });
+    if (!r.ok) {
+      let why = "";
+      try {
+        why = String(((await r.json()) as { error?: unknown }).error ?? "");
+      } catch {
+        /* тело не JSON */
+      }
+      return { credited: false, reason: null, pts: 0, refused: `${r.status} ${why}`.trim() };
+    }
+    return (await r.json()) as { credited: boolean; reason: string | null; pts: number };
+  } catch {
+    return null;
+  }
 }
 
 export async function getPayPacks(): Promise<PayPacks | null> {
@@ -428,11 +514,15 @@ export async function createPayment(sku: string): Promise<string | null> {
         ...payHostHeaders(),
         ...platformAuthHeaders(),
       },
-      // ⚠️ vid = persistentID. Сервер это поле принимал с самого начала, но
-      // клиент его не слал — и все заказы легли с пустым vid, то есть выручку
-      // нельзя было разложить по источникам трафика (мост orders.vid →
-      // traffic_journey.vid). Найдено 28.08 по пустой колонке «Источник».
-      body: JSON.stringify({ sku, vid: getPersistentID() }),
+      // ⚠️ vid = ключ УСТРОЙСТВА, тот же, которым подписана строка воронки.
+      // Сервер это поле принимал с самого начала, но клиент его не слал — и все
+      // заказы легли с пустым vid, то есть выручку нельзя было разложить по
+      // источникам трафика (мост orders.vid → traffic_journey.vid). Найдено
+      // 28.08 по пустой колонке «Источник».
+      // ⚠️ Именно getDeviceID(), а НЕ getPersistentID(): платит всегда
+      // залогиненный, и второй отдал бы account-uuid — ключ, которого у строки
+      // воронки с 09.09 нет вовсе (см. Auth.getDeviceID). Мост бы молча умер.
+      body: JSON.stringify({ sku, vid: getDeviceID() }),
     });
     if (!r.ok) return null;
     const d = (await r.json()) as { payUrl?: string };
@@ -643,6 +733,100 @@ export async function buyItem(
   }
 }
 
+// terron 16.09: бонус-код (platform-api/src/bonusCodes.ts). Награда идёт на
+// аккаунт, поэтому анониму сервер отвечает 401 — клиент просит войти.
+export type BonusCodeRefusal =
+  | "bad_code"
+  | "not_found"
+  | "disabled"
+  | "not_started"
+  | "expired"
+  | "used_up"
+  | "already_redeemed"
+  | "skin_name_taken"
+  | "too_many_attempts"
+  | "unauthorized"
+  | "network";
+export interface BonusCodeGranted {
+  pts: number;
+  lts: number;
+  skins: { id: string; sku: string; name: string | null }[];
+}
+export type BonusCodeReward =
+  | { type: "pts"; amount: number }
+  | { type: "lts"; amount: number }
+  | { type: "skin"; sku: string; name: string | null };
+/** Отказ + сколько неудачных попыток осталось на сутки (лимит — на сервере). */
+export interface BonusCodeFailure {
+  ok: false;
+  reason: BonusCodeRefusal;
+  attemptsLeft?: number;
+  retryAt?: string | null;
+}
+
+async function postBonusCode<T>(path: string, code: string): Promise<{ status: number; body: T | null }> {
+  const r = await fetch(getApiBase() + path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: await getAuthHeader(),
+    },
+    body: JSON.stringify({ code }),
+  });
+  return { status: r.status, body: (await r.json().catch(() => null)) as T | null };
+}
+
+function bonusFailure(status: number, j: Partial<BonusCodeFailure> | null): BonusCodeFailure {
+  if (status === 401) return { ok: false, reason: "unauthorized" };
+  return {
+    ok: false,
+    reason: j?.reason ?? "network",
+    attemptsLeft: typeof j?.attemptsLeft === "number" ? j.attemptsLeft : undefined,
+    retryAt: j?.retryAt ?? null,
+  };
+}
+
+// terron 16.09: шаг 1 — проверить код и показать, что он даёт. Ничего не выдаёт.
+export async function checkBonusCode(
+  code: string,
+): Promise<{ ok: true; code: string; rewards: BonusCodeReward[] } | BonusCodeFailure> {
+  try {
+    const { status, body } = await postBonusCode<{
+      ok?: boolean;
+      code?: string;
+      rewards?: BonusCodeReward[];
+    } & Partial<BonusCodeFailure>>("/me/bonus-code/check", code);
+    if (status === 200 && body?.ok && body.code && body.rewards) {
+      return { ok: true, code: body.code, rewards: body.rewards };
+    }
+    return bonusFailure(status, body);
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}
+
+// Шаг 2 — забрать награду (сервер ещё раз проверяет код в той же транзакции).
+export async function redeemBonusCode(
+  code: string,
+): Promise<
+  | { ok: true; granted: BonusCodeGranted; balances: { lts: number; pts: number } }
+  | BonusCodeFailure
+> {
+  try {
+    const { status, body } = await postBonusCode<{
+      ok?: boolean;
+      granted?: BonusCodeGranted;
+      balances?: { lts: number; pts: number };
+    } & Partial<BonusCodeFailure>>("/me/bonus-code", code);
+    if (status === 200 && body?.ok && body.granted && body.balances) {
+      return { ok: true, granted: body.granted, balances: body.balances };
+    }
+    return bonusFailure(status, body);
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}
+
 // Задать ник купленному скину-черновику (бесплатно).
 export async function nameSkin(
   id: string,
@@ -739,6 +923,7 @@ export interface NamedSkin {
   created_at: string;
   bake_params?: SkinBake | null; // ползунки/поворот (для редактора)
   has_master?: boolean; // есть чистый 4K-мастер → тир можно перепечь без перезаливки
+  from_catalog?: boolean; // terron 28.09: ещё на картинке из каталога (цена правки)
 }
 
 export async function createNamedSkin(
@@ -1026,20 +1211,24 @@ export function getApiBase() {
 }
 
 export function getAudience() {
+  // ⚠️ В платформенной сборке домен ВШИТ: страница лежит на чужом хостинге, и
+  // вывод из адреса дал бы чужой api-домен (см. apiAudienceHost).
+  const baked = apiAudienceHost();
+  if (baked) return baked;
   const { hostname } = new URL(window.location.href);
   const domainname = hostname.split(".").slice(-2).join(".");
   return domainname;
 }
 
-// Check if the user's account is linked to a Discord or email account.
-export function hasLinkedAccount(
-  userMeResponse: UserMeResponse | false,
-): boolean {
-  return (
-    userMeResponse !== false &&
-    (userMeResponse.user?.discord !== undefined ||
-      userMeResponse.user?.email !== undefined)
-  );
+/** Вошёл ли игрок В НАШ аккаунт.
+ *  ⚠️ terron 09.09: раньше это звалось `hasLinkedAccount` и отвечало «привязан ли
+ *  Discord ИЛИ почта» — апстримовский вопрос. У игрока с площадки (ВК, Яндекс,
+ *  Пикабу) нет НИ ТОГО, НИ ДРУГОГО никогда: его аккаунт ключуется id площадки.
+ *  Поэтому вошедший игрок ВК получал красную плашку «ВЫ НЕ АВТОРИЗОВАНЫ» на
+ *  выборе флага, в скинах и в магазине (замечание модерации ВК 08.09, пункт 4).
+ *  Признак сессии — сам факт ответа /users/@me: анониму он отдаёт false. */
+export function isSignedIn(userMeResponse: UserMeResponse | false): boolean {
+  return userMeResponse !== false;
 }
 
 export async function fetchGameById(
@@ -1144,11 +1333,6 @@ export async function getNews(): Promise<NewsItem[]> {
     return newsItemsFallback as NewsItem[];
   }
 }
-
-
-
-
-
 
 // ---- terron profile (api.terron.io platform-api) ----
 
@@ -1290,7 +1474,6 @@ export async function getDailyQuests(): Promise<{
   }
 }
 
-
 /** Правка ачивки (награда/порог/вкл). Возвращает обновлённую или null. */
 export async function updateAchievement(
   id: string,
@@ -1318,8 +1501,6 @@ export async function updateAchievement(
     return null;
   }
 }
-
-
 
 /** Установить абсолютные балансы юзера (только переданные валюты). */
 export async function setUserWallet(
@@ -1427,7 +1608,6 @@ export async function clearPetriDish(): Promise<boolean> {
     return false;
   }
 }
-
 
 /** Full profile for the logged-in user. Null when not authenticated. */
 export async function getMyProfile(): Promise<TerronProfile | null> {
@@ -1798,7 +1978,6 @@ export async function getTestersLeaderboard(): Promise<TesterRow[]> {
     return [];
   }
 }
-
 
 // ── terron: ЗАМКИ НА УЛЬТЫ (TZ-ult-unlocks.md) ──────────────────────────────
 export interface UltUnlockView {

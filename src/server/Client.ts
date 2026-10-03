@@ -34,6 +34,9 @@ export class Client {
   // именно по нему рисуется значок «забег с телефона». Мутабельно —
   // «мышь» может стать «смешанным» посреди матча.
   public inputMode: InputMode | undefined = undefined;
+  // terron 29.09: сырой UA апгрейда — для журнала мультиокон (Archive.reportMatchClients).
+  // Не персистится: после рестарта сервера у резюмнутых клиентов пусто.
+  public userAgent: string | undefined = undefined;
   // terron: «смерть уже отправлена в API» — гард от повторов (клиент шлёт один
   // раз, но реконнект/битый бандл могут повторить, а это деньги).
   public deathReported = false;

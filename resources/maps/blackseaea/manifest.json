@@ -1,0 +1,92 @@
+{
+  "name": "BlackSea (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        165,
+        622
+      ],
+      "name": "Bulgaria",
+      "flag": "bg"
+    },
+    {
+      "coordinates": [
+        527,
+        915
+      ],
+      "name": "Turkiye",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        205,
+        235
+      ],
+      "name": "Romania",
+      "flag": "ro"
+    },
+    {
+      "coordinates": [
+        366,
+        203
+      ],
+      "name": "Moldova",
+      "flag": "md"
+    },
+    {
+      "coordinates": [
+        751,
+        153
+      ],
+      "name": "Ukraine",
+      "flag": "ua"
+    },
+    {
+      "coordinates": [
+        1153,
+        361
+      ],
+      "name": "Russia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1352,
+        694
+      ],
+      "name": "Georgia",
+      "flag": "ge"
+    },
+    {
+      "coordinates": [
+        1391,
+        901
+      ],
+      "name": "Armenia",
+      "flag": "am"
+    },
+    {
+      "coordinates": [
+        1105,
+        555
+      ],
+      "flag": "Circassia",
+      "name": "Circassia"
+    }
+  ],
+  "map": {
+    "width": 1524,
+    "height": 1080,
+    "num_land_tiles": 1196383
+  },
+  "map4x": {
+    "width": 762,
+    "height": 540,
+    "num_land_tiles": 293602
+  },
+  "map16x": {
+    "width": 381,
+    "height": 270,
+    "num_land_tiles": 70953
+  }
+}

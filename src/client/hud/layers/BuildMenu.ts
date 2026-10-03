@@ -7,6 +7,7 @@ import {
   BuildableUnit,
   Gold,
   PlayerBuildableUnitType,
+  ultCasts,
   ULTIMATE_REGISTRY,
   UnitType,
   VISIBLE_BUILD_TYPES,
@@ -32,6 +33,7 @@ import { tutBlocked, tutHighlighted } from "../tutHighlight";
 const warshipIcon = assetUrl("images/BattleshipIconWhite.svg");
 const splitIcon = assetUrl("images/SplitIconWhite.svg"); // terron: каст МЕДИА
 const waterNukeIcon = assetUrl("images/RiversBackIconWhite.svg"); // terron: каст гидроузла
+const landNukeIcon = assetUrl("images/LandNukeIconWhite.svg"); // terron: «Насыпь»
 const satStrikeIcon = assetUrl("images/OurSkyIconWhite.svg"); // terron: каст Неба нашего
 const blockadeIcon = assetUrl("images/PiracyIconWhite.svg"); // terron: каст Пиратства
 const respiteIcon = assetUrl("images/TruceIconWhite.svg"); // terron: каст Гордости
@@ -104,6 +106,20 @@ export const buildTable: BuildItemDisplay[][] = [
     },
     // terron 25.08: ТЕРРАФОРМИНГ — две другие ракеты ульты. На мобиле радиал
     // единственный интерфейс: без записи здесь каст применить НЕЛЬЗЯ вообще.
+    {
+      unitType: UnitType.LandNuke,
+      icon: landNukeIcon,
+      description: "build_menu.desc.land_nuke",
+      key: "unit_type.land_nuke",
+      countable: false,
+    },
+    {
+      unitType: UnitType.BlastNuke,
+      icon: atomBombIcon,
+      description: "build_menu.desc.blast_nuke",
+      key: "unit_type.blast_nuke",
+      countable: false,
+    },
     {
       // terron: «Сбить спутники» — каст Неба нашего (реворк 21.08): ставит
       // ракету-носитель на своей земле, 60с телеграф → блэкаут всем врагам.
@@ -245,15 +261,8 @@ const MANUAL_BUILD_TYPES: ReadonlySet<UnitType> = new Set(
   buildTable.flat().map((i) => i.unitType as UnitType),
 );
 
-// ⚠️ ПРОД-ВЕРСИЯ: здесь `u.cast`, а не `ultCasts(u)`, потому что функции
-// `ultCasts` (и дополнительных кастов `extraCasts`) в прод-ядре ещё нет —
-// они приезжают вместе с Терраформингом, который пока дев-онли. На проде у
-// ульты ровно один каст, так что список полный. ⚠️ КОГДА ТЕРРАФОРМИНГ УЕДЕТ
-// НА ПРОД, этот файл обязан приехать из дев-дерева ЦЕЛИКОМ — иначе
-// дополнительные касты снова не попадут в радиал, то есть вернётся ровно тот
-// баг, который здесь и чинится.
 const DERIVED_CAST_ITEMS: BuildItemDisplay[] = ULTIMATE_REGISTRY.flatMap((u) =>
-  u.cast === undefined ? [] : [u.cast],
+  ultCasts(u),
 )
   .filter((c) => !MANUAL_BUILD_TYPES.has(c.type))
   .map((c) => ({

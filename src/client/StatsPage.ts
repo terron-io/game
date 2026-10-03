@@ -1,10 +1,11 @@
 import { pollWhileVisible } from "./utilities/PollWhileVisible";
+import { gameOrigin } from "./GameHost";
 import { html, svg, TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { getApiBase } from "./Api";
 import { BaseModal } from "./components/BaseModal";
 import { modalHeader } from "./components/ui/ModalHeader";
-import { getMapName, L, translateText } from "./Utils";
+import { getMapName, L, onPlatformSurface, translateText } from "./Utils";
 
 interface Point {
   ts: string;
@@ -230,7 +231,9 @@ export class StatsPage extends BaseModal {
   private async loadGames(): Promise<void> {
     if (this.games.length === 0) this.gamesLoading = true;
     try {
-      const r = await fetch("/w0/api/active_games", { cache: "no-store" });
+      const r = await fetch(`${gameOrigin()}/w0/api/active_games`, {
+        cache: "no-store",
+      });
       const d = (await r.json()) as {
         serverTime?: number;
         games?: ActiveGame[];
@@ -248,7 +251,9 @@ export class StatsPage extends BaseModal {
   // terron: распределение онлайна — где сидят подключённые клиенты.
   private async loadBreakdown(): Promise<void> {
     try {
-      const r = await fetch("/w0/api/online_breakdown", { cache: "no-store" });
+      const r = await fetch(`${gameOrigin()}/w0/api/online_breakdown`, {
+        cache: "no-store",
+      });
       if (!r.ok) return;
       this.breakdown = (await r.json()) as OnlineBreakdown;
       this.requestUpdate();
@@ -289,7 +294,9 @@ export class StatsPage extends BaseModal {
 
   private async loadOnlineNow(): Promise<void> {
     try {
-      const r = await fetch("/w0/api/online", { cache: "no-store" });
+      const r = await fetch(`${gameOrigin()}/w0/api/online`, {
+        cache: "no-store",
+      });
       if (!r.ok) return;
       const d = (await r.json()) as { n?: number };
       if (typeof d.n === "number") {
@@ -433,18 +440,24 @@ export class StatsPage extends BaseModal {
           L("Активные игры", "Active games"),
           () => this.setView("games"),
         )}
-        ${this.pill(this.view === "traffic", L("Трафик", "Traffic"), () =>
-          this.setView("traffic"),
-        )}
+        ${onPlatformSurface()
+          ? ""
+          : this.pill(this.view === "traffic", L("Трафик", "Traffic"), () =>
+              this.setView("traffic"),
+            )}
       </div>`,
     });
   }
 
   protected renderBody(): TemplateResult {
+    // terron 09.09: вкладка «Трафик» — таблица чужих доменов-источников;
+    // внутри площадки модерация читает её как «сторонние ссылки». Прячем и
+    // вкладку, и сам вид (deep-link /stats/traffic).
+    const view = onPlatformSurface() && this.view === "traffic" ? "charts" : this.view;
     return html`<div class="t-page" style="max-width:980px">
-      ${this.view === "games"
+      ${view === "games"
         ? this.renderGames()
-        : this.view === "traffic"
+        : view === "traffic"
           ? this.renderTraffic()
           : this.renderCharts()}
     </div>`;

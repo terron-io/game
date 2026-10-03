@@ -119,6 +119,36 @@ class ModalRouter {
     return null;
   }
 
+  /**
+   * Подтянуть модуль ЛЕНИВОЙ страницы по её pageId и дождаться регистрации тега.
+   *
+   * ⚠️ Нужен тем, кто открывает страницу МИМО роутера — через
+   * `window.showPage(pageId)` (так делают ссылки футера и пункты навбаров).
+   * `showPage` только снимает `hidden` с контейнера; если модуль не загружен,
+   * custom element не определён, и человек видит ПУСТОЙ ЛИСТ. Ровно это и
+   * случилось со страницей /download 30.08: по адресу она открывалась (там
+   * модуль грузит роутер), а по клику в футере — нет.
+   *
+   * Возвращает true, если страница известна роутеру (и, если была ленивой,
+   * теперь загружена).
+   */
+  public async ensurePageLoaded(pageId: string): Promise<boolean> {
+    for (const entry of this.registry.values()) {
+      if (entry.pageId !== pageId) continue;
+      if (entry.load) {
+        try {
+          await entry.load();
+        } catch (e) {
+          console.error(`ModalRouter: lazy load failed for ${entry.tag}`, e);
+          return false;
+        }
+      }
+      await customElements.whenDefined(entry.tag);
+      return true;
+    }
+    return false;
+  }
+
   /** Build `/segment[/tab][?query]` for a modal. */
   private pathFor(name: string, args?: Record<string, unknown>): string {
     // terron 28.08: вложенные админ-пути (/admin/petri-bonus, /admin/ru-ban,
@@ -366,6 +396,9 @@ class ModalRouter {
   }
 
   private replacePath(path: string): void {
+    // ⚠️ На чужом хостинге адрес не меняется вовсе — запрет стоит общим шимом на
+    // History API (см. PlatformHistoryGuard.ts): точек записи истории в клиенте
+    // больше двадцати, гейтить каждую бессмысленно.
     history.replaceState(history.state, "", path);
   }
 
@@ -374,5 +407,6 @@ class ModalRouter {
     history.pushState(history.state, "", path);
   }
 }
+
 
 export const modalRouter = new ModalRouter();

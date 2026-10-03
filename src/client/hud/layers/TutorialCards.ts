@@ -8,8 +8,13 @@ import {
   PlayerType,
   UnitType,
 } from "../../../core/game/Game";
+import {
+  BUILD_SLOTS,
+  defaultHotkeyLabel,
+} from "../../../core/game/BuildSlots";
 import { TileRef } from "../../../core/game/GameMap";
 import { GameView } from "../../../core/game/GameView";
+import { UserSettings } from "../../../core/game/UserSettings";
 import { Controller } from "../../Controller";
 import { ReplaySpeedChangeEvent } from "../../InputHandler";
 import { confirmDialog, toast } from "../../Toast";
@@ -21,8 +26,10 @@ import {
   SendBoatAttackIntentEvent,
   SendSpawnIntentEvent,
 } from "../../Transport";
-import { isTutorialActive, setTutorialActive,
+import {
+  isTutorialActive,
   markTutorialDone,
+  setTutorialActive,
 } from "../../Tutorial";
 import { ReplaySpeedMultiplier } from "../../utilities/ReplaySpeedMultiplier";
 import { L, renderNumber, renderTroops, translateText } from "../../Utils";
@@ -83,17 +90,39 @@ const chip = (url: string) =>
     ><img src=${url} width="13" height="13" alt=""
   /></span>`;
 
+// terron 28.09: ЦИФРА КЛАВИШИ — ИЗ ТОГО ЖЕ РЕЕСТРА, ЧТО У ПАНЕЛИ (BuildSlots).
+// Раньше здесь были вписаны руками «5 / 6 / 7» для шахты, ПВО и корабля; когда в
+// панель встал аэропорт на 5, всё сдвинулось на единицу, а карточки обучения
+// остались со старыми цифрами (репорт iScrag 28.09). Переназначенную игроком
+// клавишу показываем так же, как панель (UnitDisplay.renderBuildSlot).
+export function hotkeyFor(type: UnitType): string {
+  const slot = BUILD_SLOTS.find((s) => s.type === type);
+  if (slot === undefined) return "";
+  let custom: string | undefined;
+  try {
+    const kb = new UserSettings().parsedUserKeybinds() as Record<
+      string,
+      { key?: string } | undefined
+    >;
+    custom = kb[slot.keybind]?.key;
+  } catch {
+    custom = undefined;
+  }
+  return custom ?? defaultHotkeyLabel(slot);
+}
+
 // финальный справочник по юнитам (карусель карточек-«товаров»)
 const UNIT_CATALOG: {
   icon: string;
-  key: string;
+  /** Кнопка панели; цифру берём из реестра BuildSlots (см. hotkeyFor). */
+  unit: UnitType;
   title: () => string;
   desc: () => string;
   coin?: boolean; // показать иконку золота в описании
 }[] = [
   {
     icon: siloIconUrl,
-    key: "5",
+    unit: UnitType.MissileSilo,
     title: () => L("Ракетная шахта", "Missile silo"),
     desc: () =>
       L(
@@ -103,7 +132,7 @@ const UNIT_CATALOG: {
   },
   {
     icon: samIconUrl,
-    key: "6",
+    unit: UnitType.SAMLauncher,
     title: () => L("ПВО", "SAM launcher"),
     desc: () =>
       L(
@@ -113,7 +142,7 @@ const UNIT_CATALOG: {
   },
   {
     icon: warshipIconUrl,
-    key: "7",
+    unit: UnitType.Warship,
     title: () => L("Варшип", "Warship"),
     desc: () =>
       L(
@@ -2056,7 +2085,7 @@ export class TutorialCards extends LitElement implements Controller {
                   <span class="tut-keyicons"
                     >${chip(buildIconUrl)} → ${chip(cityIconUrl)}</span
                   >`
-              : html`${L("Клавиша", "Key")} ${this.keyCap("1")}`}
+              : html`${L("Клавиша", "Key")} ${this.keyCap(hotkeyFor(UnitType.City))}`}
           </div>
         </div>
       </div>
@@ -2101,8 +2130,8 @@ export class TutorialCards extends LitElement implements Controller {
                     >${chip(buildIconUrl)} → ${chip(factoryIconUrl)} /
                     ${chip(portIconUrl)}</span
                   >`
-              : html`${L("Клавиши", "Keys")} ${this.keyCap("2")}
-                ${this.keyCap("3")}`}
+              : html`${L("Клавиши", "Keys")} ${this.keyCap(hotkeyFor(UnitType.Factory))}
+                ${this.keyCap(hotkeyFor(UnitType.Port))}`}
           </div>
         </div>
       </div>
@@ -2192,7 +2221,9 @@ export class TutorialCards extends LitElement implements Controller {
                     >${chip(buildIconUrl)} →
                     ${chip(isPort ? portIconUrl : factoryIconUrl)}</span
                   >`
-              : html`${L("Клавиша", "Key")} ${this.keyCap(isPort ? "3" : "2")}`}
+              : html`${L("Клавиша", "Key")} ${this.keyCap(
+                  hotkeyFor(isPort ? UnitType.Port : UnitType.Factory),
+                )}`}
           </div>
         </div>
       </div>
@@ -2335,7 +2366,7 @@ export class TutorialCards extends LitElement implements Controller {
                   <span class="tut-keyicons"
                     >${chip(buildIconUrl)} → ${chip(defenseIconUrl)}</span
                   >`
-              : html`${L("Клавиша", "Key")} ${this.keyCap("4")}`}
+              : html`${L("Клавиша", "Key")} ${this.keyCap(hotkeyFor(UnitType.DefensePost))}`}
           </div>
         </div>
       </div>
@@ -2441,7 +2472,7 @@ export class TutorialCards extends LitElement implements Controller {
                   <span class="tut-keyicons"
                     >${chip(buildIconUrl)} → ${chip(cityIconUrl)}</span
                   >`
-              : html`${L("Клавиша", "Key")} ${this.keyCap("1")}`}
+              : html`${L("Клавиша", "Key")} ${this.keyCap(hotkeyFor(UnitType.City))}`}
           </div>
         </div>
       </div>
@@ -2484,7 +2515,7 @@ export class TutorialCards extends LitElement implements Controller {
             <div>
               <div class="tut-cat-title">${item.title()}</div>
               <div class="tut-cat-key">
-                ${L("Клавиша", "Key")} ${this.keyCap(item.key)}
+                ${L("Клавиша", "Key")} ${this.keyCap(hotkeyFor(item.unit))}
               </div>
             </div>
           </div>

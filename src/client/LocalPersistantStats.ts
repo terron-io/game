@@ -11,17 +11,41 @@ export interface LocalStatsData {
 
 let _startTime: number;
 
+const KEY = "game-records";
+
 function getStats(): LocalStatsData {
-  const statsStr = localStorage.getItem("game-records");
-  return statsStr ? JSON.parse(statsStr) : {};
+  try {
+    const statsStr = localStorage.getItem(KEY);
+    return statsStr ? JSON.parse(statsStr) : {};
+  } catch {
+    // битая запись / хранилище недоступно — начинаем с чистого листа
+    return {};
+  }
 }
 
+// terron 04.09: запись росла бесконечно (по объекту на КАЖДЫЙ матч за жизнь
+// устройства) и однажды упиралась в квоту — «QuotaExceededError … 'game-records'»
+// летел из setTimeout НЕОБРАБОТАННЫМ (js_error, 3 сессии/3 дня). Теперь при
+// отказе выбрасываем старшую половину записей (ключи объекта хранят порядок
+// вставки) и пробуем ещё раз; не вышло — молчим, это локальная справка.
 function save(stats: LocalStatsData) {
   // To execute asynchronously
-  setTimeout(
-    () => localStorage.setItem("game-records", JSON.stringify(stats, replacer)),
-    0,
-  );
+  setTimeout(() => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(stats, replacer));
+    } catch {
+      const ids = Object.keys(stats);
+      if (ids.length <= 1) return;
+      for (const id of ids.slice(0, Math.ceil(ids.length / 2))) {
+        delete stats[id];
+      }
+      try {
+        localStorage.setItem(KEY, JSON.stringify(stats, replacer));
+      } catch {
+        /* квота даже для половины — сдаёмся */
+      }
+    }
+  }, 0);
 }
 
 // The user can quit the game anytime so better save the lobby as soon as the

@@ -1,7 +1,10 @@
+import { TERRON_NUKE_DEATH_MULT } from "../configuration/TerronTuning";
 import {
   Execution,
   Game,
   MessageType,
+  NeedsWaterUnder,
+  NonBombNukes,
   Nukes,
   Player,
   Structures,
@@ -15,7 +18,7 @@ import { UniversalPathFinding } from "../pathfinding/PathFinder";
 import { ParabolaUniversalPathFinder } from "../pathfinding/PathFinder.Parabola";
 import { PathStatus } from "../pathfinding/types";
 import { PseudoRandom } from "../PseudoRandom";
-import { NukeType } from "../StatsSchemas";
+import { LaunchableNukeType, NukeType } from "../StatsSchemas";
 import { listNukeBreakAlliance } from "./Util";
 
 const SPRITE_RADIUS = 16;
@@ -39,7 +42,7 @@ export class NukeExecution implements Execution {
     // terron: ультимейты — «Реки вспять» ездит той же экзекуцией, но в
     // статистику бомб (NukeType/bombUnits, zod-схема архива) НЕ пишется —
     // расширять схему ради одной ульты не стали, метрика своя (waterTiles).
-    private nukeType: NukeType | UnitType.WaterNuke,
+    private nukeType: LaunchableNukeType,
     private player: Player,
     private dst: TileRef,
     private src?: TileRef | null,
@@ -67,8 +70,22 @@ export class NukeExecution implements Execution {
   }
 
   /** terron: ультимейты — это ракета «Реки вспять» (топит землю, а не выжигает). */
+  /**
+   * Топит ли эта ракета сушу. terron 01.09: таких ракет ДВЕ — у «Рек вспять»
+   * и у Терраформинга. Отличаются они только ценой и воронкой, а эффект один,
+   * поэтому здесь их и объединяем: любая проверка «это затопление» обязана
+   * знать про обе, иначе ракета Терраформинга просто выжжет землю.
+   */
   private isWaterNuke(): boolean {
-    return this.nukeType === UnitType.WaterNuke;
+    return (
+      this.nukeType === UnitType.WaterNuke ||
+      this.nukeType === UnitType.TerraFlood
+    );
+  }
+
+  /** terron 25.08: ТЕРРАФОРМИНГ — «Насыпь» (вода в радиусе становится сушей). */
+  private isLandNuke(): boolean {
+    return this.nukeType === UnitType.LandNuke;
   }
 
   private tilesToDestroy(): Set<TileRef> {
@@ -86,7 +103,14 @@ export class NukeExecution implements Execution {
     // terron: ультимейты — «Реки вспять» рисует такую же неровную кромку, как
     // мод «водяные ядерки», независимо от флага лобби: иначе после затопления
     // оставались бы одиночные пиксели суши, к которым надо плыть отдельно.
-    if (this.mg.config().waterNukes() || this.isWaterNuke()) {
+    // terron 25.08: «Насыпь» рисует такую же неровную кромку, что и затопление
+    // (иначе новый остров был бы идеальным кругом — видно, что это не рельеф,
+    // а штамп). «Ядерный удар» кромку НЕ меняет: он обычная ядерка.
+    if (
+      this.mg.config().waterNukes() ||
+      this.isWaterNuke() ||
+      this.isLandNuke()
+    ) {
       // Smooth irregular boundary for water nukes.
       // Generate random radii at angular samples, then smooth them so the
       // boundary undulates gently instead of creating spiky flower shapes.
@@ -110,10 +134,15 @@ export class NukeExecution implements Execution {
       const outer = magnitude.outer;
 
       const result = new Set<TileRef>();
-      const x0 = Math.max(0, cx - outer);
-      const y0 = Math.max(0, cy - outer);
-      const x1 = Math.min(this.mg.width() - 1, cx + outer);
-      const y1 = Math.min(this.mg.height() - 1, cy + outer);
+      // ⚠️ 01.09 (краш с боевого дева, «Invalid coordinates: 651.4,1367.4»):
+      // РАДИУС может быть дробным (у ракет Терраформинга он 7.2/12.6 — это −10%
+      // от прежнего), а индекс тайла обязан быть целым. Коробка перебора
+      // округляется НАРУЖУ; форму по-прежнему задаёт проверка d2 — то есть на
+      // целых радиусах поведение прежнее байт-в-байт.
+      const x0 = Math.max(0, Math.floor(cx - outer));
+      const y0 = Math.max(0, Math.floor(cy - outer));
+      const x1 = Math.min(this.mg.width() - 1, Math.ceil(cx + outer));
+      const y1 = Math.min(this.mg.height() - 1, Math.ceil(cy + outer));
       for (let py = y0; py <= y1; py++) {
         for (let px = x0; px <= x1; px++) {
           const dx = px - cx;
@@ -213,6 +242,16 @@ export class NukeExecution implements Execution {
       if (this.nuke.type() !== UnitType.MIRVWarhead) {
         this.maybeBreakAlliances();
       }
+      // terron 01.09: ключ Терраформинга — «50 ракет «Реки вспять» за матч».
+      //
+      // ⚠️ СЧИТАЕМ ЗДЕСЬ, А НЕ В БЛОКЕ НИЖЕ. Тот блок целиком под
+      // `hasOwner(dst)`: обычные бомбы записываются, только когда цель —
+      // ЧУЖАЯ земля. Для этой ракеты так нельзя: ею чаще правят нейтральный
+      // берег, и половина пусков не засчиталась бы вовсе. Поймано
+      // собственным тестом, а не в бою.
+      if (this.nukeType === UnitType.WaterNuke) {
+        this.mg.stats().waterNukeLaunch(this.player);
+      }
       if (this.mg.hasOwner(this.dst)) {
         const target = this.mg.owner(this.dst);
         if (!target.isPlayer()) {
@@ -235,9 +274,10 @@ export class NukeExecution implements Execution {
           );
         }
 
-        // Record stats (водяная ракета — вне схемы bombUnits, см. конструктор;
-        // сравнение инлайном, а не через isWaterNuke(): нужно СУЖЕНИЕ типа)
-        if (this.nukeType !== UnitType.WaterNuke) {
+        // Record stats: ракеты Терраформинга в схему bombUnits не входят
+        // (см. конструктор). Проверка через группу — она type predicate,
+        // поэтому в else тип сужается до NukeType, как и нужно bombLaunch.
+        if (!NonBombNukes.has(this.nukeType)) {
           this.mg.stats().bombLaunch(this.player, target, this.nukeType);
         }
       }
@@ -355,6 +395,12 @@ export class NukeExecution implements Execution {
           this.player.smallID(),
           prevOwnerSmallID,
         );
+      } else if (this.isLandNuke()) {
+        // terron 25.08: ТЕРРАФОРМИНГ — «Насыпь». Вода в воронке становится
+        // НИЧЕЙНОЙ сушей (решение владельца): её занимает тот, кто дотянется,
+        // в том числе противник. По СУШЕ ракета работает как обычная ядерка
+        // (ветка выше) — это полноценное оружие, а не мирная стройка.
+        mg.queueLandConversion(tile);
       }
     }
 
@@ -366,6 +412,14 @@ export class NukeExecution implements Execution {
         if (mg.isLand(tile)) flooded++;
       }
       this.player.addUltStat("waterTiles", flooded);
+    }
+    // terron 25.08: ТЕРРАФОРМИНГ — зеркальная метрика «Насыпи».
+    if (this.isLandNuke()) {
+      let raised = 0;
+      for (const tile of toDestroy) {
+        if (!mg.isLand(tile)) raised++;
+      }
+      this.player.addUltStat("landTiles", raised);
     }
 
     // terron: ультимейты — метрика МИРВ «территорий уничтожено»: чужие
@@ -394,6 +448,7 @@ export class NukeExecution implements Execution {
             player.troops(),
             numTilesLeft,
             maxTroops,
+            TERRON_NUKE_DEATH_MULT,
           ),
         );
         for (const attack of outgoingAttacks) {
@@ -403,6 +458,7 @@ export class NukeExecution implements Execution {
             attackTroops,
             numTilesLeft,
             maxTroops,
+            TERRON_NUKE_DEATH_MULT,
           );
           attack.setTroops(attackTroops - deaths);
         }
@@ -413,6 +469,7 @@ export class NukeExecution implements Execution {
             unitTroops,
             numTilesLeft,
             maxTroops,
+            TERRON_NUKE_DEATH_MULT,
           );
           unit.setTroops(unitTroops - deaths);
         }
@@ -436,6 +493,15 @@ export class NukeExecution implements Execution {
       if (mg.euclideanDistSquared(dst, unit.tile()) < outer2) {
         unit.delete(true, destroyer);
       }
+    }
+
+    // terron 25.08: ТЕРРАФОРМИНГ — добиваем всё, под чем ИСЧЕЗЛА ВОДА.
+    // ⚠️ Волна выше сносит юниты по СТРОГОМУ `d² < outer²`, а тайлы воронки
+    // берутся по нестрогому — на кольце ровно в `outer` лодка переживала взрыв
+    // и оставалась стоять посреди свежей суши. Считать это арифметикой
+    // радиусов бессмысленно: правило другое — «под юнитом больше нет воды».
+    if (this.isLandNuke()) {
+      sinkUnitsLeftOnLand(mg, dst, magnitude.outer, toDestroy, destroyer);
     }
 
     this.redrawBuildings(magnitude.outer + SPRITE_RADIUS);
@@ -505,6 +571,29 @@ export class NukeExecution implements Execution {
 }
 
 /**
+ * terron 25.08: ТЕРРАФОРМИНГ — утопить (снести) всё, что не умеет стоять на
+ * суше, на тайлах, которые ею только что стали. Один пространственный запрос
+ * на подрыв: набор тайлов уже посчитан, остаётся спросить юнитов рядом.
+ */
+export function sinkUnitsLeftOnLand(
+  mg: Game,
+  center: TileRef,
+  radius: number,
+  raised: ReadonlySet<TileRef>,
+  destroyer: Player,
+): void {
+  for (const { unit } of mg.nearbyUnits(
+    center,
+    radius + 2,
+    NeedsWaterUnder.types,
+  )) {
+    if (!unit.isActive()) continue;
+    if (!raised.has(unit.tile())) continue;
+    unit.delete(true, destroyer);
+  }
+}
+
+/**
  * terron: ультимейты — «РЕКИ ВСПЯТЬ». Затопление В ТОЧКЕ, без ракеты.
  * Нужно для пробы «сбитая ПВО ракета всё равно оставляет воронку» (флаг
  * TERRON_RIVERS_CRATER_ON_INTERCEPT): радиусы умножаются на frac.
@@ -540,4 +629,58 @@ export function floodWaterCrater(
     flooded++;
   }
   if (flooded > 0) owner.addUltStat("waterTiles", flooded);
+}
+
+/**
+ * terron 25.08: ТЕРРАФОРМИНГ — зеркало `floodWaterCrater` для «Насыпи».
+ * Сбитая ПВО ракета всё равно оставляет ПОЛОВИННЫЙ островок в точке
+ * перехвата: правило «перехват не отменяет терраформинг» должно работать в
+ * обе стороны, иначе одна ракета ульты сбивается «полностью», а другая нет.
+ *
+ * ⚠️ Юниты тут НЕ сносятся (это не подрыв, а остаточный эффект) — но вода
+ * под ними может стать сушей. Лодку на такой клетке вытолкнет обычная логика
+ * пути: поднятая суша попадает в мини-карту и корабли её обходят.
+ */
+export function raiseLandCrater(
+  mg: Game,
+  dst: TileRef,
+  owner: Player,
+  frac: number,
+): void {
+  const magnitude = mg.config().nukeMagnitudes(UnitType.LandNuke);
+  const inner = Math.max(1, Math.round(magnitude.inner * frac));
+  const outer = Math.max(inner, Math.round(magnitude.outer * frac));
+  const inner2 = inner * inner;
+  const outer2 = outer * outer;
+  const rand = new PseudoRandom(mg.ticks());
+
+  let raised = 0;
+  const cx = mg.x(dst);
+  const cy = mg.y(dst);
+  // ⚠️ Прямоугольный скан, а НЕ `mg.bfs`: заливка ходит по соседям от точки,
+  // а точка перехвата вполне может быть над сушей — тогда островок вырос бы
+  // только с той стороны, куда заливка «пролезла». У затопления обратной
+  // беды нет (там источник всегда над сушей, которую и топят).
+  for (
+    let py = Math.max(0, cy - outer);
+    py <= Math.min(mg.height() - 1, cy + outer);
+    py++
+  ) {
+    for (
+      let px = Math.max(0, cx - outer);
+      px <= Math.min(mg.width() - 1, cx + outer);
+      px++
+    ) {
+      const dx = px - cx;
+      const dy = py - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > outer2) continue;
+      if (d2 > inner2 && !rand.chance(2)) continue;
+      const tile = mg.ref(px, py);
+      if (mg.isLand(tile)) continue;
+      mg.queueLandConversion(tile);
+      raised++;
+    }
+  }
+  if (raised > 0) owner.addUltStat("landTiles", raised);
 }

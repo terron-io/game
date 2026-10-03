@@ -81,6 +81,21 @@ export function initNavigation() {
           typeof (target as any).open === "function"
         ) {
           (target as any).open();
+        } else if (target.hasAttribute("inline")) {
+          // ⚠️ Тег ещё НЕ определён: страница ленивая (`load:` в роутере), а
+          // showPage лишь снимает `hidden` — человек увидел бы ПУСТОЙ ЛИСТ.
+          // Так и было со страницей /download 30.08: по адресу открывалась (там
+          // модуль подтягивает роутер), а по клику в футере — нет. Подтягиваем
+          // модуль и открываем, когда тег зарегистрируется.
+          void modalRouter.ensurePageLoaded(pageId).then((ok) => {
+            if (!ok) return;
+            const el = document.getElementById(pageId) as HTMLElement & {
+              open?: () => void;
+            };
+            if (typeof el?.open === "function" && !el.classList.contains("hidden")) {
+              el.open();
+            }
+          });
         }
       }
     }

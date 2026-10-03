@@ -2,11 +2,29 @@ import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { track } from "../Analytics";
 import { getApiBase } from "../Api";
+import { gameOrigin } from "../GameHost";
 import { L, translateText } from "../Utils";
 import { APP_STORE_URL, appleIcon, PLAY_URL, playIcon } from "./AndroidPromo";
+import { linuxIcon, windowsIcon } from "./ui/OsIcons";
 
 // время сборки клиента (vite define), для «обновлено … назад» по сайту
 declare const __BUILD_TIME__: number | undefined;
+
+// terron 30.08: значок системы гостя рядом со ссылкой «скачать». Отвечает на
+// «а есть ли сборка под меня» раньше, чем прочитан текст. Ошибиться не страшно:
+// на самой странице /download лежат все системы.
+function guestOsIcon(size = 13) {
+  try {
+    const ua = navigator.userAgent;
+    if (/Win/i.test(ua)) return windowsIcon(size);
+    if (/Mac/i.test(navigator.platform ?? "") || /Mac OS X/i.test(ua))
+      return appleIcon(size);
+    if (/Linux/i.test(ua) && !/Android/i.test(ua)) return linuxIcon(size);
+  } catch {
+    /* ignore */
+  }
+  return windowsIcon(size); // на телефоне и при неизвестной системе — самая частая
+}
 
 @customElement("page-footer")
 export class Footer extends LitElement {
@@ -45,7 +63,9 @@ export class Footer extends LitElement {
   // 1 воркер (порт 3001 → /w0). При масштабировании суммировать /w0../wN.
   private async fetchOnline(): Promise<void> {
     try {
-      const r = await fetch("/w0/api/online", { cache: "no-store" });
+      const r = await fetch(`${gameOrigin()}/w0/api/online`, {
+        cache: "no-store",
+      });
       if (!r.ok) return;
       const d = (await r.json()) as { n?: number; up?: number };
       if (typeof d.n === "number") this.online = d.n;
@@ -207,6 +227,25 @@ export class Footer extends LitElement {
                РАНЬШЕ нашего обработчика, и уводил адрес на /privacy ещё до
                открытия модалки (поймано на проде 25.08). Сам переход при этом
                не случается — его отменяет наш preventDefault. -->
+          <!-- ⚠️ КЛАСС t-external-link — тот же гейт, что у telegram и ссылок на
+               сторы: внутри площадки уводить игрока на скачивание нельзя, за
+               внешние ссылки карают. Сама ссылка ВНУТРЕННЯЯ (/download) —
+               гейт нужен из-за того, КУДА она ведёт дальше, а не из-за адреса. -->
+          <a
+            href="/download"
+            class="t-external-link hover:underline inline-flex items-center gap-1"
+            style="cursor:pointer"
+            title=${L(
+              "Версии для Windows, macOS и Linux",
+              "Builds for Windows, macOS and Linux",
+            )}
+            @click=${(e: Event) => {
+              e.preventDefault();
+              track("footer_link", { link: "download" });
+              window.showPage?.("page-download");
+            }}
+            >${guestOsIcon(13)} ${L("скачать", "download")}</a
+          >
           <a
             href="/terms"
             data-hard-nav
@@ -242,7 +281,7 @@ export class Footer extends LitElement {
           >
           <a
             href="/glory"
-            class="hover:underline"
+            class="hover:underline t-glory-link"
             style="cursor:pointer"
             title=${L(
               "Зал славы — ютуберы и тестеры",

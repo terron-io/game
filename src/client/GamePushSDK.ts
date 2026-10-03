@@ -71,6 +71,13 @@ const ALWAYS_AUTHORIZED_PLATFORMS = new Set([
   "FOTOSTRANA",
   "PLAYDECK",
   "BEELINE",
+  // terron 20.09: Пикабу = партнёрская рамка GamePush, тип площадки в SDK —
+  // PARTNER. Игрок, залогиненный на Пикабу, приходит уже авторизованным, а мы
+  // на первом заходе отвечали тихому автовходу «аккаунта нет» и ждали клика
+  // («эта штука попыталась сама войти и не смогла», владелец 20.09). Гостя
+  // это не трогает: автовход и так гейтится `isPlayerLoggedIn()`.
+  "PARTNER",
+  "PIKABU",
 ]);
 
 // Public-креды (projectId/publicToken) живут в index.html — GamePush требует свой
@@ -106,11 +113,36 @@ interface GPPlayer {
   // игрока вошедшим, а игра — нет.
   logout?(): Promise<unknown>;
 }
+/** Товар площадки (docs/purchases/payments «Поля покупки»). */
+export interface GPProduct {
+  id: number;
+  tag?: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  price?: number;
+  currency?: string;
+  currencySymbol?: string;
+  isSubscription?: boolean;
+}
+
 interface GPInstance {
   player: GPPlayer;
   isDev?: boolean;
   // GamePush умеет дёргать нативный SDK площадки (для Яндекса → getUniqueID).
   callNativeSDK?(method: string): Promise<unknown>;
+  // terron 12.09: покупки через площадку (docs/purchases/payments). Каталог и
+  // покупки игрока грузятся на старте SDK; purchase/consume — по тегу товара.
+  payments?: {
+    isAvailable?: boolean;
+    products?: GPProduct[];
+    purchases?: { productId?: number; tag?: string; payload?: unknown }[];
+    purchase?(q: { tag?: string; id?: number }): Promise<{
+      product?: GPProduct;
+      purchase?: { _id?: string; id?: string | number; productId?: number; tag?: string };
+    }>;
+    consume?(q: { tag?: string; id?: number }): Promise<unknown>;
+  };
   // terron: обязательные по чек-листу модерации GamePush методы жизненного цикла.
   // gameStart — «игра загрузилась, меню готово» (аналог Yandex LoadingAPI.ready).
   // gameplayStart/Stop — границы РАУНДА (для POKI/CrazyGames обязательны, для
@@ -157,9 +189,12 @@ interface GPInstance {
     showRewardedVideo?(): void;
     showSticky?(): void;
     closeSticky?(): void;
+    refreshSticky?(): void;
     isRewardedAvailable?: boolean;
     isPreloaderAvailable?: boolean;
     isStickyAvailable?: boolean;
+    isFullscreenAvailable?: boolean;
+    isStickyPlaying?: boolean;
   };
   /** Приложение: ярлык на рабочий стол, отзыв (docs/application). */
   app?: {
@@ -201,6 +236,9 @@ declare global {
     onGPInit?: (gp: GPInstance) => void;
     __gp?: GPInstance;
     __gpReady?: Promise<GPInstance>;
+    // Ставит инлайн-скрипт index.html: «нас запустила площадка» (iframe ИЛИ
+    // верхний документ мобильного приложения ВК/ОК с их параметрами запуска).
+    __platformLaunch?: boolean;
   }
 }
 
@@ -211,7 +249,8 @@ class GamePushSDKImpl {
   private gp: GPInstance | null = null;
   private initStarted = false;
 
-  /** Внутри iframe площадки? На terron.io/Capacitor — false (no-op). */
+  /** Запущены площадкой? Это ИЛИ чужой iframe, ИЛИ верхний документ мобильного
+   *  приложения площадки. На terron.io/Capacitor — false (no-op). */
   isOnPlatform(): boolean {
     if (typeof window === "undefined") return false;
     // itch.io — чужой iframe, но НЕ площадка GamePush: их реклама, аналитика,
@@ -219,6 +258,13 @@ class GamePushSDKImpl {
     // 17.08). Сниппет SDK туда и не грузится (гейт в index.html) — это второй
     // рубеж на случай, если __gpReady появится другим путём.
     if (isItchEmbed()) return false;
+    // ⚠️ IFRAME — НЕ ЕДИНСТВЕННАЯ ФОРМА ПЛОЩАДКИ. Мобильные приложения ВК и ОК
+    // открывают игру верхним документом в своём WebView (self === top), и по
+    // одному только iframe мы считали такой заход обычным сайтом: ни автовхода,
+    // ни рекламы площадки. Флаг ставит инлайн-скрипт index.html по параметрам
+    // запуска в адресе — он же единственный источник правды, второй детект
+    // разъехался бы с ним.
+    if (window.__platformLaunch === true) return true;
     try {
       return window.self !== window.top;
     } catch {
@@ -297,6 +343,7 @@ class GamePushSDKImpl {
       });
       this.wirePlatformSound();
       this.wirePlatformAds();
+      this.reportAdCaps();
       this.wirePlatformLanguage();
       this.wirePlatformLogin();
       this.wirePlatformFullscreen();
@@ -762,6 +809,65 @@ class GamePushSDKImpl {
     });
   }
 
+  // ── Покупки через площадку (terron 12.09, TZ-gp-payments.md) ──────────────
+  /** Отдаёт ли ЭТА площадка покупки вообще (у части площадок платежей нет). */
+  paymentsAvailable(): boolean {
+    return this.gp?.payments?.isAvailable === true;
+  }
+
+  /** Каталог товаров площадки (цены уже в её валюте). Пусто до init SDK. */
+  paymentProducts(): GPProduct[] {
+    const list = this.gp?.payments?.products;
+    return Array.isArray(list) ? list : [];
+  }
+
+  /** terron 20.09: теги наших пакетов, которые у игрока куплены и НЕ погашены
+   *  (разовая покупка исчезает из списка после consume). Непусто = прошлый
+   *  claim не дошёл — витрина просит сервер добрать. */
+  unconsumedPtsTags(): string[] {
+    const list = this.gp?.payments?.purchases;
+    if (!Array.isArray(list)) return [];
+    const byId = new Map<number, string>();
+    for (const p of this.paymentProducts())
+      if (typeof p.id === "number" && p.tag) byId.set(p.id, p.tag);
+    const out = new Set<string>();
+    for (const it of list) {
+      const tag = it.tag || (it.productId != null ? byId.get(it.productId) : "") || "";
+      if (/^pts_\d+$/i.test(tag)) out.add(tag.toLowerCase());
+    }
+    return [...out];
+  }
+
+  /** Купить по тегу. Возвращает id покупки у GamePush (для claim на сервере)
+   *  или null, если площадка/игрок отказали. ⚠️ Это НЕ факт оплаты — факт
+   *  подтверждает сервер (вебхук или сверка админским ключом). */
+  async purchase(tag: string): Promise<string | null> {
+    const fn = this.gp?.payments?.purchase;
+    if (typeof fn !== "function") return null;
+    try {
+      const r = await fn.call(this.gp!.payments, { tag });
+      const id = r?.purchase?._id ?? r?.purchase?.id;
+      return id == null ? null : String(id);
+    } catch (e) {
+      console.warn("[gp] purchase failed", e);
+      return null;
+    }
+  }
+
+  /** Погасить разовую покупку. Порядок жёсткий: СНАЧАЛА начисление сервером,
+   *  ПОТОМ consume — иначе при сбое покупка теряется. */
+  async consume(tag: string): Promise<boolean> {
+    const fn = this.gp?.payments?.consume;
+    if (typeof fn !== "function") return false;
+    try {
+      await fn.call(this.gp!.payments, { tag });
+      return true;
+    } catch (e) {
+      console.warn("[gp] consume failed", e);
+      return false;
+    }
+  }
+
   /** Доступна ли rewarded-реклама сейчас (кнопку «×2» без неё не рисуем). */
   isRewardedAvailable(): boolean {
     return this.gp?.ads?.isRewardedAvailable === true;
@@ -779,11 +885,39 @@ class GamePushSDKImpl {
    * трогать не нужно.
    */
   showStickyAd(): void {
-    if (this.gp?.ads?.isStickyAvailable !== true) return;
+    const ads = this.gp?.ads;
+    if (!ads?.showSticky) return;
+    // terron 02.09: ГЕЙТ ПО `isStickyAvailable` УБРАН — тот же урок, что у
+    // Playgama (`isInterstitialSupported`): флаг доступности у площадки живёт
+    // своей жизнью и на момент нашего вызова бывает false, а баннер при этом
+    // показался бы. Репорт владельца с телефона ВК: «рекламы не вижу, ты
+    // уверен, что ты это триггеришь?» — мы молча выходили на этой строке.
+    // Пусть решает их SDK: он сам знает, есть ли у площадки баннер.
     try {
-      this.gp.ads.showSticky?.();
+      console.log("[gp] sticky: показываю", {
+        available: ads.isStickyAvailable ?? "?",
+      });
+      ads.showSticky();
     } catch (e) {
       console.warn("[gp] showSticky failed:", e);
+    }
+  }
+
+  /** FULLSCREEN (interstitial) — ТОЛЬКО при возврате из матча в меню.
+   *  Требование модерации ОК 02.09 («лучше всего и стики, и в конце»); правило
+   *  площадок — никогда посреди геймплея и навигации, а возврат в меню после
+   *  матча = перерыв между игровыми сессиями. Частоту показов держит их SDK
+   *  (таймеры в панели GamePush), своего счётчика не заводим — разъехался бы. */
+  showFullscreenAd(): void {
+    const ads = this.gp?.ads;
+    if (!ads?.showFullscreen) return;
+    try {
+      console.log("[gp] fullscreen: показываю (возврат в меню)", {
+        available: ads.isFullscreenAvailable ?? "?",
+      });
+      ads.showFullscreen();
+    } catch (e) {
+      console.warn("[gp] showFullscreen failed:", e);
     }
   }
 
@@ -795,10 +929,41 @@ class GamePushSDKImpl {
     }
   }
 
+  /** Что из рекламы площадка ВООБЩЕ отдаёт. Без этого репорт «рекламы не вижу»
+   *  не разобрать: то ли мы не зовём, то ли площадка не даёт. Лог — для консоли,
+   *  событие хелса — чтобы это было видно С ТЕЛЕФОНА ИГРОКА, где консоли нет. */
+  private reportAdCaps(): void {
+    const ads = this.gp?.ads;
+    const caps = {
+      sticky: ads?.isStickyAvailable === true,
+      fullscreen: ads?.isFullscreenAvailable === true,
+      rewarded: ads?.isRewardedAvailable === true,
+      preloader: ads?.isPreloaderAvailable === true,
+    };
+    console.log("[gp] реклама площадки:", caps);
+    void import("./Health").then(({ reportHealth }) =>
+      reportHealth(
+        "gp_ads_caps",
+        `${this.gp?.platform?.type ?? "?"} ` +
+          `sticky=${+caps.sticky} fs=${+caps.fullscreen} ` +
+          `rw=${+caps.rewarded} pre=${+caps.preloader}`,
+      ),
+    ).catch(() => undefined);
+  }
+
   private wirePlatformAds(): void {
     const setMuted = (muted: boolean) => {
       setTransientAll(muted); // реклама = временный общий мут
     };
+    // Sticky не прерывает игру, звук по нему не глушим — только диагностика:
+    // по этим строкам с телефона видно, дошёл ли баннер до экрана.
+    for (const ev of ["sticky:start", "sticky:render", "sticky:close"]) {
+      try {
+        this.gp?.ads?.on?.(ev, () => console.log(`[gp] ${ev}`));
+      } catch {
+        /* площадка без событий баннера */
+      }
+    }
     const START = ["fullscreen:start", "rewarded:start", "preloader:start"];
     const END = ["fullscreen:close", "rewarded:close", "preloader:close"];
     const targets = [this.gp?.ads, this.gp];
@@ -898,6 +1063,23 @@ class GamePushSDKImpl {
     return Boolean(
       p._hasAuthModal || p.hasIntegratedAuth || p.isSecretCodeAuthAvailable,
     );
+  }
+
+  /**
+   * terron 20.09: у площадки есть СВОЁ окно входа (её модалка или встроенная
+   * авторизация GamePush). Только тогда кнопка «Войти через …» имеет смысл.
+   *
+   * ⚠️ Где есть лишь вход по коду (песочница GamePush на не-тестовом домене,
+   * партнёрские сайты), `login({withSecretCode:false})` открывает их окно БЕЗ
+   * ЕДИНОЙ КНОПКИ: заголовок, текст и крестик. Наша крутилка «Входим…» при
+   * этом ждёт вечно (репорт владельца 20.09: «почему вход такой долгий»).
+   * SDK ещё не поднялся — не прячем (как canPlatformLogin): клик дождётся.
+   */
+  canNativeLogin(): boolean {
+    const p = this.gp?.platform;
+    if (!p) return this.isOnPlatform();
+    if (typeof this.gp?.player?.login !== "function") return false;
+    return Boolean(p._hasAuthModal || p.hasIntegratedAuth);
   }
 
   /** Площадка принимает вход по СЕКРЕТНОМУ КОДУ (запасной путь GamePush для
@@ -1078,6 +1260,22 @@ class GamePushSDKImpl {
       playerName: (p?.name ?? "").slice(0, 24),
       suppressed: this.autoLoginSuppressed(),
     };
+  }
+
+  /**
+   * terron 08.09: МЫ НА ПЛОЩАДКЕ, НО SDK ЕЩЁ НЕ ГОТОВ.
+   *
+   * До готовности экран аккаунта рисовал КНОПКУ «Войти через площадку», хотя
+   * через секунду начинался тихий автовход и кнопка сменялась крутилкой. Со
+   * стороны это выглядело как «сначала не вошёл, потом сам вошёл» (репорт
+   * владельца 08.09: «думает, потом пишет войти через площадку, потом долго
+   * крутится, и только потом я авторизован»). Пока идёт инициализация, честнее
+   * показывать «Входим…».
+   */
+  platformInitPending(): boolean {
+    if (!this.isOnPlatform()) return false;
+    if (this.gp) return false; // SDK уже готов — дальше решают обычные ветки
+    return this.autoLoginSuppressed() === false;
   }
 
   noteExplicitLogout(): void {
@@ -1380,6 +1578,12 @@ class GamePushSDKImpl {
     }
   }
 
+  /** То же по ТИПУ площадки — для превью экрана входа в тест-режиме
+   *  (`?embed=1&platform=…`), где SDK не поднят и `platformType()` пуст. */
+  platformAlwaysAuthorizedFor(type: string): boolean {
+    return ALWAYS_AUTHORIZED_PLATFORMS.has(type.toUpperCase());
+  }
+
   /** Площадка авторизует игрока сама и всегда (ВК, ОК, Телеграм…). */
   platformAlwaysAuthorized(): boolean {
     const type = this.platformType();
@@ -1417,6 +1621,39 @@ class GamePushSDKImpl {
       const uid = await this.yandexUniqueId();
       return uid ? { provider: "yandex", id: uid } : null;
     }
+
+    // terron 12.09 (просьба владельца: «везде, где отдаётся реальный id,
+    // собирай»). ОК — как ВК: параметр запуска `logged_user_id` в адресе игры
+    // (по нему же index.html опознаёт площадку). Форма идентична VK-ветке:
+    // только число, нет параметра — null, gp-id не подставляем.
+    if (type === "OK") {
+      const okId = LAUNCH_PARAMS.get("logged_user_id");
+      if (okId && /^\d+$/.test(okId)) return { provider: "ok", id: okId };
+      console.warn("[gp] ОК: logged_user_id в адресе не найден");
+      return null;
+    }
+
+    // Telegram: WebApp SDK площадки кладёт пользователя в initDataUnsafe.
+    // ⚠️ Это НЕПОДПИСАННЫЕ данные (подпись initData проверять умеет только
+    // сервер с токеном бота, которого у нас нет) — как и vk_user_id, это
+    // ВТОРАЯ привязка «истинный id площадки», а не доказательство владения:
+    // сессию по ней не поднимаем, аккаунт ключуется gp-id (auth/nativeLink.ts).
+    if (type === "TELEGRAM") {
+      try {
+        const tg = (
+          window as unknown as {
+            Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: unknown } } } };
+          }
+        ).Telegram?.WebApp?.initDataUnsafe?.user?.id;
+        if (tg != null && /^\d+$/.test(String(tg)))
+          return { provider: "telegram", id: String(tg) };
+      } catch {
+        /* нет объекта Telegram */
+      }
+      return null;
+    }
+    // Пикабу / партнёрка / остальные: своего id площадка через SDK не отдаёт —
+    // остаётся только gp-id, вторую привязку не выдумываем.
     return null;
   }
 
@@ -1528,7 +1765,11 @@ class GamePushSDKImpl {
     // заберёт сыгранное без аккаунта и отложенные награды.
     const { getAnonPersistentIDs } = await import("./Auth");
     const anonIds = getAnonPersistentIDs();
-    const challenge = await this.passChallenge(gpPlayerId);
+    // Тот же ключ поедет и в /auth/ya — сервер сверит, что челлендж просил
+    // именно этот браузер. Хранилище запрещено (шим) → пусто, и тогда сервер
+    // засчитывает ровно присланный nonce, без истории.
+    const clientKey = anonIds[0] ?? "";
+    const challenge = await this.passChallenge(gpPlayerId, clientKey);
     if (!challenge) return false;
     const { nonce, field } = challenge;
     // ⏳ ЖДЁМ, ПОКА ПЛОЩАДКА ПОКАЖЕТ ЗАПИСЬ СВОЕМУ ЖЕ API. sync() у них
@@ -1550,6 +1791,7 @@ class GamePushSDKImpl {
         anonIds,
         allowCreate,
         native,
+        clientKey,
       ).catch((e) => {
         console.error("[gp] loginToBackend failed:", e);
         return { ok: false as const, reason: "exception" };
@@ -1589,6 +1831,7 @@ class GamePushSDKImpl {
     anonIds: string[],
     allowCreate: boolean,
     native: { provider: string; id: string } | null,
+    clientKey: string,
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     const r = await fetch(`${getApiBase()}/auth/ya`, {
       method: "POST",
@@ -1605,6 +1848,7 @@ class GamePushSDKImpl {
         idSource: ident.native ? "native" : "gamepush",
         gpPlayerId,
         nonce,
+        clientKey,
         // Имя с площадки — чтобы новый аккаунт не был безликим «playerNNNN».
         // Сервер применяет его ТОЛЬКО при создании аккаунта.
         name: this.platformName() ?? undefined,
@@ -1661,6 +1905,7 @@ class GamePushSDKImpl {
    *  Возвращает nonce, который сервер и будет сверять; null — не сложилось. */
   private async passChallenge(
     gpPlayerId: string,
+    clientKey: string,
   ): Promise<{ nonce: string; field: string } | null> {
     const player = this.gp?.player;
     if (!player?.set || !player.sync) return null;
@@ -1668,7 +1913,10 @@ class GamePushSDKImpl {
       const r = await fetch(`${getApiBase()}/auth/platform/challenge`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ gpPlayerId }),
+        // clientKey — КТО просит челлендж. Сервер хранит нонсы по паре
+        // «игрок + клиент»: без этого недавний nonce жертвы засчитался бы
+        // постороннему, знающему её gpPlayerId (разбор — gamepush.ts keyFor).
+        body: JSON.stringify({ gpPlayerId, clientKey }),
       });
       if (!r.ok) {
         console.warn("[gp] челлендж не выдан:", r.status);

@@ -42,6 +42,19 @@ interface ClusterTraversalState {
 
 // Per-game traversal state used by calculateClusters() to avoid per-player buffers.
 const traversalStates = new WeakMap<Game, ClusterTraversalState>();
+// terron 05.09: порог лога шипов пересчёта анклавов, мс (замер на реплее:
+// TERRON_CLUSTER_SPIKE_MS=15 node --import tsx scratch-replay.ts rec.json).
+const CLUSTER_SPIKE_LOG_MS: number = (() => {
+  try {
+    const v = Number(
+      (globalThis as { process?: { env?: Record<string, string> } }).process
+        ?.env?.TERRON_CLUSTER_SPIKE_MS,
+    );
+    return Number.isFinite(v) && v > 0 ? v : 1000;
+  } catch {
+    return 1000;
+  }
+})();
 
 // terron: авиация — пустой набор по умолчанию для removeCluster без плацдармов.
 const EMPTY_TILE_SET: ReadonlySet<TileRef> = new Set<TileRef>();
@@ -93,6 +106,23 @@ export class PlayerExecution implements Execution {
 
       const owner = this.mg!.owner(u.tile());
       if (!owner?.isPlayer()) {
+        // terron 01.09 (репорт: «дора взрывается при переезде через мосты»).
+        //
+        // ⚠️ Баг ШИРЕ моста. ДОРА — единственное ЕДУЩЕЕ здание, и рельсы под
+        // ней законно идут и через ВОДУ (мост через пролив: AStar.Rail пускает
+        // на воду с берега), и через НИЧЕЙНУЮ землю (запрещена только земля
+        // ДРУГОГО игрока). В такой момент у тайла под орудием нет владельца —
+        // и общая зачистка «строение на не-своей земле → снести» убивала его
+        // прямо на переезде. Игрок видит взрыв: орудие исчезает под ним.
+        //
+        // Где Доре стоять МОЖНО, решает RailGunExecution и только он: ничейное
+        // и вода — можно, ЧУЖАЯ земля — минута и взрыв на месте. Второй судья
+        // здесь и был ошибкой.
+        //
+        // ⚠️ Захват врагом НЕ ЗАТРОНУТ: он ниже, в ветке живого владельца, —
+        // «орудие можно захватить вместе с землёй» остаётся в силе. И смерть
+        // игрока Дору сносит через removeOnDeath, как вышки.
+        if (u.type() === UnitType.RailGun) continue;
         u.delete();
         continue;
       }
@@ -112,7 +142,14 @@ export class PlayerExecution implements Execution {
     // TERRON_CAPTURED_ULT_SELFDESTRUCT_TICKS тиков владения (флаг; 0 = ВЫКЛ). Своя
     // выбранная ульта (тип === ultimateChoice) не трогается; пассивку захваченной
     // используешь, пока живо, а дальше — снеси или взорвётся. new-units/ULTIMATES.md
-    if (TERRON_CAPTURED_ULT_SELFDESTRUCT_TICKS > 0) {
+    // terron 04.09 ПЕРФ: обход всех юнитов ради захваченных ульт — только если
+    // ульт-здания вообще есть (Set в PlayerImpl ведётся на постройке/захвате/
+    // сносе, то есть ⊇ ульт среди units()). Иначе это сотни юнитов каждый тик
+    // у каждого игрока впустую.
+    if (
+      TERRON_CAPTURED_ULT_SELFDESTRUCT_TICKS > 0 &&
+      this.player.hasUltBuildings()
+    ) {
       for (const u of this.player.units()) {
         if (!Ultimates.has(u.type()) || u.isUnderConstruction()) continue;
         if (this.player.ultimateChoice() === u.type()) continue; // своя выбранная
@@ -244,7 +281,14 @@ export class PlayerExecution implements Execution {
         const start = performance.now();
         this.removeClusters();
         const end = performance.now();
-        if (end - start > 1000) {
+        if (end - start > CLUSTER_SPIKE_LOG_MS) {
+          // terron 05.09: порог из env (замер шипов на реплее), по умолчанию 1 с.
+          console.log(
+            `[clusters] ${this.player.name()}: ${(end - start).toFixed(1)}ms ` +
+              `tiles=${this.player.numTilesOwned()} border=${this.player.borderTiles().size}`,
+          );
+        }
+        if (end - start > 1000 && CLUSTER_SPIKE_LOG_MS >= 1000) {
           console.log(`player ${this.player.name()}, took ${end - start}ms`);
         }
       }
@@ -305,35 +349,71 @@ export class PlayerExecution implements Execution {
 
     // terron: авиация — снять метку у плацдармов, чей регион вырвался к морю/краю карты
     // (получил выход → окружение больше не грозит → гаснут иммунитет и клиентский таймер).
-    if (beachheads.size > 0) {
-      for (const tile of beachheads) {
-        if (this.regionReachedOpen(tile)) {
-          this.player.clearAirborneBeachhead(tile);
-        }
-      }
-    }
+    // ⚠️ Идём по activeAirborneMarkers, а НЕ по beachheads: в beachheads входят ещё и
+    // «тихие» иммунитеты Раскола, снять которые этот код физически не может (они в
+    // другом реестре) — гонять по ним обход было холостой работой на десятки тысяч
+    // тайлов. Разбор — PlayerImpl.activeAirborneMarkers.
+    this.clearOpenedBeachheads(
+      this.player.activeAirborneMarkers(this.mg.ticks()),
+    );
   }
 
-  // terron: авиация — регион своих тайлов от `startTile` касается моря/края карты?
-  // Ранний выход на первом же «открытом» тайле. Регион >CAP считаем безопасным (это не
-  // хрупкий окружённый карман) → тоже «вырвался», чтобы ограничить стоимость флудфилла.
-  private regionReachedOpen(startTile: TileRef): boolean {
+  // terron 30.08 (перф): снять метку у плацдармов, чей регион своих тайлов касается
+  // моря/края карты (получил выход → окружение больше не грозит).
+  //
+  // ⚠️ ОБХОД — ОДИН НА РЕГИОН, А НЕ НА МЕТКУ, и это суть правки. Раньше на каждую
+  // метку шёл свой флудфилл, а все метки одного плацдарма/одной буквы Т лежат в ОДНОМ
+  // регионе — то есть один и тот же ответ считался тысячи раз. Замер боевого матча
+  // vg8v5xLZ (два раскола): 20 204 обхода за пересчёт = 100% времени тика, до 12 с на
+  // тик каждые 20 тиков. Общий `visited` делает суммарную стоимость O(территории
+  // игрока) независимо от числа меток.
+  //
+  // Правило «регион больше CAP считаем открытым» сохранено байт-в-байт (это не
+  // хрупкий окружённый карман), но обход после срабатывания НЕ обрывается: надо
+  // дособрать метки этого же региона, иначе следующая итерация начнёт его заново.
+  private clearOpenedBeachheads(markers: ReadonlySet<TileRef>) {
+    if (markers.size === 0) return;
     const OPEN_REGION_CAP = 2000;
     const myID = this.player.smallID();
-    const visited = new Set<TileRef>([startTile]);
-    const stack: TileRef[] = [startTile];
-    while (stack.length > 0) {
-      const t = stack.pop()!;
-      if (this.mg.isShore(t) || this.mg.isOnEdgeOfMap(t)) return true;
-      this.mg.forEachNeighbor(t, (n) => {
-        if (!visited.has(n) && this.mg.ownerID(n) === myID) {
-          visited.add(n);
-          stack.push(n);
+    const gen = this.bumpGeneration();
+    const visited = this.traversalState().visited;
+
+    for (const start of markers) {
+      if (visited[start] === gen) continue;
+      // Дешёвый частый случай: сама метка стоит у воды/края — регион заведомо
+      // открыт, обходить его незачем (так вёл себя и прежний ранний выход).
+      if (this.mg.isShore(start) || this.mg.isOnEdgeOfMap(start)) {
+        this.player.clearAirborneBeachhead(start);
+        continue;
+      }
+      const stack: TileRef[] = [start];
+      visited[start] = gen;
+      const inRegion: TileRef[] = [];
+      let open = false;
+      let size = 0;
+      while (stack.length > 0) {
+        const t = stack.pop()!;
+        size++;
+        if (markers.has(t)) inRegion.push(t);
+        if (
+          !open &&
+          (this.mg.isShore(t) ||
+            this.mg.isOnEdgeOfMap(t) ||
+            size > OPEN_REGION_CAP)
+        ) {
+          open = true;
         }
-      });
-      if (visited.size > OPEN_REGION_CAP) return true;
+        this.mg.forEachNeighbor(t, (n) => {
+          if (visited[n] !== gen && this.mg.ownerID(n) === myID) {
+            visited[n] = gen;
+            stack.push(n);
+          }
+        });
+      }
+      if (open) {
+        for (const t of inRegion) this.player.clearAirborneBeachhead(t);
+      }
     }
-    return false;
   }
 
   private surroundedBySamePlayer(
@@ -597,19 +677,22 @@ export class PlayerExecution implements Execution {
       stack.push(start);
     }
 
+    // terron 04.09 ПЕРФ: колбэк создаём ОДИН раз на заливку, а не на каждый
+    // снятый со стека тайл (сотни тысяч замыканий за пересчёт кластеров у
+    // большой страны). Порядок обхода и результат байт-в-байт прежние.
+    const visit = (neighbor: TileRef): void => {
+      if (visited[neighbor] === currentGen) {
+        return;
+      }
+      if (!includeFn(neighbor)) {
+        return;
+      }
+      visited[neighbor] = currentGen;
+      result.add(neighbor);
+      stack.push(neighbor);
+    };
     while (stack.length > 0) {
-      const tile = stack.pop()!;
-      neighborFn(tile, (neighbor) => {
-        if (visited[neighbor] === currentGen) {
-          return;
-        }
-        if (!includeFn(neighbor)) {
-          return;
-        }
-        visited[neighbor] = currentGen;
-        result.add(neighbor);
-        stack.push(neighbor);
-      });
+      neighborFn(stack.pop()!, visit);
     }
 
     return result;
@@ -636,8 +719,10 @@ export class PlayerExecution implements Execution {
     const cx = this.mg.x(center);
     const cy = this.mg.y(center);
     const r = magnitude.inner;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
+    // Радиус бывает дробным — шаг перебора нет (см. NukeExecution.tilesToDestroy).
+    const rBox = Math.ceil(r);
+    for (let dy = -rBox; dy <= rBox; dy++) {
+      for (let dx = -rBox; dx <= rBox; dx++) {
         if (dx * dx + dy * dy > inner2) continue;
         const x = cx + dx;
         const y = cy + dy;

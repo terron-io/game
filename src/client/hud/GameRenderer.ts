@@ -46,6 +46,7 @@ import { PlayerInfoOverlay } from "./layers/PlayerInfoOverlay";
 import { PlayerPanel } from "./layers/PlayerPanel";
 import { ReplayPanel } from "./layers/ReplayPanel";
 import { SatelliteBlackoutTimer } from "./layers/SatelliteBlackoutTimer";
+import { VictoryTimer } from "./layers/VictoryTimer";
 import { SatelliteLaunchFx } from "./layers/SatelliteLaunchFx";
 import { SettingsModal } from "./layers/SettingsModal";
 import { SpawnTimer } from "./layers/SpawnTimer";
@@ -341,6 +342,14 @@ export function createRenderer(
   satelliteBlackoutTimer.game = game;
   satelliteBlackoutTimer.eventBus = eventBus;
 
+  // terron 26.08: полоса-отсчёт победы (порог территории надо удержать).
+  const victoryTimer = document.querySelector("victory-timer") as VictoryTimer;
+  if (!(victoryTimer instanceof VictoryTimer)) {
+    console.error("victory timer not found");
+  }
+  victoryTimer.game = game;
+  victoryTimer.eventBus = eventBus;
+
   const layers: Controller[] = [
     // terron: «Небо наше» — screen-space взлёт ракеты в точке эпицентра
     new SatelliteLaunchFx(game, transformHandler),
@@ -396,6 +405,7 @@ export function createRenderer(
     taskTracker,
     immunityTimer,
     satelliteBlackoutTimer,
+    victoryTimer,
     leaderboard,
     gameLeftSidebar,
     unitDisplay,

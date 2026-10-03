@@ -33,6 +33,16 @@ export interface GameMap {
   terrainRaw(): Uint8Array;
   // Terrain setters
   setWater(ref: TileRef): void;
+  /**
+   * terron 25.08: ТЕРРАФОРМИНГ — обратная операция к `setWater`: вода
+   * становится сушей (каст «Насыпь»). Апстрим умел только топить.
+   *
+   * Ставит бит суши, СНИМАЕТ бит океана и кладёт magnitude (высота: <10 =
+   * равнина). Береговые биты, magnitude соседней воды, мини-карту и водный
+   * граф чинит `WaterManager` — как и при затоплении, поштучно этот метод
+   * звать нельзя, только через `Game.queueLandConversion`.
+   */
+  setLand(ref: TileRef, magnitude: number): void;
   setShorelineBit(ref: TileRef): void;
   clearShorelineBit(ref: TileRef): void;
   setOcean(ref: TileRef): void;
@@ -239,6 +249,16 @@ export class GameMapImpl implements GameMap {
     this.numLandTiles_--;
   }
 
+  // terron 25.08: ТЕРРАФОРМИНГ — вода → суша. Зеркало setWater: байт пишем
+  // ЦЕЛИКОМ (бит суши + высота), поэтому бит океана и береговой бит гаснут
+  // сами; берег отрастит фиксап WaterManager по соседям.
+  setLand(ref: TileRef, magnitude: number): void {
+    if (this.isLand(ref)) return;
+    this.terrain[ref] =
+      (1 << GameMapImpl.IS_LAND_BIT) | (magnitude & GameMapImpl.MAGNITUDE_MASK);
+    this.numLandTiles_++;
+  }
+
   setShorelineBit(ref: TileRef): void {
     this.terrain[ref] |= 1 << GameMapImpl.SHORELINE_BIT;
   }
@@ -370,13 +390,16 @@ export class GameMapImpl implements GameMap {
   }
 
   manhattanDist(c1: TileRef, c2: TileRef): number {
+    // terron 04.09 ПЕРФ: координаты инлайном (те же формулы, что x()/y()).
+    const w = this.width_;
     return (
-      Math.abs(this.x(c1) - this.x(c2)) + Math.abs(this.y(c1) - this.y(c2))
+      Math.abs((c1 % w) - (c2 % w)) + Math.abs(((c1 / w) | 0) - ((c2 / w) | 0))
     );
   }
   euclideanDistSquared(c1: TileRef, c2: TileRef): number {
-    const x = this.x(c1) - this.x(c2);
-    const y = this.y(c1) - this.y(c2);
+    const w = this.width_;
+    const x = (c1 % w) - (c2 % w);
+    const y = ((c1 / w) | 0) - ((c2 / w) | 0);
     return x * x + y * y;
   }
   circleSearch(
@@ -590,3 +613,4 @@ export function andFN(
 ): (gm: GameMap, tile: TileRef) => boolean {
   return (gm: GameMap, tile: TileRef) => x(gm, tile) && y(gm, tile);
 }
+

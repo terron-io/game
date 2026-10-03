@@ -13,6 +13,7 @@ import { customElement, state } from "lit/decorators.js";
 import { getPayPacks, primeUntilMs, type PayPacks } from "./Api";
 import { BaseModal } from "./components/BaseModal";
 import { modalHeader } from "./components/ui/ModalHeader";
+import { takeReturnPage } from "./PageReturn";
 import { isTerronPrime } from "./UltimateGrid";
 import { L, translateText } from "./Utils";
 
@@ -50,7 +51,12 @@ export class PrimePage extends BaseModal {
   protected renderHeaderSlot() {
     return modalHeader({
       title: "TERRON Prime",
-      onBack: () => this.close(),
+      onBack: () => {
+        // Пришли из магазина (ссылка «+ Prime на …») — туда и возвращаемся.
+        const back = takeReturnPage();
+        this.close();
+        if (back) window.showPage?.(back);
+      },
       ariaLabel: translateText("common.back"),
     });
   }
@@ -75,10 +81,7 @@ export class PrimePage extends BaseModal {
         ? date
           ? L(`Prime активен — до ${date}.`, `Prime is active — until ${date}.`)
           : L("Prime активен.", "Prime is active.")
-        : L(
-            "Prime сейчас не активен.",
-            "Prime is not active right now.",
-          )}
+        : L("Prime сейчас не активен.", "Prime is not active right now.")}
     </div>`;
   }
 
@@ -90,16 +93,17 @@ export class PrimePage extends BaseModal {
       style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin:10px 0 4px"
     >
       ${packs.map(
-        (p) => html`<div
-          style="border:1px solid var(--t-ink);background:var(--t-sheet);padding:8px 10px;display:flex;justify-content:space-between;gap:8px;font-size:13px"
-        >
-          <span style="font-weight:700">
-            ${p.priceRub.toLocaleString("ru-RU")} ₽
-          </span>
-          <span style="color:var(--t-red);font-weight:700">
-            ${daysLabel(p.primeDays ?? 0)}
-          </span>
-        </div>`,
+        (p) =>
+          html`<div
+            style="border:1px solid var(--t-ink);background:var(--t-sheet);padding:8px 10px;display:flex;justify-content:space-between;gap:8px;font-size:13px"
+          >
+            <span style="font-weight:700">
+              ${p.priceRub.toLocaleString("ru-RU")} ₽
+            </span>
+            <span style="color:var(--t-red);font-weight:700">
+              ${daysLabel(p.primeDays ?? 0)}
+            </span>
+          </div>`,
       )}
     </div>`;
   }

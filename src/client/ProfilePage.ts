@@ -11,10 +11,10 @@ import {
   type TerronProfile,
 } from "./Api";
 import { avatarSrc } from "./Avatar";
-import { reportHealth } from "./Health";
 import { fetchClanBySlug, type ClanFull } from "./ClanApi";
 import "./ClanPage";
 import { BaseModal } from "./components/BaseModal";
+import { chatIcon } from "./components/ui/ChatIcon";
 import { modalHeader } from "./components/ui/ModalHeader";
 import { uiIcon } from "./components/ui/UiIcon";
 import {
@@ -22,17 +22,20 @@ import {
   requestFriendByIdentifier,
   withdrawFriendRequest,
 } from "./FriendsApi";
+import { reportHealth } from "./Health";
 import {
   captureProfileReferral,
   getMyReferral,
   type MyReferral,
 } from "./Referral";
 import { openReportDialog } from "./ReportDialog";
+import { siteChatAllowed } from "./SiteChatGate";
+import { siteChat } from "./SiteChatPanel";
 import { allSkins, skinSwatchStyle } from "./Skins";
 import { softGo } from "./SoftNavigate";
 import { toast } from "./Toast";
 import "./UltTree";
-import { L, translateText } from "./Utils";
+import { L, onPlatformSurface, translateText } from "./Utils";
 
 const REF_EVENT_LABELS: Record<string, string> = {
   open: "Открыли ссылку",
@@ -431,6 +434,21 @@ export class ProfilePage extends BaseModal {
       style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"
     >
       ${friend}
+      ${siteChatAllowed()
+        ? html`<button
+            class="t-btn ghost profile-write-btn"
+            style=${btn}
+            title=${this.relation === "friends"
+              ? L("Написать личное сообщение", "Send a direct message")
+              : L(
+                  "Личные сообщения только между друзьями",
+                  "Direct messages are friends-only",
+                )}
+            @click=${() => this.writeMessage()}
+          >
+            ${chatIcon(16)} ${L("Написать", "Message")}
+          </button>`
+        : ""}
       <button
         class="t-btn ghost"
         style="${btn};color:var(--t-red,#a8432b);border-color:var(--t-red,#a8432b);margin-left:auto"
@@ -440,6 +458,20 @@ export class ProfilePage extends BaseModal {
         🚩 ${L("Пожаловаться", "Report")}
       </button>
     </div>`;
+  }
+
+  // terron 22.09: «Написать» — ЛС из досье. Панель сама скажет, если не друзья
+  // (сервер отвечает not_friends) или игрок не залогинен.
+  private async writeMessage(): Promise<void> {
+    const me = await getUserMe();
+    if (!me) {
+      toast(
+        L("Войди в аккаунт, чтобы писать", "Sign in to send messages"),
+        "error",
+      );
+      return;
+    }
+    await siteChat()?.openDmWith(this.slug);
   }
 
   // terron: заявка в друзья со страницы чужого досье (account→account). См. friends.md.
@@ -538,7 +570,13 @@ export class ProfilePage extends BaseModal {
     if (this.own) tabs.push(["skins", td("tab_skins")]);
     // terron: ЗАМКИ НА УЛЬТЫ — ростер-дерево (как персонажи в DBD). TZ-ult-unlocks.md
     if (this.own) tabs.push(["ults", L("Ульты", "Ultimates")]);
-    if (this.own) tabs.push(["invites", L("Приглашения", "Invites")]);
+    // ⚠️ ВНУТРИ ПЛОЩАДКИ ВКЛАДКИ «Приглашения» НЕТ ВОВСЕ (решение владельца
+    // 09.09 по замечанию модерации ВК, пункт 5). 08.09 мы убрали оттуда саму
+    // ссылку на terron.io, оставив вкладку с текстом «зови через лобби», — но
+    // дразнить модерацию разделом про приглашения незачем: своя система
+    // инвайтов внутри площадки будет позже. На terron.io вкладка на месте.
+    if (this.own && !onPlatformSurface())
+      tabs.push(["invites", L("Приглашения", "Invites")]);
     // ⚠️ terron 26.08: полоса ОБЯЗАНА скроллиться по горизонтали. На СВОЁМ
     // досье вкладок шесть (у чужого три — потому баг и не был виден со
     // стороны), и на 375–412px они требуют ~437px при ~327px доступных:
@@ -709,8 +747,7 @@ export class ProfilePage extends BaseModal {
       );
     return html`<h3 class="t-h3">${td("streaks")}</h3>
       <div class="t-grid">
-        ${cell(td("streak_win"), s.win)}
-        ${cell(td("streak_bad"), s.bad, true)}
+        ${cell(td("streak_win"), s.win)} ${cell(td("streak_bad"), s.bad, true)}
         ${s.golden.best > 0 || s.golden.current > 0
           ? cell(td("streak_golden"), s.golden)
           : ""}
@@ -799,22 +836,36 @@ export class ProfilePage extends BaseModal {
 
       ${funnel}
 
-      <div
-        style="display:flex; gap:8px; align-items:center; margin-bottom:16px; flex-wrap:wrap;"
-      >
-        <input
-          readonly
-          .value=${r.link}
-          @focus=${(e: Event) => (e.target as HTMLInputElement).select()}
-          style="flex:1; min-width:200px; padding:9px 11px; border:1px solid var(--t-border, rgba(0,0,0,0.2)); border-radius:8px; background:rgba(0,0,0,0.03); color:var(--t-ink); font-size:13px;"
-        />
-        <button
-          @click=${copy}
-          style="padding:9px 16px; border-radius:8px; background:#2563eb; color:#fff; font-weight:700; cursor:pointer; border:none;"
-        >
-          ${L("Копировать", "Copy")}
-        </button>
-      </div>
+      <!-- terron 08.09: ВНУТРИ ПЛОЩАДКИ ССЫЛКИ НАРУЖУ НЕ ПОКАЗЫВАЕМ.
+           Реферальная ссылка ведёт на terron.io, а для ВК это сторонний ресурс —
+           прямое замечание модерации («в рефералке ссылка на сторонний ресурс»).
+           Сама механика приглашений работает и там: заход по ссылке лобби и по
+           профилю привязывает друга так же, поэтому объясняем эти два способа. -->
+      ${onPlatformSurface()
+        ? html`<div
+            style="color: var(--t-ink); opacity: 0.75; margin: 0 0 16px; font-size: 13px; line-height: 1.5;"
+          >
+            ${L(
+              "Здесь зови друзей изнутри игры: создай лобби и позови — заход по ссылке лобби тоже твой. Ссылка-приглашение доступна на сайте.",
+              "Invite friends from inside the game: create a lobby and invite — joining via the lobby link counts too. The invite link is available on the website.",
+            )}
+          </div>`
+        : html`<div
+            style="display:flex; gap:8px; align-items:center; margin-bottom:16px; flex-wrap:wrap;"
+          >
+            <input
+              readonly
+              .value=${r.link}
+              @focus=${(e: Event) => (e.target as HTMLInputElement).select()}
+              style="flex:1; min-width:200px; padding:9px 11px; border:1px solid var(--t-border, rgba(0,0,0,0.2)); border-radius:8px; background:rgba(0,0,0,0.03); color:var(--t-ink); font-size:13px;"
+            />
+            <button
+              @click=${copy}
+              style="padding:9px 16px; border-radius:8px; background:#2563eb; color:#fff; font-weight:700; cursor:pointer; border:none;"
+            >
+              ${L("Копировать", "Copy")}
+            </button>
+          </div>`}
 
       <h3 class="t-h3">
         ${L("Награды за друга (в этом месяце)", "Friend rewards (this month)")}
@@ -887,9 +938,16 @@ export class ProfilePage extends BaseModal {
     const goal = next ? next.threshold : tiers[tiers.length - 1].threshold;
     const pct = Math.max(0, Math.min(1, goal > 0 ? progress / goal : 1));
     const open = this.expanded.has(fam);
-    const sub = next
-      ? `${td("tier")} ${curTier} ${td("of")} ${tiers.length}`
-      : td("received");
+    // terron 29.08: у семейства из ОДНОГО тира тиров нет вовсе — «Тир 0 из 1»
+    // читается как поломка. Там же вместо счётчика тиров показываем УСЛОВИЕ
+    // (см. ниже): раскрывашки у такой карточки нет, и текст ачивки игроку
+    // больше взять негде.
+    const single = tiers.length === 1;
+    const sub = single
+      ? ""
+      : next
+        ? `${td("tier")} ${curTier} ${td("of")} ${tiers.length}`
+        : td("received");
     return html`<div
       style="background:#fdfcf7;border:0.5px solid rgba(0,0,0,.15);border-left:3px solid ${s.c};border-radius:0 8px 8px 0;padding:11px 13px;${tiers.length >
       1
@@ -902,19 +960,29 @@ export class ProfilePage extends BaseModal {
         <div style="min-width:0;flex:1">
           <div style="font-weight:700">
             ${this.familyName(fam, tiers)}
-            <span style="font-size:12px;opacity:.5;font-weight:400"
-              >· ${sub}</span
-            >
+            ${sub
+              ? html`<span style="font-size:12px;opacity:.5;font-weight:400"
+                  >· ${sub}</span
+                >`
+              : ""}
           </div>
           <div style="font-size:12px;opacity:.7">
-            ${next ? `${n(progress)} / ${n(goal)}` : td("all_done")}${next &&
-            next.reward > 0
+            ${next
+              ? `${n(progress)} / ${n(goal)}`
+              : single
+                ? td("received")
+                : td("all_done")}${next && next.reward > 0
               ? html` ·
                   <b style="color:${s.ink}"
                     >+${next.reward} ${td("reward_lts")}</b
                   >`
               : ""}
           </div>
+          ${single
+            ? html`<div style="font-size:12px;opacity:.55;margin-top:2px">
+                ${translateText(`achievements.${tiers[0].id}.desc`)}
+              </div>`
+            : ""}
         </div>
         ${tiers.length > 1
           ? html`<span style="opacity:.5;font-size:13px"
@@ -1340,10 +1408,12 @@ export class ProfilePage extends BaseModal {
         sessionStorage.removeItem("terron_profile_tab");
         if (
           this.own &&
-          (want === "invites" ||
-            want === "titles" ||
+          // «Приглашения» внутри площадки не существует — deep-link туда
+          // (напр. из инвайт-топа) не должен воскрешать спрятанную вкладку.
+          (want === "titles" ||
             want === "skins" ||
-            want === "ults")
+            want === "ults" ||
+            (want === "invites" && !onPlatformSurface()))
         ) {
           this.tab = want as Tab;
         }

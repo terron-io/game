@@ -21,6 +21,7 @@ import {
 } from "../../../types";
 import { DynamicInstanceBuffer } from "../../DynamicBuffer";
 import type { RenderSettings } from "../../RenderSettings";
+import { loadAtlasImage, reportAtlasFailure } from "../../utils/AtlasImage";
 import { createProgram, shaderSrc } from "../../utils/GlUtils";
 
 import fxAtlasMeta from "resources/atlases/fx-atlas-meta.json";
@@ -278,7 +279,7 @@ export class FxSpritePass {
 
     gl.bindVertexArray(null);
 
-    this.loadAtlas();
+    void this.loadAtlas().catch((e) => reportAtlasFailure("fx", e));
   }
 
   // -------------------------------------------------------------------------
@@ -286,10 +287,7 @@ export class FxSpritePass {
   // -------------------------------------------------------------------------
 
   private async loadAtlas(): Promise<void> {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = fxAtlasUrl;
-    await img.decode();
+    const img = await loadAtlasImage(fxAtlasUrl);
     const gl = this.gl;
 
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);

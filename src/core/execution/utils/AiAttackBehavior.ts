@@ -35,6 +35,21 @@ import { closestTwoTiles } from "../Util";
 
 export class AiAttackBehavior {
   private botAttackTroopsSent: number = 0;
+  /**
+   * terron 23.09: ФИЛЬТР ЦЕЛЕЙ по выбору (честный бот v2, new-units/FAIRBOT.md).
+   * false — по этому игроку не наступаем и не шлём десант по своей инициативе
+   * (ответ на нападение, помощь союзнику и предательство он не трогает).
+   * У наций и племён null — их ветки и порядок вызовов ГСЧ прежние байт-в-байт.
+   */
+  private targetFilter: ((p: Player) => boolean) | null = null;
+
+  setTargetFilter(fn: ((p: Player) => boolean) | null): void {
+    this.targetFilter = fn;
+  }
+
+  private targetable(p: Player): boolean {
+    return this.targetFilter === null || this.targetFilter(p);
+  }
 
   constructor(
     private random: PseudoRandom,
@@ -52,22 +67,47 @@ export class AiAttackBehavior {
       throw new Error("not initialized");
     }
 
-    const border = Array.from(this.player.borderTiles())
-      .flatMap((t) => this.game.neighbors(t))
-      .filter(
-        (t) =>
-          this.game.isLand(t) &&
-          this.game.ownerID(t) !== this.player?.smallID(),
-      );
-    const playerNeighbors = this.player.nearby();
-    const borderingPlayerSet = new Set<Player>(
-      border
-        .map((t) => this.game.playerBySmallID(this.game.ownerID(t)))
-        .filter((o): o is Player => o.isPlayer()),
-    );
-    for (const n of playerNeighbors) {
-      if (n.isPlayer()) borderingPlayerSet.add(n);
+    // terron 04.09 ПЕРФ: раньше тут строились ЧЕТЫРЕ временных массива на всю
+    // границу (flatMap соседей → filter → map → filter) — у большой нации это
+    // десятки тысяч элементов мусора на каждый вызов. Теперь один проход.
+    // ⚠️ Порядок вставки в Set сохранён (обход границы, соседи в порядке
+    // game.neighbors): от него зависит стабильная сортировка ниже, а значит и
+    // выбор цели ботом — хэши реплея совпали.
+    // terron 04.09 ПЕРФ: ОДИН обход границы вместо трёх (flatMap соседей +
+    // nearby() + поиск свободной земли). Здесь же, что делал nearby():
+    // сухопутные соседи по границе + морские через узкую воду
+    // (shoreReachableNeighbors). Порядок множества тот же, что давал nearby():
+    // сначала сухопутные в порядке обхода границы, затем морские — от него
+    // зависит порядок при равных войсках (stable sort), то есть хэш.
+    const me = this.player.smallID();
+    const borderingPlayerSet = new Set<Player>();
+    let borderHasFreeLand = false;
+    let hasTerraNullius = false;
+    for (const t of this.player.borderTiles()) {
+      const ns = this.game.neighbors(t);
+      for (let i = 0; i < ns.length; i++) {
+        const n = ns[i];
+        if (!this.game.isLand(n)) continue;
+        const oid = this.game.ownerID(n);
+        if (oid === me) continue;
+        const o = this.game.playerBySmallID(oid);
+        if (o.isPlayer()) {
+          borderingPlayerSet.add(o);
+          continue;
+        }
+        hasTerraNullius = true;
+        if (!borderHasFreeLand && !this.game.hasFallout(n)) {
+          borderHasFreeLand = true;
+        }
+      }
     }
+    for (const n of this.player.shoreReachableNeighbors()) {
+      if (n.isPlayer()) borderingPlayerSet.add(n);
+      else hasTerraNullius = true;
+    }
+    // Несортированная копия — для ботов-соседей (attackBots): там порядок
+    // обязан быть порядком nearby(), а не по войскам (stable sort ниже).
+    const borderingAll = [...borderingPlayerSet];
     const borderingPlayers = [...borderingPlayerSet].sort(
       (a, b) => a.troops() - b.troops(),
     );
@@ -79,9 +119,7 @@ export class AiAttackBehavior {
     );
 
     // Attack TerraNullius but not nuked territory (direct border or across a river)
-    const hasNonNukedTerraNullius =
-      border.some((t) => !this.game.hasOwner(t) && !this.game.hasFallout(t)) ||
-      playerNeighbors.some((n) => !n.isPlayer());
+    const hasNonNukedTerraNullius = borderHasFreeLand || hasTerraNullius;
     if (hasNonNukedTerraNullius) {
       if (this.sendAttack(this.game.terraNullius())) return;
     }
@@ -99,7 +137,13 @@ export class AiAttackBehavior {
       this.allianceBehavior.maybeSendAllianceRequests(borderingEnemies);
     }
 
-    this.attackBestTarget(borderingFriends, borderingEnemies);
+    this.attackBestTarget(
+      borderingFriends,
+      this.targetFilter === null
+        ? borderingEnemies
+        : borderingEnemies.filter((o) => this.targetable(o)),
+      borderingAll,
+    );
   }
 
   // terron: буфер реакции — тик, когда бот ВПЕРВЫЕ заметил текущую атаку под
@@ -207,6 +251,7 @@ export class AiAttackBehavior {
       if (owner.isPlayer() && borderingEnemies.includes(owner)) {
         continue;
       }
+      if (owner.isPlayer() && !this.targetable(owner)) continue;
       // Don't spam boats into players which are stronger than us (FFA only)
       if (
         this.isFFA() &&
@@ -245,12 +290,16 @@ export class AiAttackBehavior {
   private attackBestTarget(
     borderingFriends: Player[],
     borderingEnemies: Player[],
+    // terron 04.09 ПЕРФ: соседи-игроки в порядке nearby(), уже посчитанные в
+    // maybeAttack — иначе hasNeighboringBotWithStructures и attackBots обходили
+    // границу ещё дважды за тик.
+    borderingAll: Player[] = this.nearbyPlayers(),
   ) {
     // In games with high starting gold, nations will quickly build a lot of cities
     // This causes them to expand slowly (cities increase max troops), and bots will steal their structures
     // In this case: Attack bots before ratio checks
-    if (this.hasNeighboringBotWithStructures()) {
-      if (this.attackBots()) return;
+    if (this.hasNeighboringBotWithStructures(borderingAll)) {
+      if (this.attackBots(borderingAll)) return;
     }
 
     // Save up troops until we reach the reserve ratio
@@ -263,6 +312,7 @@ export class AiAttackBehavior {
     const strategies = this.getAttackStrategies(
       borderingFriends,
       borderingEnemies,
+      borderingAll,
     );
 
     for (const strategy of strategies) {
@@ -273,6 +323,7 @@ export class AiAttackBehavior {
   private getAttackStrategies(
     borderingFriends: Player[],
     borderingEnemies: Player[],
+    borderingAll: Player[],
   ): Array<() => boolean> {
     const { difficulty } = this.game.config().gameConfig();
 
@@ -285,7 +336,7 @@ export class AiAttackBehavior {
       return false;
     };
 
-    const bots = (): boolean => this.attackBots();
+    const bots = (): boolean => this.attackBots(borderingAll);
 
     const assist = (): boolean => this.assistAllies();
 
@@ -334,6 +385,7 @@ export class AiAttackBehavior {
         const other = relation.player;
         if (this.player.isFriendly(other)) continue;
         if (this.isFFA() && other.troops() > this.player.troops() * 3) continue;
+        if (!this.targetable(other)) continue;
         return this.sendAttack(other);
       }
       return false;
@@ -391,16 +443,20 @@ export class AiAttackBehavior {
     }
   }
 
-  private hasNeighboringBotWithStructures(): boolean {
-    return this.player
-      .nearby()
-      .some(
-        (n) =>
-          n.isPlayer() &&
-          n.type() === PlayerType.Bot &&
-          !this.player.isFriendly(n) &&
-          n.units().some((u) => Structures.has(u.type())),
-      );
+  /** Соседи-игроки в порядке nearby() (без ничьей земли). */
+  private nearbyPlayers(): Player[] {
+    return this.player.nearby().filter((n): n is Player => n.isPlayer());
+  }
+
+  private hasNeighboringBotWithStructures(
+    neighbors: Player[] = this.nearbyPlayers(),
+  ): boolean {
+    return neighbors.some(
+      (n) =>
+        n.type() === PlayerType.Bot &&
+        !this.player.isFriendly(n) &&
+        n.units().some((u) => Structures.has(u.type())),
+    );
   }
 
   private hasReserveRatioTroops(): boolean {
@@ -441,15 +497,11 @@ export class AiAttackBehavior {
   // Sort neighboring bots by density (troops / tiles) and attempt to attack many of them (Parallel attacks)
   // sendAttack will do nothing if we don't have enough reserve troops left
   // Bots that own structures are prioritized as targets (they might have stolen our structures and they will delete them!)
-  private attackBots(): boolean {
-    const bots = this.player
-      .nearby()
-      .filter(
-        (n): n is Player =>
-          n.isPlayer() &&
-          this.player.isFriendly(n) === false &&
-          n.type() === PlayerType.Bot,
-      );
+  private attackBots(neighbors: Player[] = this.nearbyPlayers()): boolean {
+    const bots = neighbors.filter(
+      (n): n is Player =>
+        this.player.isFriendly(n) === false && n.type() === PlayerType.Bot,
+    );
 
     if (bots.length === 0) {
       return false;
@@ -642,6 +694,7 @@ export class AiAttackBehavior {
     const filteredPlayers = this.game.players().filter((p) => {
       if (p === this.player) return false;
       if (this.player.isFriendly(p)) return false;
+      if (!this.targetable(p)) return false;
       // In FFA, don't spam boats into players with more troops
       return !this.isFFA() || p.troops() < this.player.troops();
     });

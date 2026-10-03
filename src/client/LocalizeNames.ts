@@ -11,6 +11,7 @@
 //   порядок слов — через tribe.format ({suffix} {prefix} для ru/fr).
 // Нации-шутки (Cow/Snail) и страны — пока проходят как есть (стадии 2–3).
 
+import { fairBotByName } from "../core/execution/fairbot/FairBotRoster";
 import { SPLIT_NATION_PREFIXES } from "../core/execution/SplitNames";
 import {
   TRIBE_NAME_PREFIXES,
@@ -45,10 +46,32 @@ const TRANSLIT_DIGRAPHS: [string, string][] = [
   ["ee", "и"],
 ];
 const TRANSLIT_SINGLE: Record<string, string> = {
-  a: "а", b: "б", c: "к", d: "д", e: "е", f: "ф", g: "г", h: "х",
-  i: "и", j: "дж", k: "к", l: "л", m: "м", n: "н", o: "о", p: "п",
-  q: "к", r: "р", s: "с", t: "т", u: "у", v: "в", w: "в", x: "кс",
-  y: "й", z: "з",
+  a: "а",
+  b: "б",
+  c: "к",
+  d: "д",
+  e: "е",
+  f: "ф",
+  g: "г",
+  h: "х",
+  i: "и",
+  j: "дж",
+  k: "к",
+  l: "л",
+  m: "м",
+  n: "н",
+  o: "о",
+  p: "п",
+  q: "к",
+  r: "р",
+  s: "с",
+  t: "т",
+  u: "у",
+  v: "в",
+  w: "в",
+  x: "кс",
+  y: "й",
+  z: "з",
 };
 
 function translitWord(tok: string): string {
@@ -132,6 +155,16 @@ function computeLocalizedAIName(raw: string): string {
   const m = /^(\p{Emoji_Presentation}|👤)\s+/u.exec(raw);
   const head = m ? m[0] : "";
   const body = m ? raw.slice(m[0].length) : raw;
+
+  // terron 28.09: честный бот (полководец из ростера) всегда подписан как бот
+  // (репорт KDaniilW: «почему бот отображается как игрок?») — на любом языке и
+  // везде, где имя идёт через localizeAIName: подпись на карте, лидерборд,
+  // панель игрока, лента, экран победы.
+  const fair = fairBotByName(body);
+  if (fair) {
+    const name = getCurrentLang() === "ru" ? fair.ru : body;
+    return head + name + (getCurrentLang() === "ru" ? " [бот]" : " [bot]");
+  }
 
   const tribe = tryTribe(body);
   if (tribe) return head + tribe;

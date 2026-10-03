@@ -27,6 +27,7 @@ export class TileScatterPass {
   private uMapSize: WebGLUniformLocation;
 
   private fbo: WebGLFramebuffer;
+  private readonly tileTex: WebGLTexture;
   private vao: WebGLVertexArrayObject;
   private vbo: WebGLBuffer;
 
@@ -46,6 +47,7 @@ export class TileScatterPass {
     this.gl = gl;
     this.mapW = mapW;
     this.mapH = mapH;
+    this.tileTex = tileTex;
 
     this.program = createProgram(gl, vertSrc, fragSrc);
     this.uMapSize = gl.getUniformLocation(this.program, "uMapSize")!;
@@ -112,6 +114,21 @@ export class TileScatterPass {
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    // terron 12.09: ⚠️ ТЕКСТУРУ ПРИКРЕПЛЯЕМ ЗАНОВО на каждой заливке. Под ANGLE
+    // Metal (Mac на Apple Silicon) FBO прохода «умирал»: статус complete,
+    // ошибок нет, чтение через него верное, а отрисовка молча не писала НИ
+    // ОДНОГО тексела — внутри оставалась устаревшая цель. Территория застывала
+    // у всех владельцев разом, а подписи и числа жили (давний репорт владельца
+    // «сменил вкладку — карта застыла»; пойман датчиком карты вживую 12.09).
+    // Повторное прикрепление той же текстуры оживляет FBO — проверено на живом
+    // матче. Цена — один вызов на кадр.
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.tileTex,
+      0,
+    );
     gl.viewport(0, 0, this.mapW, this.mapH);
     gl.disable(gl.BLEND);
 

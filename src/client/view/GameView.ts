@@ -24,6 +24,7 @@ import {
   GameUpdateViewData,
   SatBlackoutUpdate,
   SpawnPhaseEndUpdate,
+  VictoryCountdownUpdate,
 } from "../../core/game/GameUpdates";
 import {
   MotionPlanRecord,
@@ -36,6 +37,7 @@ import { ClientID, GameID, Player, PlayerCosmetics } from "../../core/Schemas";
 import { formatPlayerDisplayName } from "../../core/Util";
 import { WorkerClient } from "../../core/worker/WorkerClient";
 import { collectBalance } from "../BalanceCollector";
+import { fairBotCosmetics } from "../FairBotCosmetics";
 import { localizeSeparatistName } from "../LocalizeNames";
 import { computeAllianceClusters } from "../render/frame/derive/AllianceClusters";
 import { extractAttackRings } from "../render/frame/derive/AttackRings";
@@ -79,6 +81,7 @@ export class GameView implements GameMap {
   // terron: ульта «Небо наше» — последний запуск антиспутниковой ракеты
   // (окно слепоты). НЕ чистим по концу окна: эпицентр нужен волне возврата.
   private _satBlackout: SatBlackoutUpdate | null = null;
+  private _victoryCountdown: VictoryCountdownUpdate | null = null;
   private _blockades: BlockadeUpdate[] = [];
 
   // terron: ПИРАТСТВО — активные зоны блокады (для рендера кругов).
@@ -136,12 +139,21 @@ export class GameView implements GameMap {
   private _falloutSkinCache = new Map<number, number>();
   private _foDirtyRowMin = Infinity;
   private _foDirtyRowMax = -1;
+  // terron 27.08: КАКИЕ ИМЕННО строки грязные, а не только диапазон min..max.
+  // Диапазон врал при двух воронках на разных концах карты: между ними
+  // заливались ВСЕ строки, хотя менялись только две горстки тайлов. Байт на
+  // строку карты (≈4 КБ на самой большой), выделяется один раз.
+  private _foDirtyRows: Uint8Array | null = null;
   /**
    * The single long-lived FrameData object. Fields are mutated in place each
    * tick by update(). Renderer reads this each frame via frameData().
    */
   private _frame: FrameData;
   private _structuresDirty = false;
+  // terron 27.08: id юнитов, изменившихся за этот тик. Ядро шлёт UnitUpdate
+  // ТОЛЬКО на изменение, так что список короткий (замер: 5 из 521 в поздней
+  // игре) — рендер по нему обновляет точечно вместо полной пересборки.
+  private _changedUnitIds: number[] = [];
   /** True until first populateFrame() — controls full-vs-delta tile upload. */
   private _firstPopulate = true;
 
@@ -195,6 +207,13 @@ export class GameView implements GameMap {
         flag: extra.flag ? `/flags/${extra.flag}.svg` : undefined,
       } satisfies PlayerCosmetics);
     }
+    // terron 23.09: честные боты лобби /fair — клиента у них нет, косметику
+    // (флаг державы + скин-флаг) строим из ростера, ключ — имя, как у наций.
+    for (const [name, cosmetics] of fairBotCosmetics(
+      this._config.gameConfig().fairBots,
+    )) {
+      this._cosmetics.set(name, cosmetics);
+    }
 
     const mapW = this._map.width();
     const mapH = this._map.height();
@@ -241,6 +260,7 @@ export class GameView implements GameMap {
       falloutOwnerState: null,
       falloutOwnerDirtyRowMin: 0,
       falloutOwnerDirtyRowMax: -1,
+      falloutOwnerDirtyRows: null,
       // Derived data — populated each tick by populateFrame(). Empty defaults
       // here so the type is satisfied before the first update().
       playerStatus: new Map(),
@@ -251,6 +271,7 @@ export class GameView implements GameMap {
       nukeTelegraphs: [],
       attackRings: [],
       structuresDirty: false,
+      changedUnitIds: null,
       tileMode: "live",
     };
   }
@@ -363,6 +384,15 @@ export class GameView implements GameMap {
       this.startTick = spawnPhaseEndUpdate.startTick;
     }
 
+    // terron 26.08: победа с удержанием — сим шлёт окно отсчёта ОДИН раз
+    // (старт) и один раз при сбросе. Остаток клиент считает сам по ticks().
+    const victory = gu.updates[GameUpdateType.VictoryCountdown]?.[0] as
+      | VictoryCountdownUpdate
+      | undefined;
+    if (victory) {
+      this._victoryCountdown = victory.active ? victory : null;
+    }
+
     // terron: ульта «Небо наше» — запуск антиспутниковой ракеты. Запоминаем
     // окно слепоты; сам туман включает клиент (fogOfWarActive/WebGLFrameBuilder).
     const satBlackout = gu.updates[GameUpdateType.SatBlackout]?.[0] as
@@ -442,10 +472,6 @@ export class GameView implements GameMap {
 
       if (existing !== undefined) {
         existing.applyUpdate(pu);
-        const nextNameData = gu.playerNameViewData?.[pu.id];
-        if (nextNameData !== undefined) {
-          existing.nameData = nextNameData;
-        }
       } else {
         const player = new PlayerView(
           this,
@@ -460,6 +486,20 @@ export class GameView implements GameMap {
         this._playerStates.set(pu.smallID!, player.state);
       }
     });
+
+    // terron 13.09: размеры подписей — ВСЕМ известным игрокам, а не только тем,
+    // от кого пришло обновление в этом тике. Нации и боты шлют обновление раз в
+    // 5 тиков (PlayerImpl.toUpdate, перф 11.09), а подписи пересчитываются на
+    // других тиках (GameRunner, раз в 10) — совпадений не бывает никогда, и у
+    // наций/ботов подпись застывала размером со стартовый клочок (репорт беты
+    // 13.09). Поле приходит только в тиках пересчёта, проход — по нему.
+    const nameViewData = gu.playerNameViewData;
+    if (nameViewData !== undefined) {
+      for (const id in nameViewData) {
+        const pv = this._players.get(id);
+        if (pv !== undefined) pv.nameData = nameViewData[id];
+      }
+    }
 
     // Pass 2: translate engine embargoes (Set<PlayerID>) → renderer-format
     // smallIDs. Only re-translate when embargoes changed (field present);
@@ -492,6 +532,7 @@ export class GameView implements GameMap {
     gu.updates[GameUpdateType.Unit].forEach((update) => {
       let unit = this._units.get(update.id);
       const isStructure = STRUCTURE_TYPES.has(update.unitType);
+      if (!isStructure) this._changedUnitIds.push(update.id);
       if (unit !== undefined) {
         // Structure changes that affect rendering: owner changed (captured),
         // level changed, became inactive, or construction state flipped
@@ -648,6 +689,10 @@ export class GameView implements GameMap {
     f.falloutOwnerDirtyRowMin =
       this._foDirtyRowMin === Infinity ? 0 : this._foDirtyRowMin;
     f.falloutOwnerDirtyRowMax = this._foDirtyRowMax;
+    // ⚠️ Отдаём САМ массив, а не копию: получатель (TerritoryPass) читает его
+    // синхронно в том же кадре и сам гасит отданные строки. Копия на кадр —
+    // это аллокация на ровном месте в горячем пути.
+    f.falloutOwnerDirtyRows = this._foDirtyRows;
     this._foDirtyRowMin = Infinity;
     this._foDirtyRowMax = -1;
 
@@ -684,6 +729,10 @@ export class GameView implements GameMap {
         )
       : [];
     f.structuresDirty = this._structuresDirty;
+    // ⚠️ Отдаём сам массив: получатель читает его синхронно в этом же кадре.
+    // Длину сбрасываем ЗДЕСЬ же — следующий тик копит заново.
+    f.changedUnitIds = this._changedUnitIds.slice();
+    this._changedUnitIds.length = 0;
 
     // First populate: signal "full upload required" by nulling changedTiles.
     // uploadFrameData() treats null as "no delta info; do a full tile+trail
@@ -1232,6 +1281,11 @@ export class GameView implements GameMap {
     return this._satBlackout;
   }
 
+  /** terron 26.08: идёт ли сейчас отсчёт победы (порог территории удерживают). */
+  victoryCountdown(): VictoryCountdownUpdate | null {
+    return this._victoryCountdown;
+  }
+
   // terron: снаряды-«выстрелы» бункеров этого тика (Укрепления). Читается раз/тик.
   fortShots(): FortShotUpdate[] {
     return this._fortShots;
@@ -1456,6 +1510,10 @@ export class GameView implements GameMap {
   terrainRaw(): Uint8Array {
     return this._map.terrainRaw();
   }
+  setLand(ref: TileRef, magnitude: number): void {
+    this._map.setLand(ref, magnitude);
+  }
+
   setWater(ref: TileRef): void {
     this._map.setWater(ref);
   }
@@ -1524,9 +1582,9 @@ export class GameView implements GameMap {
 
   private applyFalloutOwners(packed: Uint32Array): void {
     const w = this._map.width();
-    if (!this._falloutOwners) {
-      this._falloutOwners = new Uint16Array(w * this._map.height());
-    }
+    this._falloutOwners ??= new Uint16Array(w * this._map.height());
+    this._foDirtyRows ??= new Uint8Array(this._map.height());
+    const rows = this._foDirtyRows;
     for (let i = 0; i + 1 < packed.length; i += 2) {
       const tile = packed[i];
       const owner = packed[i + 1] & 0xfff;
@@ -1534,6 +1592,7 @@ export class GameView implements GameMap {
       const row = (tile / w) | 0;
       if (row < this._foDirtyRowMin) this._foDirtyRowMin = row;
       if (row > this._foDirtyRowMax) this._foDirtyRowMax = row;
+      rows[row] = 1;
     }
   }
   isBorder(ref: TileRef): boolean {

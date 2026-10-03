@@ -1,0 +1,196 @@
+{
+  "name": "East Asia (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        1018,
+        714
+      ],
+      "name": "Hokkaido",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        914,
+        911
+      ],
+      "name": "Tohoku",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        799,
+        1125
+      ],
+      "name": "Chubu",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        875,
+        1115
+      ],
+      "name": "Kanto",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        985,
+        188
+      ],
+      "name": "Sakhalin",
+      "flag": "Sakhalin"
+    },
+    {
+      "coordinates": [
+        554,
+        1196
+      ],
+      "name": "Chugoku",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        572,
+        1274
+      ],
+      "name": "Shikoku",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        444,
+        1314
+      ],
+      "name": "Kyushu",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        306,
+        1119
+      ],
+      "name": "South Korea",
+      "flag": "kr"
+    },
+    {
+      "coordinates": [
+        235,
+        884
+      ],
+      "name": "North Korea",
+      "flag": "kp"
+    },
+    {
+      "coordinates": [
+        127,
+        821
+      ],
+      "name": "China",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        381,
+        96
+      ],
+      "name": "Russia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        830,
+        997
+      ],
+      "name": "Sado Island",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        575,
+        1108
+      ],
+      "name": "Oki Islands",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        700,
+        1191
+      ],
+      "name": "Kyoto",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        269,
+        1025
+      ],
+      "name": "Seoul",
+      "flag": "kr"
+    },
+    {
+      "coordinates": [
+        899,
+        1152
+      ],
+      "name": "Tokyo",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        844,
+        1160
+      ],
+      "name": "Mount Fuji",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        1121,
+        605
+      ],
+      "name": "Shiretoko Peninsula",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        426,
+        1393
+      ],
+      "name": "Sakurajima",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        260,
+        1696
+      ],
+      "name": "Okinawa",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        691,
+        1198
+      ],
+      "name": "Kinki",
+      "flag": "jp"
+    }
+  ],
+  "map": {
+    "width": 1468,
+    "height": 1748,
+    "num_land_tiles": 833772
+  },
+  "map4x": {
+    "width": 734,
+    "height": 874,
+    "num_land_tiles": 205623
+  },
+  "map16x": {
+    "width": 367,
+    "height": 437,
+    "num_land_tiles": 50302
+  }
+}

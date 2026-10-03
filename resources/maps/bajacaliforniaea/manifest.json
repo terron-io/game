@@ -1,0 +1,84 @@
+{
+  "name": "Baja California (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        555,
+        54
+      ],
+      "name": "California",
+      "flag": "California"
+    },
+    {
+      "coordinates": [
+        811,
+        677
+      ],
+      "name": "Baja California",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        1324,
+        1383
+      ],
+      "name": "Baja California Sur",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        1361,
+        653
+      ],
+      "name": "Sonora",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        1768,
+        1190
+      ],
+      "name": "Sinaloa",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        1711,
+        547
+      ],
+      "name": "Chihuahua",
+      "flag": "mx"
+    },
+    {
+      "coordinates": [
+        980,
+        74
+      ],
+      "name": "Arizona",
+      "flag": "Arizona"
+    },
+    {
+      "coordinates": [
+        1507,
+        64
+      ],
+      "name": "New Mexico",
+      "flag": "New_Mexico"
+    }
+  ],
+  "map": {
+    "width": 1828,
+    "height": 2080,
+    "num_land_tiles": 1326962
+  },
+  "map4x": {
+    "width": 914,
+    "height": 1040,
+    "num_land_tiles": 328508
+  },
+  "map16x": {
+    "width": 457,
+    "height": 520,
+    "num_land_tiles": 80800
+  }
+}

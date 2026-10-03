@@ -1,0 +1,518 @@
+{
+  "name": "Southeast Asia (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        1147,
+        84
+      ],
+      "name": "Taiwan",
+      "flag": "tw"
+    },
+    {
+      "coordinates": [
+        708,
+        23
+      ],
+      "name": "China",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        887,
+        112
+      ],
+      "name": "Hong Kong",
+      "flag": "hk"
+    },
+    {
+      "coordinates": [
+        833,
+        138
+      ],
+      "name": "Macau",
+      "flag": "mo"
+    },
+    {
+      "coordinates": [
+        194,
+        205
+      ],
+      "name": "Myanmar",
+      "flag": "mm"
+    },
+    {
+      "coordinates": [
+        2092,
+        621
+      ],
+      "name": "Guam",
+      "flag": "gu"
+    },
+    {
+      "coordinates": [
+        2111,
+        582
+      ],
+      "name": "Northern Mariana Islands",
+      "flag": "mp"
+    },
+    {
+      "coordinates": [
+        2382,
+        955
+      ],
+      "name": "Micronesia",
+      "flag": "fm"
+    },
+    {
+      "coordinates": [
+        1694,
+        935
+      ],
+      "name": "Palau",
+      "flag": "pw"
+    },
+    {
+      "coordinates": [
+        1936,
+        21
+      ],
+      "name": "Japan",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        1208,
+        734
+      ],
+      "name": "Philippines",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        595,
+        466
+      ],
+      "name": "Vietnam",
+      "flag": "vn"
+    },
+    {
+      "coordinates": [
+        338,
+        558
+      ],
+      "name": "Thailand",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        382,
+        1071
+      ],
+      "name": "Malaysia",
+      "flag": "my"
+    },
+    {
+      "coordinates": [
+        457,
+        1240
+      ],
+      "name": "Singapore",
+      "flag": "sg"
+    },
+    {
+      "coordinates": [
+        517,
+        629
+      ],
+      "name": "Cambodia",
+      "flag": "kh"
+    },
+    {
+      "coordinates": [
+        35,
+        663
+      ],
+      "name": "India",
+      "flag": "in"
+    },
+    {
+      "coordinates": [
+        396,
+        227
+      ],
+      "name": "Laos",
+      "flag": "la"
+    },
+    {
+      "coordinates": [
+        2091,
+        1644
+      ],
+      "name": "Papua New Guinea",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        932,
+        1093
+      ],
+      "name": "Brunei",
+      "flag": "bn"
+    },
+    {
+      "coordinates": [
+        539,
+        1910
+      ],
+      "name": "Christmas Island",
+      "flag": "cx"
+    },
+    {
+      "coordinates": [
+        1340,
+        1821
+      ],
+      "name": "Timor-Leste",
+      "flag": "tl"
+    },
+    {
+      "coordinates": [
+        395,
+        1448
+      ],
+      "name": "Sumatra",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        734,
+        1741
+      ],
+      "name": "Java",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        853,
+        1330
+      ],
+      "name": "Kalimantan",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1686,
+        1522
+      ],
+      "name": "West Papua",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1116,
+        1458
+      ],
+      "name": "Sulawesi",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1113,
+        1808
+      ],
+      "name": "Nusa Tenggara",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1483,
+        1515
+      ],
+      "name": "Maluku",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        731,
+        1298
+      ],
+      "name": "Sarawak",
+      "flag": "Sarawak"
+    },
+    {
+      "coordinates": [
+        264,
+        111
+      ],
+      "name": "Wa State",
+      "flag": "Wa State"
+    }
+  ],
+  "additionalNations": [
+    {
+      "coordinates": [
+        11,
+        12
+      ],
+      "name": "Assam",
+      "flag": "in"
+    },
+    {
+      "coordinates": [
+        15,
+        179
+      ],
+      "name": "Bangladesh",
+      "flag": "bd"
+    },
+    {
+      "coordinates": [
+        956,
+        27
+      ],
+      "name": "Guangdong",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        1164,
+        4
+      ],
+      "name": "Fujian",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        802,
+        284
+      ],
+      "name": "Hainan",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        688,
+        112
+      ],
+      "name": "Guangxi",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        459,
+        114
+      ],
+      "name": "Yunnan",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        1334,
+        378
+      ],
+      "name": "Luzon",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        1516,
+        601
+      ],
+      "name": "Visayas",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        1500,
+        830
+      ],
+      "name": "Mindanao",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        313,
+        225
+      ],
+      "name": "Lan Na",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        509,
+        408
+      ],
+      "name": "Isan",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        355,
+        391
+      ],
+      "name": "Siam",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        1148,
+        938
+      ],
+      "name": "Sabah",
+      "flag": "Sabah"
+    },
+    {
+      "coordinates": [
+        180,
+        946
+      ],
+      "name": "Aceh",
+      "flag": "Aceh"
+    },
+    {
+      "coordinates": [
+        598,
+        1380
+      ],
+      "name": "Lampung",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1060,
+        1557
+      ],
+      "name": "Bali",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1208,
+        731
+      ],
+      "name": "Palawan",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        734,
+        985
+      ],
+      "name": "Riau Islands",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        656,
+        1477
+      ],
+      "name": "Banten",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        400,
+        1138
+      ],
+      "name": "Riau",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        629,
+        1267
+      ],
+      "name": "Bangka-Belitung",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1652,
+        1144
+      ],
+      "name": "North Maluku",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        2092,
+        1278
+      ],
+      "name": "Papua",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        2127,
+        1534
+      ],
+      "name": "South Papua",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        2280,
+        1416
+      ],
+      "name": "Highlands",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        2293,
+        1354
+      ],
+      "name": "Mormase",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        2687,
+        1445
+      ],
+      "name": "New Britain",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        2805,
+        1369
+      ],
+      "name": "New Ireland",
+      "flag": "pg"
+    },
+    {
+      "coordinates": [
+        301,
+        744
+      ],
+      "name": "Tambralinga",
+      "flag": "th"
+    },
+    {
+      "coordinates": [
+        924,
+        386
+      ],
+      "name": "Paracel Islands",
+      "flag": ""
+    }
+  ],
+  "map": {
+    "width": 2440,
+    "height": 1928,
+    "num_land_tiles": 971788
+  },
+  "map4x": {
+    "width": 1220,
+    "height": 964,
+    "num_land_tiles": 234498
+  },
+  "map16x": {
+    "width": 610,
+    "height": 482,
+    "num_land_tiles": 55758
+  }
+}

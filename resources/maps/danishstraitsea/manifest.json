@@ -1,0 +1,228 @@
+{
+  "name": "Danish Straits (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        89,
+        204
+      ],
+      "name": "Agder",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        289,
+        47
+      ],
+      "name": "Østlandet",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        746,
+        740
+      ],
+      "name": "Skåne",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        651,
+        526
+      ],
+      "name": "Halland",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        837,
+        445
+      ],
+      "name": "Småland",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        693,
+        240
+      ],
+      "name": "Västergötland",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        511,
+        256
+      ],
+      "name": "Bohuslän",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        824,
+        250
+      ],
+      "name": "Östergötland",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        578,
+        50
+      ],
+      "name": "Dalsland",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        804,
+        66
+      ],
+      "name": "Närke",
+      "flag": "Sweden Norway Union"
+    },
+    {
+      "coordinates": [
+        524,
+        775
+      ],
+      "name": "Zealand",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        510,
+        902
+      ],
+      "name": "Lolland-Falster",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        364,
+        815
+      ],
+      "name": "Funen",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        254,
+        927
+      ],
+      "name": "Schleswig-Holstein",
+      "flag": "prussia"
+    },
+    {
+      "coordinates": [
+        605,
+        1137
+      ],
+      "name": "Mecklenburg-Schwerin",
+      "flag": "German Empire"
+    },
+    {
+      "coordinates": [
+        871,
+        1075
+      ],
+      "name": "Pomerania",
+      "flag": "prussia"
+    },
+    {
+      "coordinates": [
+        62,
+        1148
+      ],
+      "name": "Oldenburg",
+      "flag": "German Empire"
+    },
+    {
+      "coordinates": [
+        314,
+        1097
+      ],
+      "name": "Hamburg",
+      "flag": "German Empire"
+    },
+    {
+      "coordinates": [
+        227,
+        1159
+      ],
+      "name": "Hanover",
+      "flag": "prussia"
+    },
+    {
+      "coordinates": [
+        347,
+        425
+      ],
+      "name": "North Jutland",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        228,
+        566
+      ],
+      "name": "Viborg",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        402,
+        603
+      ],
+      "name": "Aarhus",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        172,
+        717
+      ],
+      "name": "Ringkobing",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        207,
+        813
+      ],
+      "name": "Ribe",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        298,
+        694
+      ],
+      "name": "Vejle",
+      "flag": "dk"
+    },
+    {
+      "coordinates": [
+        862,
+        831
+      ],
+      "name": "Bornholm",
+      "flag": "dk"
+    }
+  ],
+  "map": {
+    "width": 904,
+    "height": 1180,
+    "num_land_tiles": 589453
+  },
+  "map4x": {
+    "width": 452,
+    "height": 590,
+    "num_land_tiles": 142792
+  },
+  "map16x": {
+    "width": 226,
+    "height": 295,
+    "num_land_tiles": 33993
+  }
+}

@@ -1,0 +1,220 @@
+{
+  "name": "Asia (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        328,
+        247
+      ],
+      "name": "Russia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        177,
+        459
+      ],
+      "name": "Türkiye",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        298,
+        684
+      ],
+      "name": "Saudi Arabia",
+      "flag": "sa"
+    },
+    {
+      "coordinates": [
+        241,
+        843
+      ],
+      "name": "Yemen",
+      "flag": "ye"
+    },
+    {
+      "coordinates": [
+        180,
+        581
+      ],
+      "name": "Jordan",
+      "flag": "jo"
+    },
+    {
+      "coordinates": [
+        287,
+        555
+      ],
+      "name": "Iraq",
+      "flag": "iq"
+    },
+    {
+      "coordinates": [
+        374,
+        512
+      ],
+      "name": "Iran",
+      "flag": "ir"
+    },
+    {
+      "coordinates": [
+        604,
+        537
+      ],
+      "name": "Pakistan",
+      "flag": "pk"
+    },
+    {
+      "coordinates": [
+        648,
+        626
+      ],
+      "name": "India",
+      "flag": "in"
+    },
+    {
+      "coordinates": [
+        804,
+        709
+      ],
+      "name": "Bangladesh",
+      "flag": "bd"
+    },
+    {
+      "coordinates": [
+        877,
+        759
+      ],
+      "name": "Myanmar",
+      "flag": "mm"
+    },
+    {
+      "coordinates": [
+        994,
+        759
+      ],
+      "name": "Vietnam",
+      "flag": "vn"
+    },
+    {
+      "coordinates": [
+        942,
+        1047
+      ],
+      "name": "Malaysia",
+      "flag": "my"
+    },
+    {
+      "coordinates": [
+        1006,
+        1207
+      ],
+      "name": "Indonesia",
+      "flag": "id"
+    },
+    {
+      "coordinates": [
+        1038,
+        879
+      ],
+      "name": "Philippines",
+      "flag": "ph"
+    },
+    {
+      "coordinates": [
+        1179,
+        687
+      ],
+      "name": "Taiwan",
+      "flag": "tw"
+    },
+    {
+      "coordinates": [
+        1107,
+        519
+      ],
+      "name": "China",
+      "flag": "cn"
+    },
+    {
+      "coordinates": [
+        1233,
+        492
+      ],
+      "name": "South Korea",
+      "flag": "kr"
+    },
+    {
+      "coordinates": [
+        1386,
+        517
+      ],
+      "name": "Japan",
+      "flag": "jp"
+    },
+    {
+      "coordinates": [
+        635,
+        321
+      ],
+      "name": "Kazakhstan",
+      "flag": "kz"
+    },
+    {
+      "coordinates": [
+        570,
+        480
+      ],
+      "name": "Tajikistan",
+      "flag": "tj"
+    },
+    {
+      "coordinates": [
+        1005,
+        361
+      ],
+      "name": "Mongolia",
+      "flag": "mn"
+    },
+    {
+      "coordinates": [
+        234,
+        1064
+      ],
+      "name": "Somalia",
+      "flag": "so"
+    },
+    {
+      "coordinates": [
+        115,
+        611
+      ],
+      "name": "Egypt",
+      "flag": "eg"
+    },
+    {
+      "coordinates": [
+        212,
+        319
+      ],
+      "name": "Ukraine",
+      "flag": "ua"
+    }
+  ],
+  "map": {
+    "width": 1920,
+    "height": 1248,
+    "num_land_tiles": 1037297
+  },
+  "map4x": {
+    "width": 960,
+    "height": 624,
+    "num_land_tiles": 254887
+  },
+  "map16x": {
+    "width": 480,
+    "height": 312,
+    "num_land_tiles": 62105
+  }
+}

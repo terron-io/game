@@ -1,3 +1,4 @@
+import { TERRON_TRAINS_SPEED_MULT } from "../configuration/TerronTuning";
 import { fuelSpeedMult } from "../game/FuelSpeed";
 import {
   Execution,
@@ -12,7 +13,6 @@ import { MotionPlanRecord } from "../game/MotionPlans";
 import { RailNetwork } from "../game/RailNetwork";
 import { getOrientedRailroad, OrientedRailroad } from "../game/Railroad";
 import { TrainStation } from "../game/TrainStation";
-import { TERRON_TRAINS_SPEED_MULT } from "../configuration/TerronTuning";
 
 export class TrainExecution implements Execution {
   private active = true;
@@ -28,22 +28,46 @@ export class TrainExecution implements Execution {
   // terron: ТОПЛИВО — базовая скорость вагона; множитель применяется в init
   // по владельцу состава (fuelSpeedMult). FUEL.md
   private speed: number = 2;
-  private _tradeStopsVisited: number = 0;
+  // terron 24.09: РЕБАЛАНС ПОЕЗДОВ (TerronTuning §ФАБРИКИ И ПОЕЗДА). Станция
+  // платит ОДИН раз за рейс — при первом заезде (маршрут-обход возвращается по
+  // своим следам); тайлы копятся от прошлой платной точки: чем дальше, тем больше.
+  private readonly paid = new Set<TrainStation>();
+  private tilesSincePaid = 0;
 
+  /**
+   * `route` — готовый маршрут-обход (TrainTour); без него путь ищется от
+   * source до destination, как раньше. `payCars` — сколько вагонов платит
+   * (по уровню фабрики; рисуем не больше `numCars`).
+   */
   constructor(
     private railNetwork: RailNetwork,
     private player: Player,
     private source: TrainStation,
     private destination: TrainStation,
     private numCars: number,
+    private readonly route: TrainStation[] | null = null,
+    private readonly payCarsN: number = numCars,
   ) {}
 
   public owner(): Player {
     return this.player;
   }
 
-  public tradeStopsVisited(): number {
-    return this._tradeStopsVisited;
+  /** Сколько вагонов оплачивается на остановке. */
+  public payCars(): number {
+    return this.payCarsN;
+  }
+
+  /** Какая по счёту платная точка сейчас (0 — первая после фабрики). */
+  public paidStopIndex(): number {
+    // В `paid` лежит станция отправления + уже оплаченные точки; к моменту
+    // выплаты текущая точка тоже добавлена.
+    return Math.max(0, this.paid.size - 2);
+  }
+
+  /** Тайлы рельсов, пройденные от прошлой платной точки. */
+  public paidTiles(): number {
+    return this.tilesSincePaid;
   }
 
   init(mg: Game, ticks: number): void {
@@ -56,16 +80,17 @@ export class TrainExecution implements Execution {
     if (this.owner().hasUltimate(UnitType.TrainDepot)) {
       this.speed = this.speed * TERRON_TRAINS_SPEED_MULT;
     }
-    const stations = this.railNetwork.findStationsPath(
-      this.source,
-      this.destination,
-    );
+    const stations =
+      this.route ??
+      this.railNetwork.findStationsPath(this.source, this.destination);
     if (!stations || stations.length <= 1) {
       this.active = false;
       return;
     }
 
     this.stations = stations;
+    this.paid.add(stations[0]);
+    this.destination = stations[stations.length - 1];
     const railroad = getOrientedRailroad(this.stations[0], this.stations[1]);
     if (railroad) {
       this.currentRailroad = railroad;
@@ -277,12 +302,12 @@ export class TrainExecution implements Execution {
     if (this.mg === null || this.player === null) {
       throw new Error("Not initialized");
     }
-    this.stations[1].onTrainStop(this);
-    const stationType = this.stations[1].unit.type();
-    if (stationType === UnitType.City || stationType === UnitType.Port) {
-      this._tradeStopsVisited++;
-    }
-    return;
+    this.tilesSincePaid += this.currentRailroad?.getTiles().length ?? 0;
+    const station = this.stations[1];
+    if (this.paid.has(station)) return; // возврат по своим следам — не платит
+    this.paid.add(station);
+    station.onTrainStop(this);
+    this.tilesSincePaid = 0;
   }
 
   isActive(): boolean {

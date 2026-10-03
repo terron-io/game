@@ -11,6 +11,8 @@
 // detail — компактная строка для глаз в /stats/health, meta — полный JSON.
 // Смотреть: curl -H "x-api-key: $GAME_API_KEY" api.terron.io/stats/health?days=1
 
+declare const __BUILD_TIME__: number | undefined;
+
 const marks: Record<string, number> = {};
 let reported = false;
 
@@ -165,6 +167,10 @@ export function traceLoadReport(gameID: string | undefined): void {
       cold,
       marks,
       workerInit,
+      // terron 05.09: контур и сборка — чтобы сравнить renderer_ready−worker_ready
+      // дева (KHR_parallel_shader_compile) с продом по одним и тем же строкам.
+      h: typeof location !== "undefined" ? location.hostname.split(".")[0] : "",
+      b: typeof __BUILD_TIME__ === "number" ? __BUILD_TIME__ : null,
       resources: res,
       dpr: window.devicePixelRatio,
       conn: (

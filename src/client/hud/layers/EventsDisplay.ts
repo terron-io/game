@@ -3,7 +3,11 @@ import { html, LitElement, type TemplateResult } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
 import { DirectiveResult } from "lit/directive.js";
 import { unsafeHTML, UnsafeHTMLDirective } from "lit/directives/unsafe-html.js";
-import { eventRewardOf } from "../../../core/configuration/TerronTuning";
+import {
+  eveningOf,
+  eventPerPersonOf,
+  eventRewardOf,
+} from "../../../core/configuration/TerronTuning";
 import { EventBus } from "../../../core/EventBus";
 import {
   AllPlayers,
@@ -32,7 +36,8 @@ import {
 import type { Winner } from "../../../core/Schemas";
 import { isValidGameID } from "../../../core/Schemas";
 import { getApiBase } from "../../Api";
-import { getAuthHeader } from "../../Auth";
+import { getAuthHeader, getPersistentID } from "../../Auth";
+import { chatNotifyLevel } from "../../ChatApi";
 import {
   acceptClanInvite,
   type ClanMine,
@@ -41,8 +46,11 @@ import {
 } from "../../ClanApi";
 import { bracketPair } from "../../ClanTerm";
 import { Controller } from "../../Controller";
+import { chatDeviceId, deviceTraceHeaders } from "../../DeviceTrace";
 import { acceptFriendRequest, declineFriendRequest } from "../../FriendsApi";
 import { myCurrentGameID } from "../../FriendsPresence";
+import { publicSiteOrigin } from "../../GameHost";
+import { siteChatAllowed } from "../../SiteChatGate";
 import { toast } from "../../Toast";
 import {
   SendAllianceExtensionIntentEvent,
@@ -53,6 +61,7 @@ import {
   SendGetProfileIntentEvent,
   SendPlayerReportIntentEvent,
 } from "../../Transport";
+import { unitIcon, unitNameI18nKey } from "../../UnitCatalog";
 
 import { assetUrl } from "../../../core/AssetUrls";
 import { GameView, PlayerView, UnitView } from "../../../core/game/GameView";
@@ -60,61 +69,42 @@ import { onlyImages } from "../../../core/Util";
 import { uiIcon } from "../../components/ui/UiIcon";
 import { GoToPlayerEvent, GoToUnitEvent } from "../../TransformHandler";
 
-// terron: иконки построек/юнитов для ленты — те же ассеты, что в меню стройки.
-// Рисуются прямым Lit-<img> (НЕ через onlyImages-санитайзер: src из нашего кода,
-// не пользовательский ввод) → безопасно и нужного размера.
-const UNIT_ICONS: Partial<Record<UnitType, string>> = {
-  [UnitType.City]: assetUrl("images/CityIconWhite.svg"),
-  [UnitType.Port]: assetUrl("images/PortIcon.svg"),
-  [UnitType.Factory]: assetUrl("images/FactoryIconWhite.svg"),
-  [UnitType.MissileSilo]: assetUrl("images/MissileSiloIconWhite.svg"),
-  [UnitType.DefensePost]: assetUrl("images/ShieldIconWhite.svg"),
-  [UnitType.SAMLauncher]: assetUrl("images/SamLauncherIconWhite.svg"),
-  [UnitType.Warship]: assetUrl("images/BattleshipIconWhite.svg"),
-  // terron: авиация — самолёт/десант = иконка самолёта, дрон = квадрокоптер. airport.md
-  [UnitType.Airport]: assetUrl("images/AirportIconWhite.svg"),
+/**
+ * terron 31.08 — ИКОНКА И ИМЯ ЮНИТА В ЛЕНТЕ БЕРУТСЯ ИЗ ОБЩЕГО КАТАЛОГА.
+ *
+ * ⚠️ Раньше здесь лежали ТРИ собственные таблицы (иконки построек, иконки
+ * ракет, ключи имён ракет), и все три отстали от игры:
+ *   • иконки не было у 35 типов из 57 — в том числе у ШЕСТИ сообщений, ради
+ *     которых таблицу и открывали (Зелёные, АЭС, Топливо, Дора, Шагающий
+ *     город, Космодром): `messageIcon` честно возвращал undefined;
+ *   • в строке «Перехвачена ракета …» имя бралось из списка на шесть позиций,
+ *     а иначе печаталось СЫРОЕ значение enum — «Land Nuke», «Satellite Strike».
+ * При этом у КАЖДОГО из этих типов иконка и имя в каталоге уже были, и по всем
+ * пересекавшимся записям файлы совпадали байт-в-байт: таблицы были не «другим
+ * оформлением ленты», а устаревшей копией.
+ *
+ * Локальный список ниже — ТОЛЬКО для того, чего в каталоге нет по смыслу
+ * (кнопкой не строится, поэтому в реестре HUD ему не место). Тот же приём, что
+ * у вики (`WikiContent.iconOf`): сперва общий реестр, потом местные добавки.
+ */
+const mirvIcon = assetUrl("images/MIRVIcon.svg");
+const nukeIcon = assetUrl("images/NukeIconWhite.svg");
+const FEED_ICON_EXTRAS: Partial<Record<UnitType, string>> = {
+  // terron: авиация — самолёт и десант рисуются иконкой аэропорта. airport.md
   [UnitType.Airplane]: assetUrl("images/AirportIconWhite.svg"),
   [UnitType.AirborneAssault]: assetUrl("images/AirportIconWhite.svg"),
-  [UnitType.SuicideDrone]: assetUrl("images/DroneIconWhite.svg"),
-  // terron: ультимейты — здания-штабы. Спека: new-units/ULTIMATES.md
-  [UnitType.MinistryOfTruth]: assetUrl("images/MinistryIconWhite.svg"),
-  [UnitType.Fortifications]: assetUrl("images/FortIconWhite.svg"),
-  [UnitType.CentralBank]: assetUrl("images/BankIconWhite.svg"),
-  [UnitType.AirCommand]: assetUrl("images/AirCommandIconWhite.svg"),
-  [UnitType.TankFactory]: assetUrl("images/TankIconWhite.svg"),
-  [UnitType.Religion]: assetUrl("images/ReligionIconWhite.svg"),
-  [UnitType.Mining]: assetUrl("images/MiningIconWhite.svg"),
-  [UnitType.NuclearFactory]: assetUrl("images/NuclearFactoryIconWhite.svg"),
-  [UnitType.OurSky]: assetUrl("images/OurSkyIconWhite.svg"),
-  [UnitType.Piracy]: assetUrl("images/PiracyIconWhite.svg"), // terron: блокада
-  [UnitType.Respite]: assetUrl("images/TruceIconWhite.svg"), // terron: передышка
-  [UnitType.Olympics]: assetUrl("images/OlympicsIconWhite.svg"), // terron: олимпиада
-  [UnitType.Terror]: assetUrl("images/TerrorIconWhite.svg"), // terron: террор
-  [UnitType.PeacePalace]: assetUrl("images/PeacePalaceIconWhite.svg"), // terron: пакт
-};
-const nukeIcon = assetUrl("images/NukeIconWhite.svg");
-// terron: ЕДИНЫЙ источник иконки МИРВ — всё, что про МИРВ (лента/алерт/чат),
-// берёт иконку отсюда, чтобы менять в одном месте (владелец: «источник один»).
-const mirvIcon = assetUrl("images/MIRVIcon.svg");
-// terron: иконки и локализованные имена ракет для ленты «перехвачено» —
-// сырой UnitType («Hydrogen Bomb») юзеру непонятен, показываем перевод + иконку.
-const NUKE_FEED_ICONS: Record<string, string> = {
-  [UnitType.AtomBomb]: assetUrl("images/NukeIconWhite.svg"),
-  // terron: ультимейты — «Реки вспять» (штаб и его ракета).
-  [UnitType.RiversBack]: assetUrl("images/RiversBackIconWhite.svg"),
-  [UnitType.WaterNuke]: assetUrl("images/RiversBackIconWhite.svg"),
-  [UnitType.HydrogenBomb]: assetUrl("images/MushroomCloudIconWhite.svg"),
-  [UnitType.MIRV]: mirvIcon,
+  // Боеголовка МИРВ — та же иконка, что у самой МИРВ.
   [UnitType.MIRVWarhead]: mirvIcon,
+  // Мин правды снята с производства (влита в МЕДИА 06.08) — иконка нужна
+  // только затем, чтобы старые реплеи не остались без картинки.
+  [UnitType.MinistryOfTruth]: assetUrl("images/MinistryIconWhite.svg"),
 };
-const NUKE_NAME_KEYS: Record<string, string> = {
-  [UnitType.AtomBomb]: "unit_type.atom_bomb",
-  [UnitType.RiversBack]: "unit_type.rivers_back",
-  [UnitType.WaterNuke]: "unit_type.water_nuke",
-  [UnitType.HydrogenBomb]: "unit_type.hydrogen_bomb",
-  [UnitType.MIRV]: "unit_type.mirv",
-  [UnitType.MIRVWarhead]: "player_stats_table.unit.mirvw",
-};
+
+/** Иконка юнита для ленты: общий каталог, затем местные добавки. */
+function unitFeedIcon(t: UnitType | string): string | undefined {
+  return unitIcon(t) ?? FEED_ICON_EXTRAS[t as UnitType];
+}
+
 const boatIcon = assetUrl("images/BoatIconWhite.svg");
 // terron: авиация — иконка дрона-камикадзе для ленты «дрон летит». Спека: airport.md
 const droneIcon = assetUrl("images/DroneIconWhite.svg");
@@ -155,44 +145,44 @@ function messageIcon(type: MessageType, message: string): string | undefined {
     type === MessageType.SATELLITES_THREATENED ||
     type === MessageType.SATELLITES_DOWN
   ) {
-    return UNIT_ICONS[UnitType.OurSky];
+    return unitFeedIcon(UnitType.OurSky);
   }
   if (type === MessageType.BLOCKADE) {
-    return UNIT_ICONS[UnitType.Piracy];
+    return unitFeedIcon(UnitType.Piracy);
   }
   if (type === MessageType.TERROR) {
-    return UNIT_ICONS[UnitType.Terror];
+    return unitFeedIcon(UnitType.Terror);
   }
   if (type === MessageType.TRUCE) {
-    return UNIT_ICONS[UnitType.Respite];
+    return unitFeedIcon(UnitType.Respite);
   }
   if (type === MessageType.PACT) {
-    return UNIT_ICONS[UnitType.PeacePalace];
+    return unitFeedIcon(UnitType.PeacePalace);
   }
   if (type === MessageType.CATASTROPHE) {
-    return UNIT_ICONS[UnitType.Greens];
+    return unitFeedIcon(UnitType.Greens);
   }
   if (type === MessageType.CHERNOBYL || type === MessageType.RECULTIVATION) {
-    return UNIT_ICONS[UnitType.NuclearPlant];
+    return unitFeedIcon(UnitType.NuclearPlant);
   }
   if (type === MessageType.INDUSTRIAL_REVOLUTION) {
-    return UNIT_ICONS[UnitType.Fuel];
+    return unitFeedIcon(UnitType.Fuel);
   }
   if (type === MessageType.RAILGUN) {
-    return UNIT_ICONS[UnitType.RailGun];
+    return unitFeedIcon(UnitType.RailGun);
   }
   if (type === MessageType.WALKING) {
-    return UNIT_ICONS[UnitType.WalkingCity];
+    return unitFeedIcon(UnitType.WalkingCity);
   }
   if (type === MessageType.SPACEPORT) {
-    return UNIT_ICONS[UnitType.Spaceport];
+    return unitFeedIcon(UnitType.Spaceport);
   }
   if (type === MessageType.CENTRAL_BANK) {
-    return UNIT_ICONS[UnitType.CentralBank];
+    return unitFeedIcon(UnitType.CentralBank);
   }
   if (type === MessageType.NUKE_DETONATED) {
     return message.includes("hydrogen")
-      ? NUKE_FEED_ICONS[UnitType.HydrogenBomb]
+      ? unitFeedIcon(UnitType.HydrogenBomb)
       : nukeIcon;
   }
   return undefined;
@@ -507,6 +497,7 @@ export class EventsDisplay extends LitElement implements Controller {
     );
     window.addEventListener("terron-clan-invited", this.onClanInvited);
     window.addEventListener("terron-friend-requested", this.onFriendRequested);
+    window.addEventListener("terron-dm", this.onSiteDm);
     window.addEventListener(
       "terron-friend-request-sent",
       this.onFriendRequestSent,
@@ -527,6 +518,7 @@ export class EventsDisplay extends LitElement implements Controller {
       "terron-friend-requested",
       this.onFriendRequested,
     );
+    window.removeEventListener("terron-dm", this.onSiteDm);
     window.removeEventListener(
       "terron-friend-request-sent",
       this.onFriendRequestSent,
@@ -585,7 +577,10 @@ export class EventsDisplay extends LitElement implements Controller {
 
   private async fetchChatToken(): Promise<string> {
     const res = await fetch(`${getApiBase()}/realtime/token`, {
-      headers: { authorization: await getAuthHeader() },
+      headers: {
+        authorization: await getAuthHeader(),
+        ...deviceTraceHeaders(),
+      },
     });
     if (!res.ok) throw new Error("realtime token failed");
     const j = (await res.json()) as {
@@ -628,6 +623,9 @@ export class EventsDisplay extends LitElement implements Controller {
       map?: string | null;
       state?: string;
     };
+    // ЛС идут отдельным путём — событием `terron-dm` (onSiteDm), чтобы строка
+    // была и в одиночке, где своего реалтайма у ленты нет.
+    if (d.kind === "dm") return;
     if (!d?.gameID) return;
     if (d.kind === "friend_lobby_end") {
       this.feed = this.feed.filter((e) => e.friendLobbyGameID !== d.gameID);
@@ -828,6 +826,10 @@ export class EventsDisplay extends LitElement implements Controller {
           messageText: d.text || "(сообщение скрыто)",
           gameId,
           reason: d.reason,
+          // ⚠️ Без этого у анонима в журнале модерации стоит просто "anon", и
+          // пачку блокировок от ОДНОГО игрока не отличить от жалоб семерых
+          // (разбор 08.09). Сервер сам решает: аккаунт → slug, иначе anon:<8>.
+          reporterPid: getPersistentID(),
         }),
       });
     } catch {
@@ -964,9 +966,11 @@ export class EventsDisplay extends LitElement implements Controller {
       text,
       cid: myCid,
     });
-    this.chatSub.publish({ text, name: nick, cid: myCid }).catch(() => {
-      /* 429/413 — у себя уже видим, молча глотаем */
-    });
+    this.chatSub
+      .publish({ text, name: nick, cid: myCid, did: chatDeviceId() })
+      .catch(() => {
+        /* 429/413 — у себя уже видим, молча глотаем */
+      });
   }
 
   updated(changed: Map<string, unknown>) {
@@ -1018,6 +1022,17 @@ export class EventsDisplay extends LitElement implements Controller {
     return eventRewardOf(this.game.config().gameConfig());
   }
 
+  /** terron 26.09: командный вечерний алмазный — награда делится на команду. */
+  private isTeamEvening(): boolean {
+    return eveningOf(this.game.config().gameConfig()) === "team";
+  }
+
+  private eventPerPerson(): number {
+    // terron 30.09: у золотого в конфиге матча уже ТОЧНАЯ сумма — сервер
+    // посчитал её по пику лобби и заморозил на старте (GameServer.noteEventPeak).
+    return eventPerPersonOf(this.game.config().gameConfig());
+  }
+
   private onGoldenWin(wu: { winner?: Winner }) {
     if (!this.isGoldenMatch() || wu.winner === undefined) return;
     let name: string;
@@ -1026,7 +1041,8 @@ export class EventsDisplay extends LitElement implements Controller {
       if (!p?.isPlayer()) return;
       name = p.displayName();
     } else {
-      name = String(wu.winner[1]);
+      // нация/команда: имя нации — EN-ключ манифеста, локализуем как везде.
+      name = localizeAIName(String(wu.winner[1]));
     }
     this.addEvent({
       description: html`${this.isDiamondMatch()
@@ -1038,7 +1054,10 @@ export class EventsDisplay extends LitElement implements Controller {
             `⭐ Золотой матч выигран: ${name}`,
             `⭐ Golden match won by ${name}`,
           )}
-      (+${this.eventReward()} ${goldenGem()})`,
+      (${this.isTeamEvening()
+        ? L("до ", "up to ")
+        : ""}+${this.eventPerPerson()}
+      ${goldenGem()})`,
       createdAt: this.game.ticks(),
       highlight: true,
       type: MessageType.GOLDEN_MATCH,
@@ -1063,7 +1082,13 @@ export class EventsDisplay extends LitElement implements Controller {
         description: html`${this.isDiamondMatch()
           ? L("💎 АЛМАЗНЫЙ МАТЧ.", "💎 DIAMOND MATCH.")
           : L("⭐ ЗОЛОТОЙ МАТЧ.", "⭐ GOLDEN MATCH.")}
-        ${L("Победитель получит", "The winner gets")} +${this.eventReward()}
+        ${this.isTeamEvening()
+          ? L(
+              `Победившая команда делит +${this.eventReward()}, до ${this.eventPerPerson()} каждому выжившему.`,
+              `The winning team splits +${this.eventReward()}, up to ${this.eventPerPerson()} per surviving player.`,
+            )
+          : html`${L("Победитель получит", "The winner gets")}
+            +${this.eventPerPerson()}`}
         ${goldenGem()}`,
         createdAt: this.game.ticks(),
         highlight: true,
@@ -1176,9 +1201,9 @@ export class EventsDisplay extends LitElement implements Controller {
       // имя (иначе в ленте сырое «Hydrogen Bomb», юзер спросит «чо за хидроген»).
       case "events_display.missile_intercepted": {
         const unit = String(p.unit ?? "");
-        const nameKey = NUKE_NAME_KEYS[unit];
+        const nameKey = unitNameI18nKey(unit);
         const label = nameKey ? translateText(nameKey) : unit;
-        const ico = NUKE_FEED_ICONS[unit];
+        const ico = unitFeedIcon(unit);
         const txt = translateText("events_display.missile_intercepted", {
           unit: label,
         });
@@ -1229,7 +1254,7 @@ export class EventsDisplay extends LitElement implements Controller {
       unit === UnitType.HydrogenBomb ||
       unit === UnitType.MIRV;
     const isBoat = isTrade || unit === UnitType.TransportShip;
-    const iconUrl = UNIT_ICONS[unit as UnitType];
+    const iconUrl = unitFeedIcon(unit);
     // пиратство (трейд-шип) → 🏴‍☠️🚢; постройка → её иконка из меню
     const mark = isTrade
       ? html`${uiIcon("skull", 15)} ${feedIco(boatIcon)}`
@@ -1258,7 +1283,7 @@ export class EventsDisplay extends LitElement implements Controller {
     }
     if (key === "events_display.unit_destroyed") {
       if (isNuke)
-        return html`${feedIco(NUKE_FEED_ICONS[unit] ?? nukeIcon)}
+        return html`${feedIco(unitFeedIcon(unit) ?? nukeIcon)}
         ${translateText("events_display.feed_intercepted")}`;
       const url = isBoat ? boatIcon : iconUrl;
       const ic = url ? feedIco(url) : html`💥`;
@@ -1273,8 +1298,8 @@ export class EventsDisplay extends LitElement implements Controller {
       key === "events_display.drone_shot_down"
     ) {
       const url = key.includes("drone")
-        ? UNIT_ICONS[UnitType.SuicideDrone]
-        : UNIT_ICONS[UnitType.AirborneAssault];
+        ? unitFeedIcon(UnitType.SuicideDrone)
+        : unitFeedIcon(UnitType.AirborneAssault);
       const ic = url ? feedIco(url) : html`💥`;
       const mine = key.startsWith("events_display.your_");
       return mine
@@ -2186,6 +2211,27 @@ export class EventsDisplay extends LitElement implements Controller {
 
   // terron: меня зовут в друзья (in-game) → строка в ленте с Принять/Отклонить.
   // requestId — id заявки; accept/decline идут в platform-api под токеном адресата.
+  // terron 22.09: новое личное сообщение — строкой в ленту (уровень
+  // уведомлений «в игре» или «+пуши»; «никаких» — молчим). Приходит от
+  // сайтового FriendsNotifier (он держит канал друзей и в матче, и в одиночке,
+  // где у ленты своего подключения нет). Ответить из матча нельзя — панель
+  // чатов живёт на сайте.
+  private onSiteDm = (e: Event) => {
+    if (!this.game || !siteChatAllowed()) return;
+    if (chatNotifyLevel() === "none") return;
+    const dm = (e as CustomEvent).detail as {
+      from?: { name?: string };
+      preview?: string;
+    };
+    const who = dm?.from?.name || L("Друг", "Friend");
+    this.addEvent({
+      description: `✉ ${who}: ${(dm?.preview ?? "").slice(0, 60)}`,
+      type: MessageType.ALLIANCE_ACCEPTED,
+      highlight: true,
+      createdAt: this.game.ticks(),
+    });
+  };
+
   private onFriendRequested = (e: Event) => {
     const d = (e as CustomEvent).detail as { requestId?: string; by?: string };
     const requestId = d?.requestId;
@@ -2274,7 +2320,9 @@ export class EventsDisplay extends LitElement implements Controller {
     if (!this.pendingDossier || d?.target !== this.pendingDossier) return;
     this.pendingDossier = null;
     if (d.slug) {
-      window.open(`/@${d.slug}`, "_blank");
+      // ⚠️ АБСОЛЮТНЫЙ адрес: в апке origin — localhost, и `_blank` уводил в
+      // системный браузер на несуществующий `http://localhost/@ник`.
+      window.open(`${publicSiteOrigin()}/@${d.slug}`, "_blank");
     } else {
       toast(L("У игрока нет профиля", "Player has no profile"), "info");
     }

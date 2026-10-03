@@ -1,0 +1,84 @@
+{
+  "name": "Yellow Sea (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        1342,
+        552
+      ],
+      "flag": "kp",
+      "name": "North Korea"
+    },
+    {
+      "coordinates": [
+        1476,
+        900
+      ],
+      "flag": "kr",
+      "name": "South Korea"
+    },
+    {
+      "coordinates": [
+        998,
+        224
+      ],
+      "flag": "cn",
+      "name": "Liaoning"
+    },
+    {
+      "coordinates": [
+        500,
+        906
+      ],
+      "flag": "cn",
+      "name": "Shandong"
+    },
+    {
+      "coordinates": [
+        78,
+        278
+      ],
+      "flag": "cn",
+      "name": "Beijing"
+    },
+    {
+      "coordinates": [
+        192,
+        464
+      ],
+      "flag": "cn",
+      "name": "Tianjin"
+    },
+    {
+      "coordinates": [
+        128,
+        752
+      ],
+      "flag": "cn",
+      "name": "Hebei"
+    },
+    {
+      "coordinates": [
+        1354,
+        84
+      ],
+      "flag": "cn",
+      "name": "Jilin"
+    }
+  ],
+  "map": {
+    "width": 1516,
+    "height": 1136,
+    "num_land_tiles": 1058534
+  },
+  "map4x": {
+    "width": 758,
+    "height": 568,
+    "num_land_tiles": 262594
+  },
+  "map16x": {
+    "width": 379,
+    "height": 284,
+    "num_land_tiles": 64969
+  }
+}

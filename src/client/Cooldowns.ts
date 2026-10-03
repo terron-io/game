@@ -19,9 +19,10 @@ import {
   TERRON_PIRACY_SHIP_COOLDOWN_TICKS,
   TERRON_RAILGUN_RELOAD_TICKS,
 } from "../core/configuration/TerronTuning";
+import { samCooldownFrom } from "../core/execution/SAMLauncherExecution";
 import { ULT_MAX_COUNT, Ultimates, UnitType } from "../core/game/Game";
-import { spaceportPeriodTicks } from "../core/game/SpaceportTiming";
 import { GameView, UnitView } from "../core/game/GameView";
+import { spaceportPeriodTicks } from "../core/game/SpaceportTiming";
 
 export interface Cooldown {
   /** Тиков осталось. */
@@ -45,6 +46,9 @@ const RELOAD_SOURCE: Partial<Record<UnitType, UnitType>> = {
   [UnitType.HydrogenBomb]: UnitType.MissileSilo,
   [UnitType.MIRV]: UnitType.MissileSilo,
   [UnitType.WaterNuke]: UnitType.MissileSilo,
+  // terron 25.08: терраформинг — три ракеты одной шахты, откат общий.
+  [UnitType.LandNuke]: UnitType.MissileSilo,
+  [UnitType.BlastNuke]: UnitType.MissileSilo,
   // ⚠️ ДРОН СЮДА НЕ ВПИСАН (решение владельца 23.08): откат аэропортов
   // показывается ТОЛЬКО на самих аэропортах на карте. На кнопке дрона он
   // сбивал с толку — аэропортов много, и «занят» один из них, а кнопка
@@ -87,48 +91,63 @@ export function hasCooldown(action: UnitType): boolean {
   return (RELOADING_TYPES as readonly UnitType[]).includes(source);
 }
 
+/**
+ * ЕДИНСТВЕННЫЙ список «что перезаряжается и сколько это длится».
+ *
+ * ⚠️ terron 31.08 — БЫЛО ДВА СПИСКА: `switch` с длительностями и отдельный
+ * массив `RELOADING_TYPES`, по которому карта решает, кому рисовать циферблат.
+ * Совпадали они только потому, что их пока не забывали: добавь здание в switch
+ * и не впиши в массив — откат считается, а на карте его нет (и наоборот —
+ * циферблат с нулевой длительностью). Теперь массив ВЫВОДИТСЯ из таблицы.
+ */
+const RELOAD_TICKS: Partial<
+  Record<UnitType, (game: GameView, unit?: UnitView) => number>
+> = {
+  // terron: КОСМОДРОМ — период зависит от МЕСТА (море вдвое чаще), поэтому
+  // длительность отката спрашивают вместе с юнитом, если он известен.
+  [UnitType.Spaceport]: (game, unit) =>
+    spaceportPeriodTicks(
+      game,
+      unit?.tile() ??
+        game.myPlayer()?.units(UnitType.Spaceport)[0]?.tile() ??
+        0,
+    ),
+  [UnitType.MissileSilo]: (game) => game.config().SiloCooldown(),
+  // ⚠️ 01.09: перезарядка ПВО зависит от пассива «Неба нашего» (вдвое быстрее).
+  // Раньше циферблат рисовал БАЗОВУЮ и врал владельцу ульты вдвое.
+  [UnitType.SAMLauncher]: (game) =>
+    samCooldownFrom(
+      game.config().SAMCooldown(),
+      game.myPlayer()?.hasUltimate(UnitType.OurSky) ?? false,
+    ),
+  // ⚠️ Штаб «Неба нашего» САМ является ПВО (та же SAMLauncherExecution), но в
+  // этой таблице его не было — над ним не рисовалось ничего, и игроки честно
+  // читали его как «безлимитный купол» (репорт 01.09).
+  [UnitType.OurSky]: (game) =>
+    samCooldownFrom(
+      game.config().SAMCooldown(),
+      game.myPlayer()?.hasUltimate(UnitType.OurSky) ?? false,
+    ),
+  [UnitType.Airport]: (game) => game.config().AirportDroneCooldown(),
+  [UnitType.RailGun]: () => TERRON_RAILGUN_RELOAD_TICKS,
+};
+
 /** Полная длительность отката здания. 0 — здание не перезаряжается. */
 export function reloadTicks(
   game: GameView,
   type: UnitType,
-  // terron: КОСМОДРОМ — период зависит от МЕСТА (море вдвое чаще), поэтому
-  // длительность отката спрашивают вместе с юнитом, если он известен.
   unit?: UnitView,
 ): number {
-  const cfg = game.config();
-  switch (type) {
-    case UnitType.Spaceport:
-      return spaceportPeriodTicks(
-        game,
-        unit?.tile() ?? (game.myPlayer()?.units(UnitType.Spaceport)[0]?.tile() ?? 0),
-      );
-    case UnitType.MissileSilo:
-      return cfg.SiloCooldown();
-    case UnitType.SAMLauncher:
-      return cfg.SAMCooldown();
-    case UnitType.Airport:
-      return cfg.AirportDroneCooldown();
-    case UnitType.RailGun:
-      return TERRON_RAILGUN_RELOAD_TICKS;
-    default:
-      return 0;
-  }
+  return RELOAD_TICKS[type]?.(game, unit) ?? 0;
 }
 
 /** Все типы зданий, у которых есть откат (для обхода карты). */
-export const RELOADING_TYPES: readonly UnitType[] = [
-  UnitType.MissileSilo,
-  UnitType.SAMLauncher,
-  UnitType.Airport,
-  UnitType.RailGun,
-  UnitType.Spaceport,
-];
+export const RELOADING_TYPES: readonly UnitType[] = Object.keys(
+  RELOAD_TICKS,
+) as UnitType[];
 
 function make(game: GameView, remaining: number, total: number): Cooldown {
-  const ticksPerSec = Math.max(
-    1,
-    Math.round(1000 / game.config().msPerTick()),
-  );
+  const ticksPerSec = Math.max(1, Math.round(1000 / game.config().msPerTick()));
   return {
     remaining,
     total,

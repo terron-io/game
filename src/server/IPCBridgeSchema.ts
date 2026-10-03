@@ -46,6 +46,9 @@ const MasterUpdateGameSchema = z.object({
   // часами (репорт 17.07). Мастер раз в MAP_ROTATE_MS присылает свежий конфиг
   // из плейлиста; воркер применяет ТОЛЬКО если лобби всё ещё пустое.
   gameConfig: GameConfigSchema.optional(),
+  // terron 26.09: конфиг событийного лобби под другой слот (вечерний алмазный) —
+  // применить, даже если лобби не просило ротацию (гард «пусто» остаётся).
+  forceConfig: z.boolean().optional(),
 });
 
 // Broadcasts all public game info to all workers.

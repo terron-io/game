@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "fs";
 import { appendFile, rename, rm, writeFile } from "fs/promises";
@@ -60,6 +61,8 @@ export interface GameMeta {
   wireGameStartInfo: GameStartInfo;
   clients: PersistedClient[];
   kickedPersistentIds: string[];
+  /** terron 28.09: отпечаток ядра, на котором матч начался (ServerEnv.coreHash). */
+  coreHash?: string;
 }
 
 export interface LoadedGame {
@@ -179,29 +182,71 @@ const pendingTurns = new Map<GameID, string[]>();
 let flushTimer: NodeJS.Timeout | null = null;
 let flushChain: Promise<void> = Promise.resolve();
 
-function takePending(): Array<[string, string]> {
-  const out: Array<[string, string]> = [];
-  for (const [id, lines] of pendingTurns) {
-    out.push([turnsPath(id), lines.join("\n") + "\n"]);
-  }
+// terron 29.09: у каких игр прошлая запись упала посреди строки (ENOSPC и т. п.).
+// Следующая запись начинается с перевода строки: огрызок остаётся отдельной
+// битой строкой, её пропускает загрузчик, а не склеивает с целым ходом.
+const brokenTail = new Set<GameID>();
+
+function takePendingBatch(): Array<[GameID, string[]]> {
+  const out: Array<[GameID, string[]]> = [];
+  for (const [id, lines] of pendingTurns) out.push([id, lines]);
   pendingTurns.clear();
   return out;
 }
 
+function takePending(): Array<[string, string]> {
+  return takePendingBatch().map(([id, lines]) => [
+    turnsPath(id),
+    chunkFor(id, lines),
+  ]);
+}
+
+function chunkFor(id: GameID, lines: string[]): string {
+  const head = brokenTail.has(id) ? "\n" : "";
+  return head + lines.join("\n") + "\n";
+}
+
+/**
+ * Вернуть недописанное в НАЧАЛО очереди (до ходов, пришедших за время записи):
+ * порядок ходов в логе обязан сохраниться, иначе резюм после рестарта разойдётся.
+ * terron 29.09: раньше партия при ошибке просто выбрасывалась — 28.09 при 96 %
+ * диска так пропала секунда ходов всех идущих матчей.
+ */
+function requeue(rest: Array<[GameID, string[]]>): void {
+  for (const [id, lines] of rest) {
+    if (deletedIds.has(id)) continue;
+    brokenTail.add(id);
+    const newer = pendingTurns.get(id) ?? [];
+    pendingTurns.set(id, [...lines, ...newer]);
+  }
+  if (flushTimer === null && pendingTurns.size > 0) {
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      flushPendingAsync();
+    }, RETRY_MS);
+  }
+}
+const RETRY_MS = 2000;
+
 function flushPendingAsync(): void {
-  const batch = takePending();
+  const batch = takePendingBatch();
   if (batch.length === 0) return;
   flushChain = flushChain.then(async () => {
+    let i = 0;
     try {
       if (!dirEnsured) {
         ensureDir();
         dirEnsured = true;
       }
-      for (const [p, data] of batch) {
-        await appendFile(p, data);
+      for (; i < batch.length; i++) {
+        const [id, lines] = batch[i];
+        if (deletedIds.has(id)) continue;
+        await appendFile(turnsPath(id), chunkFor(id, lines));
+        brokenTail.delete(id);
       }
     } catch (e) {
       warnOnce("flushPendingAsync", e);
+      requeue(batch.slice(i));
     }
   });
 }
@@ -212,6 +257,9 @@ function flushPendingAsync(): void {
  *  Строка в файл ложится как есть → формат ndjson побайтово прежний. */
 export function persistTurn(id: GameID, turnJson: string): void {
   if (!persistEnabled()) return;
+  // terron 29.09: ход после persistDelete (игра кончилась, а endTurn ещё тикнул)
+  // раньше ложился в новый файл без снимка — за июль–сентябрь 1429 сирот.
+  if (deletedIds.has(id)) return;
   let arr = pendingTurns.get(id);
   if (arr === undefined) {
     arr = [];
@@ -297,6 +345,22 @@ export function loadForWorker(): LoadedGame[] {
   } catch {
     return out;
   }
+  // terron 29.09: логи ходов без снимка никогда не резюмятся — это хвосты
+  // закончившихся игр. Старше суток — удаляем (свежие не трогаем: снимок
+  // пишется с задержкой, и соседний воркер мог только что начать игру).
+  const names = new Set(files);
+  for (const f of files) {
+    if (!f.endsWith(".turns.ndjson")) continue;
+    const id = f.slice(0, -".turns.ndjson".length);
+    if (names.has(`${id}.meta.json`)) continue;
+    try {
+      const p = join(persistDir(), f);
+      if (Date.now() - statSync(p).mtimeMs > 24 * 3600_000)
+        rmSync(p, { force: true });
+    } catch {
+      /* не наше дело — пропускаем */
+    }
+  }
   for (const f of files) {
     if (!f.endsWith(".meta.json")) continue;
     const id = f.slice(0, -".meta.json".length);
@@ -314,14 +378,35 @@ export function loadForWorker(): LoadedGame[] {
       const raw = existsSync(turnsPath(id))
         ? readFileSync(turnsPath(id), "utf8")
         : "";
-      for (const line of raw.split("\n")) {
-        const t = line.trim();
-        if (t) turns.push(JSON.parse(t) as Turn);
-      }
+      turns.push(...parseTurnLog(raw));
     } catch {
-      /* повреждённый хвост лога — берём что распарсилось */
+      /* файл не прочитался — резюмим без ходов, как раньше */
     }
     out.push({ meta, turns });
   }
   return out;
+}
+
+/**
+ * terron 29.09: разбор лога ходов для резюма. Битые строки (огрызок записи,
+ * упавшей посреди строки) пропускаем, повторы отбрасываем, на ДЫРЕ в номерах
+ * останавливаемся: ходы после пропуска без него бесполезны — симуляция разошлась бы.
+ */
+export function parseTurnLog(raw: string): Turn[] {
+  const turns: Turn[] = [];
+  for (const line of raw.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    let turn: Turn;
+    try {
+      turn = JSON.parse(t) as Turn;
+    } catch {
+      continue;
+    }
+    if (typeof turn?.turnNumber !== "number") continue;
+    if (turn.turnNumber < turns.length) continue;
+    if (turn.turnNumber > turns.length) break;
+    turns.push(turn);
+  }
+  return turns;
 }

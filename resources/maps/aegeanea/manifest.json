@@ -1,0 +1,243 @@
+{
+  "name": "aegean (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        799,
+        1825
+      ],
+      "name": "Crete"
+    },
+    {
+      "coordinates": [
+        1611,
+        1502
+      ],
+      "name": "Rhodes"
+    },
+    {
+      "coordinates": [
+        1129,
+        535
+      ],
+      "name": "Lesbos"
+    },
+    {
+      "coordinates": [
+        1133,
+        786
+      ],
+      "name": "Chios"
+    },
+    {
+      "coordinates": [
+        1334,
+        1004
+      ],
+      "name": "Samos"
+    },
+    {
+      "coordinates": [
+        1267,
+        258
+      ],
+      "name": "Troy"
+    },
+    {
+      "coordinates": [
+        1559,
+        773
+      ],
+      "name": "Ephesus"
+    },
+    {
+      "coordinates": [
+        1635,
+        1094
+      ],
+      "name": "Miletus"
+    },
+    {
+      "coordinates": [
+        903,
+        292
+      ],
+      "name": "Lemnos"
+    },
+    {
+      "coordinates": [
+        1363,
+        34
+      ],
+      "name": "Thrace"
+    },
+    {
+      "coordinates": [
+        1578,
+        410
+      ],
+      "name": "Achaemenid Empire",
+      "flag": "Achaemenid Empire"
+    },
+    {
+      "coordinates": [
+        781,
+        47
+      ],
+      "name": "Thasos"
+    },
+    {
+      "coordinates": [
+        515,
+        865
+      ],
+      "name": "Athens",
+      "flag": "Athens"
+    },
+    {
+      "coordinates": [
+        246,
+        1142
+      ],
+      "name": "Sparta",
+      "flag": "Sparta"
+    },
+    {
+      "coordinates": [
+        484,
+        108
+      ],
+      "name": "Macedonia",
+      "flag": "Macedonia"
+    },
+    {
+      "coordinates": [
+        219,
+        436
+      ],
+      "name": "Thessaly"
+    },
+    {
+      "coordinates": [
+        112,
+        680
+      ],
+      "name": "Aetolia"
+    },
+    {
+      "coordinates": [
+        558,
+        736
+      ],
+      "name": "Euboea"
+    },
+    {
+      "coordinates": [
+        60,
+        941
+      ],
+      "name": "Olympia"
+    },
+    {
+      "coordinates": [
+        841,
+        990
+      ],
+      "name": "Andros"
+    },
+    {
+      "coordinates": [
+        1154,
+        1045
+      ],
+      "name": "Icaria"
+    },
+    {
+      "coordinates": [
+        1001,
+        1216
+      ],
+      "name": "Naxos"
+    },
+    {
+      "coordinates": [
+        983,
+        1439
+      ],
+      "name": "Thera"
+    },
+    {
+      "coordinates": [
+        950,
+        1335
+      ],
+      "name": "Ios"
+    },
+    {
+      "coordinates": [
+        1412,
+        1296
+      ],
+      "name": "Cos"
+    },
+    {
+      "coordinates": [
+        703,
+        1341
+      ],
+      "name": "Melos"
+    },
+    {
+      "coordinates": [
+        742,
+        624
+      ],
+      "name": "Scyros"
+    },
+    {
+      "coordinates": [
+        339,
+        1478
+      ],
+      "name": "Cythera"
+    },
+    {
+      "coordinates": [
+        1434,
+        1713
+      ],
+      "name": "Carpathos"
+    }
+  ],
+  "teamGameSpawnAreas": {
+    "2": [
+      {
+        "height": 2000,
+        "width": 850,
+        "x": 0,
+        "y": 0
+      },
+      {
+        "height": 2000,
+        "width": 850,
+        "x": 850,
+        "y": 0
+      }
+    ]
+  },
+  "map": {
+    "width": 1728,
+    "height": 1964,
+    "num_land_tiles": 1200671
+  },
+  "map4x": {
+    "width": 864,
+    "height": 982,
+    "num_land_tiles": 292501
+  },
+  "map16x": {
+    "width": 432,
+    "height": 491,
+    "num_land_tiles": 69962
+  }
+}

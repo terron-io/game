@@ -59,10 +59,7 @@ const GEM_H = (GEM_W * 35) / 32;
 /** Шаг в ряду: камни лежат внахлёст, как в настоящей куче. */
 const STEP = GEM_W * 0.62;
 /** Сколько камней влезает в самый широкий ряд. */
-const MAX_ROW = Math.max(
-  1,
-  Math.floor((BOX_W * 0.94 - GEM_W * 0.38) / STEP),
-);
+const MAX_ROW = Math.max(1, Math.floor((BOX_W * 0.94 - GEM_W * 0.38) / STEP));
 
 /** Сколько камней рисуем за эту сумму. */
 export function gemsForPts(pts: number): number {
@@ -76,14 +73,26 @@ export function gemsForPts(pts: number): number {
  * самого широкого: куча просто становится выше, а не вылезает вбок.
  */
 function heapRows(n: number): number[] {
+  const tri = (w: number) => (w * (w + 1)) / 2;
   const rows: number[] = [];
   let left = n;
-  let width = Math.min(MAX_ROW, Math.max(1, Math.ceil((Math.sqrt(8 * n + 1) - 1) / 2)));
-  while (left > 0) {
+  let width = Math.min(
+    MAX_ROW,
+    Math.max(1, Math.ceil((Math.sqrt(8 * n + 1) - 1) / 2)),
+  );
+  // terron 20.09: камней больше, чем держит один треугольник (2000 с бонусом ×2
+  // = 80) — раньше остаток начинал ВТОРУЮ пирамиду поверх первой, и куча
+  // читалась двумя наложенными треугольниками. Теперь у горы широкое основание:
+  // кладём полные ряды, пока остаток не уместится в сужающуюся насыпь.
+  while (left > tri(width)) {
+    rows.push(width);
+    left -= width;
+  }
+  while (left > 0 && width > 0) {
     const take = Math.min(left, width);
     rows.push(take);
     left -= take;
-    width = width > 1 ? width - 1 : Math.min(MAX_ROW, Math.max(1, Math.ceil((Math.sqrt(8 * left + 1) - 1) / 2)));
+    width -= 1;
   }
   return rows;
 }

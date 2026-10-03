@@ -286,7 +286,7 @@ export class AttackExecution implements Execution {
         return;
       }
 
-      const [tileToConquer] = this.toConquer.dequeue();
+      const tileToConquer = this.toConquer.dequeueTile();
       this.attack.removeBorderTile(tileToConquer);
 
       let onBorder = false;
@@ -336,46 +336,51 @@ export class AttackExecution implements Execution {
       throw new Error("Attack not initialized");
     }
 
-    const tickNow = this.mg.ticks(); // cache tick
-
-    this.mg.forEachNeighbor(tile, (neighbor) => {
-      if (
-        this.mg.isWater(neighbor) ||
-        this.mg.owner(neighbor) !== this.target
-      ) {
-        return;
-      }
-      this.attack!.addBorderTile(neighbor);
-      let numOwnedByMe = 0;
-      this.mg.forEachNeighbor(neighbor, (n) => {
-        if (this.mg.owner(n) === this._owner) {
-          numOwnedByMe++;
-        }
-      });
-
-      let mag: number;
-      switch (this.mg.terrainType(neighbor)) {
-        case TerrainType.Plains:
-          mag = 1;
-          break;
-        case TerrainType.Highland:
-          mag = 1.5;
-          break;
-        case TerrainType.Mountain:
-          mag = 2;
-          break;
-        default:
-          mag = 0;
-          break;
-      }
-
-      const priority =
-        (this.random.nextInt(0, 7) + 10) * (1 - numOwnedByMe * 0.5 + mag / 2) +
-        tickNow;
-
-      this.toConquer.enqueue(neighbor, priority);
-    });
+    // terron 04.09 ПЕРФ: колбэки соседей — методы-поля, а не замыкания на каждый
+    // захваченный тайл (два замыкания × миллионы захватов за матч; addNeighbors
+    // — 2.1 с из 53 в профиле). Порядок обхода и приоритеты байт-в-байт прежние.
+    this.neighborTickNow = this.mg.ticks();
+    this.mg.forEachNeighbor(tile, this.enqueueNeighbor);
   }
+
+  private neighborTickNow = 0;
+  private ownedByMeCount = 0;
+  private readonly countOwnedByMe = (n: TileRef): void => {
+    if (this.mg.owner(n) === this._owner) {
+      this.ownedByMeCount++;
+    }
+  };
+  private readonly enqueueNeighbor = (neighbor: TileRef): void => {
+    if (this.mg.isWater(neighbor) || this.mg.owner(neighbor) !== this.target) {
+      return;
+    }
+    this.attack!.addBorderTile(neighbor);
+    this.ownedByMeCount = 0;
+    this.mg.forEachNeighbor(neighbor, this.countOwnedByMe);
+    const numOwnedByMe = this.ownedByMeCount;
+
+    let mag: number;
+    switch (this.mg.terrainType(neighbor)) {
+      case TerrainType.Plains:
+        mag = 1;
+        break;
+      case TerrainType.Highland:
+        mag = 1.5;
+        break;
+      case TerrainType.Mountain:
+        mag = 2;
+        break;
+      default:
+        mag = 0;
+        break;
+    }
+
+    const priority =
+      (this.random.nextInt(0, 7) + 10) * (1 - numOwnedByMe * 0.5 + mag / 2) +
+      this.neighborTickNow;
+
+    this.toConquer.enqueue(neighbor, priority);
+  };
 
   private handleDeadDefender() {
     if (!(this.target.isPlayer() && this.target.numTilesOwned() < 100)) return;

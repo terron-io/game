@@ -1,11 +1,17 @@
+import fs from "fs";
 import { JWK } from "jose";
+import path from "path";
 import { z } from "zod";
 import { GameEnv, parseGameEnv } from "../core/configuration/Config";
 import {
+  diamondEveningLabel,
   diamondRewardPts,
   diamondScheduleLabel,
   goldenPeriodMin,
   setDiamondDaily,
+  setDiamondEveningAll,
+  setDiamondEveningHours,
+  setDiamondEveningOff,
   setDiamondEvery,
   setDiamondRewardPts,
   setGoldenPeriodMin,
@@ -26,7 +32,33 @@ const JwksSchema = z.object({
     .min(1),
 });
 
+// terron 28.09: отпечаток ядра симуляции текущей статики (core-hash.txt пишет
+// сборка, см. vite.config coreHash). Перечитываем раз в 30 с: patch-site
+// подменяет статику без рестарта процесса. Нет файла — null (старый образ).
+let coreHashRead: { at: number; value: string | null } | null = null;
+
 export class ServerEnv {
+  static coreHash(): string | null {
+    const now = Date.now();
+    if (coreHashRead !== null && now - coreHashRead.at < 30_000) {
+      return coreHashRead.value;
+    }
+    let value: string | null = null;
+    try {
+      const v = fs
+        .readFileSync(
+          path.join(__dirname, "../../static/core-hash.txt"),
+          "utf8",
+        )
+        .trim();
+      value = /^[0-9a-f]{8,64}$/.test(v) ? v : null;
+    } catch {
+      value = null;
+    }
+    coreHashRead = { at: now, value };
+    return value;
+  }
+
   private static readonly gameEnv: GameEnv = parseGameEnv(process.env.GAME_ENV);
   private static publicKey: JWK | null = null;
 
@@ -197,9 +229,28 @@ export class ServerEnv {
  *   TERRON_DIAMOND_REWARD="30"    награда победителю, ПТС (дефолт 100)
  *   TERRON_GOLDEN_PERIOD_MIN="10" период золотого в минутах (дефолт 10)
  *
+ *   TERRON_EVENT_REWARD_MAX="2"   потолок ЛЮБОЙ событийной награды, ПТС (пусто = нет)
+ *
  * Мусор в переменной НЕ роняет сервер: пишем в лог и живём на дефолте — падать
  * из-за опечатки в compose нельзя, лобби нужны всегда.
  */
+// terron 30.09 (владелец): на ДЕВЕ награды событий минимальные («аля 1 2 3 птс»),
+// потому что API и кошелёк у дева боевые — дев печатает настоящие ПТС. Нужно
+// потестить награду — поднимаем переменную (compose up -d game-dev, без сборки).
+// Режет и то, что показываем, и то, что платит API: обе стороны читают конфиг
+// лобби (eventRewardPts / eventRewardCapPts). На проде переменной нет.
+let eventRewardMaxPts: number | null = null;
+export function eventRewardMax(): number | null {
+  return eventRewardMaxPts;
+}
+/** Обещанная награда с потолком дева (null — потолка нет). */
+export function capEventReward(
+  pts: number | undefined,
+  max: number | null,
+): number | undefined {
+  return pts === undefined || max === null ? pts : Math.min(pts, max);
+}
+
 export function applyEventScheduleFromEnv(): void {
   // TERRON_DIAMOND_AT: "20:00" — раз в сутки по Москве; "*30" или "30m" — каждые N минут.
   const at = process.env.TERRON_DIAMOND_AT?.trim();
@@ -230,6 +281,30 @@ export function applyEventScheduleFromEnv(): void {
       );
     }
   }
+  // terron 26.09: TERRON_DIAMOND_EVENING — часы вечернего алмазного по МСК
+  // ("20,21"), "*" — каждый алмазный слот вечерний (обкатка), "off" — выключено.
+  const evening = process.env.TERRON_DIAMOND_EVENING?.trim();
+  if (evening) {
+    try {
+      if (evening === "*") setDiamondEveningAll();
+      else if (/^off$/i.test(evening)) setDiamondEveningOff();
+      else setDiamondEveningHours(evening.split(",").map((h) => Number(h)));
+    } catch (e) {
+      console.warn(
+        `[terron] TERRON_DIAMOND_EVENING="${evening}" не понял (${e}), оставляю ${diamondEveningLabel()}`,
+      );
+    }
+  }
+  const rewardMax = process.env.TERRON_EVENT_REWARD_MAX?.trim();
+  eventRewardMaxPts = null;
+  if (rewardMax) {
+    const n = Number(rewardMax);
+    if (Number.isInteger(n) && n >= 0) eventRewardMaxPts = n;
+    else
+      console.warn(
+        `[terron] TERRON_EVENT_REWARD_MAX="${rewardMax}" не понял, потолка нет`,
+      );
+  }
   const period = process.env.TERRON_GOLDEN_PERIOD_MIN?.trim();
   if (period) {
     try {
@@ -241,7 +316,10 @@ export function applyEventScheduleFromEnv(): void {
     }
   }
   console.log(
-    `[terron] расписание событий: алмазный ${diamondScheduleLabel()} за ${diamondRewardPts()} ПТС, золотой раз в ${goldenPeriodMin()} мин`,
+    `[terron] расписание событий: алмазный ${diamondScheduleLabel()} за ${diamondRewardPts()} ПТС (вечерний: ${diamondEveningLabel()}), золотой раз в ${goldenPeriodMin()} мин` +
+      (eventRewardMaxPts !== null
+        ? `, потолок наград ${eventRewardMaxPts} ПТС`
+        : ""),
   );
 }
 

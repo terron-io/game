@@ -54,6 +54,12 @@ export class DefensePostExecution implements Execution {
     }
 
     // TODO: Reconsider how/if defense posts target ships.
+    //
+    // ⚠️ terron 01.09: пока этот блок закомментирован, `this.target` не
+    // назначается НИКОГДА, то есть `shoot()` не стреляет ни разу. Репорт
+    // boom871: «береговой огонь бункеров — убери с описания или реализуй
+    // механику». Из вики обещание убрано; РАСКОММЕНТИРУЕШЬ ЗДЕСЬ — верни и
+    // описание (WikiContent «Береговая оборона» + числа в WikiNumbers).
     // const ships = this.mg
     //   .nearbyUnits(
     //     this.post.tile(),

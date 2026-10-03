@@ -10,8 +10,15 @@ export type UnitPredicate = (value: {
 export class UnitGrid {
   private grid: Map<UnitType, Set<Unit | UnitView>>[][];
   private readonly cellSize = 100;
+  // terron 11.09 ПЕРФ: ширина карты — для координат арифметикой по ref.
+  // `gm.x()/gm.y()` через интерфейс были 2.4 с из 66 на боевом реплее, 40 % —
+  // из updateUnitCell (каждый ход каждого корабля/поезда), 22 % — из nearbyUnits.
+  // Формула та же, что в GameMapImpl (`ref % w`, `(ref / w) | 0`) — результат
+  // байт-в-байт, хэш симуляции не задет.
+  private readonly w: number;
 
   constructor(private gm: GameMap) {
+    this.w = gm.width();
     this.grid = Array(Math.ceil(gm.height() / this.cellSize))
       .fill(null)
       .map(() =>
@@ -26,10 +33,19 @@ export class UnitGrid {
     return [Math.floor(x / this.cellSize), Math.floor(y / this.cellSize)];
   }
 
+  /** Колонка ячейки сетки по тайлу — без кортежа и без вызова GameMap. */
+  private cellX(tile: TileRef): number {
+    return Math.floor((tile % this.w) / this.cellSize);
+  }
+  private cellY(tile: TileRef): number {
+    return Math.floor(((tile / this.w) | 0) / this.cellSize);
+  }
+
   // Add a unit to the grid
   addUnit(unit: Unit | UnitView) {
     const tile = unit.tile();
-    const [gridX, gridY] = this.getGridCoords(this.gm.x(tile), this.gm.y(tile));
+    const gridX = this.cellX(tile);
+    const gridY = this.cellY(tile);
 
     if (this.isValidCell(gridX, gridY)) {
       const unitSet = this.grid[gridY][gridX].get(unit.type());
@@ -51,7 +67,8 @@ export class UnitGrid {
   }
 
   removeUnitByTile(unit: Unit | UnitView, tile: TileRef) {
-    const [gridX, gridY] = this.getGridCoords(this.gm.x(tile), this.gm.y(tile));
+    const gridX = this.cellX(tile);
+    const gridY = this.cellY(tile);
 
     if (this.isValidCell(gridX, gridY)) {
       const unitSet = this.grid[gridY][gridX].get(unit.type());
@@ -67,14 +84,12 @@ export class UnitGrid {
   updateUnitCell(unit: Unit | UnitView) {
     const newTile = unit.tile();
     const oldTile = unit.lastTile();
-    const [gridX, gridY] = this.getGridCoords(
-      this.gm.x(oldTile),
-      this.gm.y(oldTile),
-    );
-    const [newGridX, newGridY] = this.getGridCoords(
-      this.gm.x(newTile),
-      this.gm.y(newTile),
-    );
+    // Тот же тайл — та же ячейка, дальше считать нечего (стоящие юниты).
+    if (oldTile === newTile) return;
+    const gridX = this.cellX(oldTile);
+    const gridY = this.cellY(oldTile);
+    const newGridX = this.cellX(newTile);
+    const newGridY = this.cellY(newTile);
     if (gridX !== newGridX || gridY !== newGridY) {
       this.removeUnitByTile(unit, oldTile);
       this.addUnit(unit);
@@ -140,9 +155,9 @@ export class UnitGrid {
     includeUnderConstruction: boolean = false,
   ): Array<{ unit: Unit | UnitView; distSquared: number }> {
     const nearby: Array<{ unit: Unit | UnitView; distSquared: number }> = [];
-    const gm = this.gm;
-    const x = gm.x(tile);
-    const y = gm.y(tile);
+    const w = this.w;
+    const x = tile % w;
+    const y = (tile / w) | 0;
     const { startGridX, endGridX, startGridY, endGridY } = this.getCellsInRange(
       tile,
       searchRange,
@@ -163,8 +178,8 @@ export class UnitGrid {
               if (!includeUnderConstruction && unit.isUnderConstruction())
                 continue;
               const unitTile = unit.tile();
-              const dx = gm.x(unitTile) - x;
-              const dy = gm.y(unitTile) - y;
+              const dx = (unitTile % w) - x;
+              const dy = ((unitTile / w) | 0) - y;
               const distSquared = dx * dx + dy * dy;
               if (distSquared > rangeSquared) continue;
               const value = { unit, distSquared };
@@ -188,8 +203,8 @@ export class UnitGrid {
           // But include them for spacing checks
           if (!includeUnderConstruction && unit.isUnderConstruction()) continue;
           const unitTile = unit.tile();
-          const dx = gm.x(unitTile) - x;
-          const dy = gm.y(unitTile) - y;
+          const dx = (unitTile % w) - x;
+          const dy = ((unitTile / w) | 0) - y;
           const distSquared = dx * dx + dy * dy;
           if (distSquared > rangeSquared) continue;
           const value = { unit, distSquared };

@@ -1,0 +1,140 @@
+{
+  "name": "BetweenTwoSeas (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        102,
+        729
+      ],
+      "name": "Bulgaria",
+      "flag": "bg"
+    },
+    {
+      "coordinates": [
+        335,
+        922
+      ],
+      "name": "Republic of Turkiye",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        188,
+        522
+      ],
+      "name": "Romania",
+      "flag": "ro"
+    },
+    {
+      "coordinates": [
+        253,
+        430
+      ],
+      "name": "Moldova",
+      "flag": "md"
+    },
+    {
+      "coordinates": [
+        477,
+        363
+      ],
+      "name": "Ukraine",
+      "flag": "ua"
+    },
+    {
+      "coordinates": [
+        840,
+        80
+      ],
+      "name": "Russian Federation",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        873,
+        786
+      ],
+      "name": "Georgia",
+      "flag": "ge"
+    },
+    {
+      "coordinates": [
+        982,
+        924
+      ],
+      "name": "Republic of Armenia",
+      "flag": "am"
+    },
+    {
+      "coordinates": [
+        752,
+        1189
+      ],
+      "name": "Syrian Arab Republic",
+      "flag": "sy"
+    },
+    {
+      "coordinates": [
+        1189,
+        1147
+      ],
+      "name": "Islamic Republic of Iran",
+      "flag": "ir"
+    },
+    {
+      "coordinates": [
+        1084,
+        59
+      ],
+      "name": "Republic of Azerbaijan",
+      "flag": "az"
+    },
+    {
+      "coordinates": [
+        420,
+        53
+      ],
+      "name": "Belarus",
+      "flag": "by"
+    },
+    {
+      "coordinates": [
+        1384,
+        512
+      ],
+      "name": "Kazakhstan",
+      "flag": "kz"
+    },
+    {
+      "coordinates": [
+        1479,
+        899
+      ],
+      "name": "Turkmenistan",
+      "flag": "tm"
+    },
+    {
+      "coordinates": [
+        751,
+        695
+      ],
+      "flag": "Circassia",
+      "name": "Circassia"
+    }
+  ],
+  "map": {
+    "width": 1560,
+    "height": 1208,
+    "num_land_tiles": 1513075
+  },
+  "map4x": {
+    "width": 780,
+    "height": 604,
+    "num_land_tiles": 375584
+  },
+  "map16x": {
+    "width": 390,
+    "height": 302,
+    "num_land_tiles": 92799
+  }
+}

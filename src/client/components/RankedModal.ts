@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { UserMeResponse } from "../../core/ApiSchemas";
-import { getUserMe, hasLinkedAccount } from "../Api";
+import { getUserMe, isSignedIn } from "../Api";
 import { userAuth } from "../Auth";
 import { translateText } from "../Utils";
 import { BaseModal } from "./BaseModal";
@@ -50,7 +50,7 @@ export class RankedModal extends BaseModal {
       return;
     }
 
-    if (hasLinkedAccount(this.userMeResponse)) {
+    if (isSignedIn(this.userMeResponse)) {
       this.elo =
         this.userMeResponse &&
         this.userMeResponse.player.leaderboard?.oneVone?.elo
@@ -95,7 +95,7 @@ export class RankedModal extends BaseModal {
           ${this.renderCard(
             translateText("mode_selector.ranked_1v1_title"),
             this.errorMessage ??
-              (hasLinkedAccount(this.userMeResponse)
+              (isSignedIn(this.userMeResponse)
                 ? translateText("matchmaking_modal.elo", { elo: this.elo })
                 : translateText("mode_selector.ranked_title")),
             () => this.handleRanked(),

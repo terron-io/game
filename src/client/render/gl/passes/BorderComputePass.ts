@@ -221,6 +221,15 @@ export class BorderComputePass {
       const mo = this.settings.mapOverlay;
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.borderFbo);
+      // terron 12.09: прикрепляем заново — под ANGLE Metal FBO может молча
+      // перестать писать (см. TileScatterPass.flush).
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        this.borderTex,
+        0,
+      );
       gl.viewport(0, 0, this.mapW, this.mapH);
       gl.disable(gl.BLEND);
 

@@ -7,6 +7,8 @@
 //
 // Fail-open: сеть легла и кэша нет → пустой список (все ульты видны) — как
 // у реле-гейта замков: матч важнее рубильника. На деве сервер отдаёт [].
+import { gameOrigin } from "./GameHost";
+
 const LS_KEY = "terron_disabled_ults";
 
 let cached: string[] | null = null;
@@ -40,7 +42,7 @@ export function isUltRollDisabled(t: string): boolean {
 /** Обновить с сервера (зовётся на старте приложения и картой /ults). */
 export async function refreshDisabledUlts(): Promise<string[]> {
   try {
-    const r = await fetch("/api/version");
+    const r = await fetch(`${gameOrigin()}/api/version`);
     if (!r.ok) return disabledUltsSync();
     const j: unknown = await r.json();
     const list = (j as { disabledUlts?: unknown })?.disabledUlts;

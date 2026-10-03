@@ -23,8 +23,10 @@
  * дев всегда, любой домен по `?debug=perf`). СБОР идёт ВЕЗДЕ: без прода вопрос
  * «стало лучше или хуже после выката» не имеет ответа.
  */
+import { clientPlatform } from "./Analytics";
 import { perfDiagEnabled } from "./CamDiag";
 import { reportHealth } from "./Health";
+import { Host } from "./PlatformHost";
 
 /** Окно для ЖИВЫХ цифр на экране. 180 ≈ 3 секунды при 60fps. */
 const WINDOW = 180;
@@ -55,6 +57,15 @@ interface MatchCtx {
 class PerfMeter {
   // ---- экранная часть (только под perfDiagEnabled) ----
   private el: HTMLDivElement | null = null;
+  // terron 12.09: строка датчика целостности карты (TerritoryIntegrity) —
+  // владелец на деве видит «карта ✗» в момент бага и может снять кадр.
+  private mapLine: string | null = null;
+  private mapBad = false;
+
+  setMapLine(text: string | null, bad: boolean): void {
+    this.mapLine = text;
+    this.mapBad = bad;
+  }
   private timer: number | null = null;
   private live = new Float32Array(WINDOW);
   private liveCount = 0;
@@ -70,7 +81,23 @@ class PerfMeter {
   private hist = new Int32Array(BUCKETS.length + 1);
   private frames = 0;
   private worstFrame = 0;
+  // terron 04.09: КОГДА был худший кадр (тик и секунда матча) и сколько
+  // заминок пришлось на первые две минуты — заминки по данным сосредоточены в
+  // начале матча (медиана 8 на 10 мин у коротких матчей против 1.2 у длинных),
+  // а сводка не говорила, в старте ли они или размазаны.
+  private worstFrameTick = 0;
+  private worstFrameS = 0;
+  private longTasksEarly = 0;
+  // Худший шаг ингеста за матч (WebGLFrameBuilder.noteIngest): имя шага, мс, тик.
+  private worstIngestMs = 0;
+  private worstIngestStep = "";
+  private worstIngestTick = 0;
   private simTicks = 0;
+  // Пауза между тиками симуляции: worstSimGap — за матч (в отчёт),
+  // worstSimGapWindow — за окно перерисовки датчика (на экран).
+  private lastSimTickAt = 0;
+  private worstSimGap = 0;
+  private worstSimGapWindow = 0;
   private maxBacklog = 0;
   private backlog = 0;
   private longTasks = 0;
@@ -89,7 +116,16 @@ class PerfMeter {
     this.hist.fill(0);
     this.frames = 0;
     this.worstFrame = 0;
+    this.worstFrameTick = 0;
+    this.worstFrameS = 0;
+    this.longTasksEarly = 0;
+    this.worstIngestMs = 0;
+    this.worstIngestStep = "";
+    this.worstIngestTick = 0;
     this.simTicks = 0;
+    this.lastSimTickAt = 0;
+    this.worstSimGap = 0;
+    this.worstSimGapWindow = 0;
     this.maxBacklog = 0;
     this.backlog = 0;
     this.longTasks = 0;
@@ -105,6 +141,9 @@ class PerfMeter {
           if (e.duration < 100) continue;
           this.longTasks++;
           this.blockedMs += e.duration;
+          if (performance.now() - this.startedAt < 120_000) {
+            this.longTasksEarly++;
+          }
         }
       });
       this.longTaskObs.observe({ entryTypes: ["longtask"] });
@@ -141,7 +180,11 @@ class PerfMeter {
         return;
       }
       this.frames++;
-      if (dt > this.worstFrame) this.worstFrame = dt;
+      if (dt > this.worstFrame) {
+        this.worstFrame = dt;
+        this.worstFrameTick = this.simTicks;
+        this.worstFrameS = Math.round((now - this.startedAt) / 1000);
+      }
       let b = 0;
       while (b < BUCKETS.length && dt > BUCKETS[b]) b++;
       this.hist[b]++;
@@ -154,6 +197,14 @@ class PerfMeter {
     this.lastFrameAt = now;
   }
 
+  /** Худший шаг ингеста кадра за матч (зовёт WebGLFrameBuilder.update). */
+  noteIngest(step: string, ms: number, tick: number): void {
+    if (!this.running || ms <= this.worstIngestMs) return;
+    this.worstIngestMs = ms;
+    this.worstIngestStep = step;
+    this.worstIngestTick = tick;
+  }
+
   /** Зовётся на каждом обновлении из воркера симуляции. */
   simTick(pendingTurns: number | undefined): void {
     if (!this.running) return;
@@ -161,6 +212,18 @@ class PerfMeter {
     this.ticksSinceRedraw++;
     this.backlog = pendingTurns ?? 0;
     if (this.backlog > this.maxBacklog) this.maxBacklog = this.backlog;
+    // terron 31.08 (репорт: «счётчик TPS врёт — на 20 расколах лагает, а число
+    // высокое»): претензия по делу. «тик/с» — СРЕДНЕЕ за секунду, а сервер и так
+    // пейсит 10 тиков/с, поэтому при рывках оно остаётся около десятки, а на
+    // догоне даже подскакивает выше. Лаг симуляции — это ПАУЗА между тиками,
+    // и её надо показывать отдельно.
+    const now = performance.now();
+    if (this.lastSimTickAt > 0) {
+      const gap = now - this.lastSimTickAt;
+      if (gap > this.worstSimGap) this.worstSimGap = gap;
+      if (gap > this.worstSimGapWindow) this.worstSimGapWindow = gap;
+    }
+    this.lastSimTickAt = now;
   }
 
   /**
@@ -186,10 +249,27 @@ class PerfMeter {
         // худший кадр. Ключи короткие — meta режется на сервере.
         h: Array.from(this.hist),
         f: this.frames,
+        // terron 05.09: разрез «Стабильности» в даше — устройство и площадка.
+        platform: clientPlatform(),
+        host: Host.kind(),
         wf: Math.round(this.worstFrame),
+        wfT: this.worstFrameTick,
+        wfS: this.worstFrameS,
+        lt2: this.longTasksEarly,
+        wi:
+          this.worstIngestMs > 0
+            ? {
+                s: this.worstIngestStep,
+                ms: Math.round(this.worstIngestMs),
+                t: this.worstIngestTick,
+              }
+            : null,
         // Симуляция.
         t: this.simTicks,
         tps: +tps.toFixed(2),
+        // худшая пауза между тиками за матч — по ней видно рывки симуляции,
+        // которых среднее «тик/с» не показывает
+        wg: Math.round(this.worstSimGap),
         bl: this.maxBacklog,
         // Заблокированность главного потока — то, что ощущается как рывки
         // даже при приличном среднем fps.
@@ -273,22 +353,29 @@ class PerfMeter {
     const elapsed = (now - this.lastRedrawAt) / 1000;
     const tps = elapsed > 0 ? this.ticksSinceRedraw / elapsed : 0;
     this.ticksSinceRedraw = 0;
+    this.worstSimGapWindow = 0;
     this.lastRedrawAt = now;
 
     const med = this.livePercentile(0.5);
     const p95 = this.livePercentile(0.95);
     const fps = med > 0 ? 1000 / med : 0;
     const bad =
-      fps < 30 || p95 > 50 || tps < TARGET_TPS * 0.8 || this.backlog > 20;
+      fps < 30 ||
+      p95 > 50 ||
+      tps < TARGET_TPS * 0.8 ||
+      this.backlog > 20 ||
+      this.worstSimGapWindow > 300 ||
+      this.mapBad;
     el.style.color = bad ? "#ff8a80" : "#c8f7c5";
 
     const lines = [
       `${fps.toFixed(0)} fps   кадр ${med.toFixed(1)} / p95 ${p95.toFixed(0)} мс`,
-      `сим ${tps.toFixed(1)}/${TARGET_TPS} тик/с   очередь ${this.backlog}`,
+      `сим ${tps.toFixed(1)}/${TARGET_TPS} тик/с   пауза ${this.worstSimGapWindow.toFixed(0)}мс   очередь ${this.backlog}`,
     ];
     if (this.longTaskObs !== null) {
       lines.push(`заминок >100мс: ${this.longTasks}`);
     }
+    if (this.mapLine !== null) lines.push(this.mapLine);
     el.textContent = lines.join("\n");
   }
 }

@@ -2,6 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import fs from "fs";
 import { lookup as lookupMime } from "mrmime";
 import path from "path";
+import { createHash } from "crypto";
 import { fileURLToPath } from "url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { createHtmlPlugin } from "vite-plugin-html";
@@ -56,10 +57,14 @@ export default defineConfig(({ mode, command }) => {
   // terron: режим 'ya' — сборка под Яндекс/GamePush iframe. Как prod (абсолютный
   // бэкенд), но с относительными путями (base:'./') и в отдельный static-ya.
   const isYa = mode === "ya";
+  // terron 30.08: сборка под Playgama (их дистрибуция на западные веб-порталы).
+  // Как ya (относительные пути, абсолютный бэкенд), но с ДРУГИМ содержимым
+  // index.html — см. playgamaHtml() ниже.
+  const isPlaygama = mode === "playgama";
   // terron: офлайн нативный бандл (Apple 4.2) — prod-сборка (хеш/манифест/ассеты) +
   // ЗАПОЛНЕННЫЙ шаблон index.html (в апке нет сервера, чтобы рендерить BOOTSTRAP_CONFIG).
   const isBundle = mode === "bundle";
-  const isProduction = mode === "production" || isYa || isBundle;
+  const isProduction = mode === "production" || isYa || isBundle || isPlaygama;
   const resourcesDir = getResourcesDir(__dirname);
   const proprietaryDir = getProprietaryDir(__dirname);
   const sourceDirs = [resourcesDir, proprietaryDir];
@@ -100,6 +105,87 @@ export default defineConfig(({ mode, command }) => {
       cdnBase,
     ),
   };
+
+  // terron 30.08: index.html под Playgama.
+  //
+  // Их технические требования запрещают встроенную стороннюю аналитику и требуют
+  // интеграции их Bridge SDK. Поэтому из шаблона ВЫРЕЗАЮТСЯ два блока —
+  // Яндекс.Метрика и загрузчик GamePush (чужой агрегатор в их сборке не нужен и
+  // прямо мешает), и добавляется скрипт Bridge.
+  //
+  // ⚠️ Каждое вырезание идёт с проверкой: не нашли маркер — СБОРКА ПАДАЕТ. Молча
+  // собранный билд с Метрикой внутри — это отказ на модерации и потерянная неделя.
+  const playgamaHtml = (): Plugin => ({
+    name: "terron-playgama-html",
+    transformIndexHtml: {
+      order: "post" as const,
+      handler(html: string) {
+        const cut = (from: string, to: string, what: string) => {
+          const a = html.indexOf(from);
+          const b = html.indexOf(to, a + 1);
+          if (a < 0 || b < 0) {
+            throw new Error(
+              `playgama-сборка: не найден блок ${what} (маркеры «${from}» … «${to}»). ` +
+                `Шаблон изменился — проверь index.html, иначе билд уедет с ним внутри.`,
+            );
+          }
+          html = html.slice(0, a) + html.slice(b + to.length);
+        };
+        cut(
+          "<!-- Yandex.Metrika counter",
+          "<!-- /Yandex.Metrika counter -->",
+          "Яндекс.Метрика",
+        );
+        cut("<!-- terron: GamePush SDK", "</script>", "загрузчик GamePush");
+        // ⚠️ Зонд РФ-throttle меряет ПОЛОСУ ДО НАШЕГО origin, а страница лежит на
+        // ИХ хостинге: три запроса уходят на их домен, отвечают 404 и мусорят в
+        // консоли на первых же секундах (видно в их QA-инструменте). Смысла там у
+        // него нет вовсе. Парный ready-бикон в Main.ts гаснет сам — он висит на
+        // `window.__tLbSid`, который ставит ровно этот блок.
+        cut(
+          "<!-- terron: RU-THROTTLE PROBES",
+          "<!-- /terron: RU-THROTTLE PROBES -->",
+          "зонд РФ-throttle",
+        );
+        const bridge =
+          '<script src="https://bridge.playgama.com/v2/stable/playgama-bridge.js"></script>';
+        if (!html.includes("</body>")) {
+          throw new Error("playgama-сборка: в шаблоне нет </body>");
+        }
+        return html.replace("</body>", `    ${bridge}\n  </body>`);
+      },
+    },
+  });
+
+  // terron 29.08: в bundle-режиме шаблон index.html заполняем САМИ, а не через
+  // vite-plugin-html. Причина: с 21.08 у сборки ДВА входа (index + simworker), а
+  // vite-plugin-html при multi-entry теряет inject-данные и падает на первой же
+  // подстановке («manifestHref is not defined», ejs:327) — то есть офлайн-бандл
+  // (iOS/Android, а теперь и Steam) НЕ СОБИРАЛСЯ ВОВСЕ. Убрать второй вход для
+  // бандла нельзя: файла assets/simworker.js тогда не будет, а blob-фолбэк в
+  // WorkerClient ловит SecurityError, а не 404 — симуляция не поднялась бы.
+  // Подстановок в шаблоне 13 штук и ни одной ветки логики, поэтому свой
+  // transformIndexHtml надёжнее чужого EJS.
+  const fillTemplate = (data: Record<string, string>): Plugin => ({
+    name: "terron-fill-template",
+    transformIndexHtml: {
+      order: "pre" as const,
+      handler(html: string) {
+        return html.replace(
+          /<%-\s*([A-Za-z_][A-Za-z0-9_]*)\s*%>/g,
+          (_m: string, key: string) => {
+            if (!(key in data)) {
+              // Молча оставленный плейсхолдер уехал бы в статику как текст.
+              throw new Error(
+                `index.html: нет значения для подстановки <%- ${key} %>`,
+              );
+            }
+            return data[key];
+          },
+        );
+      },
+    },
+  });
 
   // Vite's HTML transform replaces the source <script src="/src/client/Main.ts">
   // with the hashed bundle URL and injects <link rel="modulepreload"> /
@@ -166,7 +252,7 @@ export default defineConfig(({ mode, command }) => {
       setupFiles: "./tests/setup.ts",
     },
     root: "./",
-    base: isYa ? "./" : "/", // terron: ya-билд (iframe площадки) — относительные пути
+    base: isYa || isPlaygama ? "./" : "/", // ya/playgama — относительные пути
     publicDir: isProduction ? false : "resources",
 
     resolve: {
@@ -177,24 +263,32 @@ export default defineConfig(({ mode, command }) => {
     },
 
     plugins: [
+      coreHashFile(),
       ...(!isProduction
         ? [serveProprietaryDir(proprietaryDir, resourcesDir)]
         : []),
       // dev И офлайн-бандл заполняют шаблон index.html (BOOTSTRAP_CONFIG); чистый
       // прод — нет (рендерит сервер). В бандле gitCommit = 40 нулей (GameRecordSchema).
-      ...(!isProduction || isBundle
+      ...(isPlaygama ? [playgamaHtml()] : []),
+      ...(isBundle || isPlaygama
+        ? [
+            fillTemplate({
+              gitCommit: JSON.stringify(
+                "0000000000000000000000000000000000000000",
+              ),
+              ...htmlAssetData,
+            }),
+          ]
+        : []),
+      ...(!isProduction
         ? [
             createHtmlPlugin({
               minify: false,
-              ...(isBundle ? {} : { entry: "/src/client/Main.ts" }),
+              entry: "/src/client/Main.ts",
               template: "index.html",
               inject: {
                 data: {
-                  gitCommit: JSON.stringify(
-                    isBundle
-                      ? "0000000000000000000000000000000000000000"
-                      : "DEV",
-                  ),
+                  gitCommit: JSON.stringify("DEV"),
                   ...htmlAssetData,
                 },
               },
@@ -205,7 +299,7 @@ export default defineConfig(({ mode, command }) => {
         ? [
             // офлайн-бандл: CDN нет → пропускаем cdnBase-инжект (иначе в статике
             // остаётся неразрешённый <%- cdnBaseRaw %>); ассеты идут локально /assets/.
-            ...(isBundle ? [] : [injectCdnBaseTemplate()]),
+            ...(isBundle || isPlaygama ? [] : [injectCdnBaseTemplate()]),
             syncHashedPublicAssets(),
           ]
         : []),
@@ -214,8 +308,21 @@ export default defineConfig(({ mode, command }) => {
 
     define: {
       __ASSET_MANIFEST__: JSON.stringify(assetManifest),
+      // terron 30.08: ИГРОВОЙ ХОСТ, ВШИТЫЙ В СБОРКУ. Нужен там, где бандл лежит
+      // на ЧУЖОМ хостинге (Playgama): `window.location.host` там — их домен, и
+      // вебсокет уходил на `ws://<их-хост>/w0/lobbies`, то есть в никуда
+      // (поймано живой проверкой сборки на локальном сервере). Пустая строка =
+      // прежнее поведение «бери хост из адреса».
+      __GAME_HOST__: JSON.stringify(isPlaygama ? (env.GAME_HOST || "terron.io") : ""),
+      // Сборка ДЛЯ КОНКРЕТНОЙ ПЛОЩАДКИ. Пусто = обычный сайт/апка. Читают
+      // PayGate (там своей платёжки быть не должно) и загрузчик их SDK.
+      __PLATFORM_BUILD__: JSON.stringify(isPlaygama ? "playgama" : ""),
       // terron: время сборки клиента (для футера «last update … ago»)
       __BUILD_TIME__: JSON.stringify(Date.now()),
+      // terron 28.09: отпечаток ЯДРА симуляции (хэш src/core). Сервер отдаёт в
+      // старте матча отпечаток, на котором матч начался; не совпал с этим —
+      // игрок загрузил новую сборку посреди матча, картина разойдётся.
+      __CORE_HASH__: JSON.stringify(coreHash()),
       "process.env.WEBSOCKET_URL": JSON.stringify(
         isProduction ? "" : "localhost:3000",
       ),
@@ -228,7 +335,7 @@ export default defineConfig(({ mode, command }) => {
     },
 
     build: {
-      outDir: isYa ? "static-ya" : "static", // ya → отдельная папка, не трём сайт
+      outDir: isYa ? "static-ya" : isPlaygama ? "static-playgama" : "static",
 
       emptyOutDir: true,
       assetsDir: "assets", // Sub-directory for assets
@@ -314,3 +421,47 @@ export default defineConfig(({ mode, command }) => {
     },
   };
 });
+
+
+// terron 28.09: отпечаток ядра симуляции — хэш всех исходников src/core. Одна
+// функция на клиент (define __CORE_HASH__) и на сервер (файл core-hash.txt
+// рядом со статикой, его читает ServerEnv.coreHash). Правки интерфейса его не
+// меняют — ложных тревог «версия матча другая» после patch-site не будет.
+let coreHashCache: string | null = null;
+function coreHash(): string {
+  if (coreHashCache !== null) return coreHashCache;
+  const root = path.resolve(__dirname, "src/core");
+  const files: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name.startsWith(".")) continue;
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (/\.ts$/.test(e.name)) files.push(f);
+    }
+  };
+  walk(root);
+  files.sort();
+  const h = createHash("sha1");
+  for (const f of files) {
+    h.update(path.relative(root, f));
+    h.update("\0");
+    h.update(fs.readFileSync(f));
+  }
+  coreHashCache = h.digest("hex").slice(0, 16);
+  return coreHashCache;
+}
+
+function coreHashFile(): Plugin {
+  return {
+    name: "terron-core-hash",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "core-hash.txt",
+        source: coreHash(),
+      });
+    },
+  };
+}

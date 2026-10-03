@@ -66,7 +66,7 @@
     "menu": "Menu",
     "troubleshooting": "Troubleshooting",
     "go_to_troubleshooting": "Go to our troubleshooting page",
-    "brand_wordmark": "terron",
+    "brand_wordmark": "TERRON.io",
     "decor_hq": "HQ",
     "decor_brand": "TERRON"
   },
@@ -478,8 +478,43 @@
     "terron": "Tutorial Terron",
     "terrontutor2": "Tutorial Terron 2",
     "world": "World",
+    "equalearth": "Giant World Map",
+    "worldea": "World",
+    "newworldea": "New World",
+    "europeea": "Europe",
+    "europeclassicea": "Europe (Classic)",
+    "asiaea": "Asia",
+    "africaea": "Africa",
+    "northamericaea": "North America",
+    "southamericaea": "South America",
+    "oceaniaea": "Oceania",
+    "menaea": "MENA",
+    "betweentwoseasea": "Between Two Seas",
+    "balkansea": "Balkans",
+    "indiansubcontinentea": "Indian Subcontinent",
+    "southeastasiaea": "Southeast Asia",
+    "eastasiaea": "East Asia",
+    "australiaea": "Australia",
+    "beringseaea": "Bering Sea",
+    "marenostrumea": "Mare Nostrum",
+    "britanniaclassicea": "Britannia (Classic)",
+    "britanniaea": "Britannia",
+    "blackseaea": "Black Sea",
+    "gatewaytotheatlanticea": "Gateway to the Atlantic",
+    "icelandea": "Iceland",
+    "italiaea": "Italia",
+    "gulfofstlawrenceea": "Gulf of St. Lawrence",
+    "aegeanea": "Aegean",
+    "greatlakesea": "Great Lakes",
+    "caucasusea": "Caucasus",
+    "bajacaliforniaea": "Baja California",
+    "koreaea": "Korea",
+    "middleeastea": "Middle East",
+    "danishstraitsea": "Danish Straits",
+    "yellowseaea": "Yellow Sea",
     "worldinverted": "World Inverted",
     "giantworldmap": "Giant World Map",
+    "newworld": "New World",
     "europe": "Europe",
     "mena": "MENA",
     "middleeast": "Middle East",
@@ -794,8 +829,8 @@
     "religion": "Religion",
     "mining": "Mining",
     "revanchism": "Revanchism",
-    "our_sky": "The Sky Is Ours",
-    "satellite_strike": "Shoot Down Satellites",
+    "our_sky": "Peaceful Sky",
+    "satellite_strike": "The Sky Is Ours",
     "closed_country": "Closed Country",
     "piracy": "Piracy",
     "blockade": "Blockade",
@@ -818,12 +853,14 @@
     "rail_gun_shell": "Dora Strike",
     "spaceport": "Spaceport",
     "secret_treasure": "Secret Treasure",
-    "peaceful_sky": "Peaceful Sky",
+    "peaceful_sky": "Sky Dome (archived)",
     "media": "Media",
     "oil_rig": "Oil Rig",
     "submarine_base": "Submarine Base",
     "rivers_back": "Rivers Back",
     "water_nuke": "Water Missile",
+    "land_nuke": "Landfill Missile",
+    "blast_nuke": "Nuclear Strike",
     "nuclear_factory": "Nuclear Factory",
     "train": "Train",
     "airplane": "Airplane",
@@ -833,7 +870,9 @@
     "pirate_ship": "Pirate Boat",
     "submarine": "Submarine",
     "walking_city": "Walking City",
-    "city_transfer": "Relocation"
+    "city_transfer": "Relocation",
+    "terraforming": "Terraforming",
+    "terra_flood": "Flood"
   },
   "user_setting": {
     "title": "Settings",
@@ -1105,9 +1144,9 @@
       "split": "Propaganda strike: aim at an enemy country and a flag-shaped chunk secedes to a new bot. The 'Т' at the center stays yours but you have 60s to connect it to your land or it falls to the bot too. The more troops you commit, the bigger the flag.",
       "religion": "Your whole territory slowly creeps outward, quietly absorbing foreign land (even allied). Leaves wasteland, fallout and anyone you are fighting alone. Crosses narrow water but not the open sea. Build as many temples as you like: each converts one more tile — and cuts another 10% off your current income.",
       "mining": "{mining_pct}% of any troops landing on you BY SEA die on the mines before the fight (naval invasions only — not airborne or land attacks).",
-      "revanchism": "A passive with no building: remembers your peak territory. As you lose land from that peak, your whole territory defends harder — up to +200% at near-total loss. Plus revenge: whoever attacked you first takes 50% more from your attacks.",
-      "our_sky": "The HQ is itself a giant SAM (intercept radius ×5), and all your SAMs reload twice as fast.",
-      "satellite_strike": "Assembles on your land for a minute (everyone is warned — and can raze it). The launch blinds all enemies with fog of war for 60 seconds; your team is spared.",
+      "revanchism": "The monument remembers your peak territory. As you lose land from that peak, conquest of your country SLOWS DOWN — {revanchism_slow_lvl1}x slower at total loss, up to {revanchism_slow_max}x at monument level {revanchism_max_level} (+{revanchism_per_level_pct}% per level). No effect while at your peak. Lose the monument and the next one is born upgraded. Plus revenge: YOUR attacks against whoever struck you first are {revanchism_revenge_pct}% more effective.",
+      "our_sky": "The HQ is itself a giant SAM (intercept radius ×5), and all your SAMs reload twice as fast. While it stands, you can cast «The Sky Is Ours» from it.",
+      "satellite_strike": "Places a second building on your land — the launcher. It assembles for a minute (everyone is warned and can raze it), then the rocket flies: every enemy is blinded by fog of war for 60 seconds. Your team is spared.",
       "closed_country": "Everyone else sees '???' instead of your troops, gold and attack sizes — on the map, in the leaderboard and in the player panel. Your team keeps its sight.",
       "piracy": "All your warships are pirate boats: twice as fast, a flat 100K each (one every 5s), half the firepower, 200 HP. Landings only from your ports — but SILENT: no alarm, no trail, invisible until close to shore.",
       "blockade": "(5M + boats) pick a spot in the ocean within range of your port — your pirate boats sail there (the attack slider sets how many), and a flag-shaped zone rises that other nations' ships route around. More boats — bigger flag.",
@@ -1126,23 +1165,27 @@
       "recultivation": "(500K) clears radioactive ash instantly across a wide radius — on your land or anyone else's, no consent asked. Ash on land that was yours mints gold; ash on another player's land is billed straight out of their treasury.",
       "fuel": "Everything of yours that moves under its own power goes twice as fast — warships, landing craft, trade ships, aircraft and trains (drones and missiles are not).",
       "industrial_revolution": "(5M) any country, including YOUR OWN: for 2 minutes everything it moves goes three times as fast, but its population growth is halved. A gift to a trader, a noose to a warmonger, a burst window for yourself. Nobody can refuse it. Does not stack.",
-      "rail_gun": "A heavy railway gun — a building that DRIVES along your railway, which grows between your buildings: its true reach is your own construction. Can be captured with the ground or destroyed by drones and nukes. Rides on allied land, but break the alliance and it detonates a minute later.",
-      "rail_gun_shell": "(100K) mark a target anywhere on land: in range — the gun fires once its minute-long reload is done; out of range — it drives along the rails until it can reach. The shell lands instantly and cannot be intercepted. The counterplay is the tracks: destroy the station behind the gun and it is stranded.",
+      "rail_gun": "A heavy railway gun — a building that DRIVES along your railway, which grows between your buildings: its true reach is your own construction. While it stands, new factories cost {railgun_factory_discount_pct}% less, and every factory speeds it up: reload −{railgun_reload_step_s}s (from {railgun_reload_base_s}s down to {railgun_reload_min_s}s), after that its rail speed grows — up to {railgun_speed_max_s} tiles per second. Can be captured with the ground or destroyed by drones and nukes. Rides on allied land, but break the alliance and it blows up a minute later.",
+      "rail_gun_shell": "(100K) mark a target anywhere on land: in range — the gun fires once its reload is done ({railgun_reload_base_s}s, down to {railgun_reload_min_s}s with factories); out of range — it drives along the rails until it can reach. The shell lands instantly and cannot be intercepted. The counterplay is to destroy the station behind it.",
       "secret_treasure": "you found a treasure",
       "spaceport": "Once a minute a launch goes up: a flat payment plus 1% of the income every other country earned during that minute — straight out of their pockets. Every launch is announced to everyone with the figure attached. Built on your land or out at sea (the sea pad costs more and pays more).",
       "peaceful_sky": "SAMs cost half as much, but they shoot down EVERYTHING hostile in range — including your allies' missiles. Nobody flies above you any more, not even friends.",
       "submarine_base": "All your warships are submarines: until a submarine fires, the enemy cannot see it or target it. Once it fires, it stays revealed for the rest of the match.",
       "oil_rig": "An offshore platform: built far out in the OPEN ocean. It sends no ships of its own, but ships flock to it and pay many times a port rate, and it repairs your warships five times faster. It cannot be taken with land, only a nuke kills it, and it sinks with you if you lose.",
-      "rivers_back": "A hydro complex: all its power is in the water missile. While it stands, you can launch one from any missile silo.",
+      "rivers_back": "While it stands, any of your missile silos can launch the water missile: land inside the crater becomes water forever. Ordinary nukes stay available.",
       "water_nuke": "Land inside the crater turns to water FOREVER — cut isthmuses, sink buildings along with the ground. Launched from a missile silo; SAMs intercept it like any missile.",
+      "land_nuke": "Water inside the crater turns to LAND forever — build an isthmus to an island, wall off a strait. The new ground belongs to nobody: whoever reaches it first takes it.",
+      "blast_nuke": "An ordinary nuke with this ultimate's price and blast radius: burns the ground and leaves fallout. Launched from a missile silo.",
       "media": "An aura drains troops from enemies around it (half goes to you), and betraying alliances is never punished — no traitor mark.",
       "nuclear_factory": "The only source of MIRVs: every launch is 5M cheaper — you already paid for the factory. Raze the factory and MIRVs are locked again.",
-      "train_depot": "Your trains run twice as fast.",
+      "train_depot": "Your trains run twice as fast. ⚠️ The depot itself can only be placed on your own rails, and those grow between your buildings — build first, then the depot.",
       "doom_train": "Send a ticking train along your own railway. It detonates where it stops — tear up the rails ahead of it and it blows up short of the target.",
       "pirate_ship": "Captures trade ships, destroys ships and boats",
       "submarine": "Captures trade ships, destroys ships and boats",
       "walking_city": "Your buildings can walk. The Relocation cast moves buildings from a zone to a new spot.",
-      "city_transfer": "Pick a zone (size = troop slider, up to 30% spent), then a destination. Buildings walk there at 1 tile/sec and keep working on the way. Ports walk along the coast."
+      "city_transfer": "Pick a zone (size = troop slider, up to 30% spent), then a destination. Buildings walk there at 1 tile/sec and keep working on the way. Ports walk along the coast.",
+      "terraforming": "While the HQ stands, BOTH ordinary nukes and the MIRV are replaced by three missiles: flood, landfill and a plain nuclear strike. Launched from a missile silo.",
+      "terra_flood": "Land inside the crater becomes water FOREVER — cut isthmuses and sink buildings with the ground. Launched from a missile silo; SAMs intercept it."
     },
     "warship_shift_hint": "Hold Shift and drag to select multiple warships at once",
     "not_enough_money": "Not enough money"
@@ -1272,7 +1315,11 @@
     "walk_invalid": "Relocation unavailable",
     "walk_blocked": "Relocation: a building lost its path and stopped",
     "walk_arrived": "Relocation complete: buildings have arrived",
-    "walk_no_shore": "Relocation: no free shore there — a port needs the coast"
+    "walk_no_shore": "Relocation: no free shore there — a port needs the coast",
+    "victory_countdown": "⚠️ {name} wins in {seconds}s — take land back!",
+    "victory_countdown_stopped": "{name} pushed back — countdown off",
+    "satellite_strike_busy": "A launcher is already up — wait for the launch or raze it",
+    "satellite_strike_bad_tile": "The launcher can only be placed on YOUR own land"
   },
   "player_type": {
     "player": "Player",
@@ -1354,7 +1401,9 @@
       "title": "Spawn failed",
       "description": "Automatic spawn selection failed. You can't play this game."
     },
-    "desync_notice": "You are desynced from other players. What you see might differ from other players."
+    "desync_notice": "You are desynced from other players. What you see might differ from other players.",
+    "desync_update_notice": "The game was updated during this match. Your version differs from the one the match started on, so what you see may differ from other players. The result is decided by everyone else: finish watching or join a new match.",
+    "update_dont_reload": "An update was released during this match. Don't reload this tab until the match ends, or what you see will drift from the other players."
   },
   "performance_overlay": {
     "reset": "Reset",
@@ -1926,7 +1975,7 @@
     },
     "closed_country_key": {
       "title": "Iron curtain",
-      "desc": "Win a diamond match after launching the 'Shoot Down Satellites' rocket"
+      "desc": "Win a diamond match after launching the «The Sky Is Ours» rocket"
     },
     "win_50": {
       "title": "Veteran",
@@ -1959,6 +2008,10 @@
     "walking_city_key": {
       "title": "City Planner",
       "desc": "Hold buildings totalling 2000 levels at once"
+    },
+    "terraforming_key": {
+      "title": "Hydro Engineer",
+      "desc": "Launch 50 Rivers Back missiles in a single match"
     },
     "trains_key": {
       "title": "Stationmaster",
@@ -2151,11 +2204,15 @@
     "hold_hint_mouse": "🖱 Click — pick · hover — describe",
     "stat_mirv_launches": "MIRVs launched: {n}",
     "stat_mirv_tiles": "Tiles destroyed: {n}",
+    "stat_revanchism_slow": "Conquest of your land slower by: {n}%",
+    "stat_revanchism_level": "Monument level: {n}",
+    "stat_revanchism_lost": "Cut from your peak: {n}%",
     "stat_fort_tiles": "Tiles captured: {n}",
     "stat_split_tiles": "Territory split off: {n}",
     "stat_religion_tiles": "Land converted: {n}",
     "stat_religion_tithe": "Tithe paid: {n}",
     "stat_water_tiles": "Land flooded: {n}",
+    "stat_land_tiles": "Water raised: {n}",
     "revenge_list": "Grudge against: {n}",
     "revenge_none": "nobody attacked yet",
     "stat_enemy_lost": "Enemies lost: {n}",
@@ -2180,5 +2237,11 @@
     "fingerprint": "Device Fingerprint:",
     "reported": "Reported:"
   },
-  "cooldown": "cooldown"
+  "cooldown": "cooldown",
+  "lobby_start_refused": {
+    "not_creator": "Only the lobby creator can start the match",
+    "public": "A public lobby starts on its own timer",
+    "already_started": "The match has already started",
+    "silent": "The start command never reached the server — check your connection and try again"
+  }
 }

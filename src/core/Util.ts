@@ -134,13 +134,16 @@ export function calculateBoundingBox(
     maxX = -Infinity,
     maxY = -Infinity;
 
+  // terron 04.09 ПЕРФ: координаты инлайном (те же формулы, что gm.x/gm.y) —
+  // это горячий путь removeClusters на 100К-тайловых странах.
+  const w = gm.width();
   for (const tile of borderTiles) {
-    const x = gm.x(tile);
-    const y = gm.y(tile);
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
+    const x = tile % w;
+    const y = (tile / w) | 0;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
   }
 
   return { min: new Cell(minX, minY), max: new Cell(maxX, maxY) };

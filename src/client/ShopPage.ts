@@ -3,29 +3,47 @@ import { customElement, state } from "lit/decorators.js";
 import { assetUrl } from "../core/AssetUrls";
 import {
   buyItem,
+  claimPlatformPurchase,
+  primeUntilMs,
+  recoverPlatformPurchases,
+  refreshPrimeStatus,
   createPayment,
   getCatalog,
-  getPayPacks,
   getEconomyRules,
   getMyNamedSkins,
-  getWallet,
+  getPayPacks,
+  getWalletStatus,
   getWalletHistory,
   nameSkin,
-  type PayPacks,
+  checkBonusCode,
+  redeemBonusCode,
+  type BonusCodeFailure,
+  type BonusCodeRefusal,
+  type BonusCodeReward,
   type EconomyRules,
   type NamedSkin,
+  type PayPacks,
   type ShopItem,
   type WalletTx,
 } from "./Api";
-import { ourPaymentsAllowed } from "./PayGate";
 import { BaseModal } from "./components/BaseModal";
 import { coin } from "./components/ui/coin";
 import { gemPile } from "./components/ui/gemPile";
-import { reportPayFunnel } from "./PayFunnel";
 import { modalHeader } from "./components/ui/ModalHeader";
 import { uiIcon } from "./components/ui/UiIcon";
+import { openPageFrom } from "./PageReturn";
+import { reportPayFunnel } from "./PayFunnel";
+import { ourPaymentsAllowed, payHost } from "./PayGate";
+import {
+  platformConsume,
+  platformPendingPtsTags,
+  platformPtsProducts,
+  platformPurchase,
+  platformPurchasesAvailable,
+  ptsOf,
+} from "./PlatformPay";
 import { renderSkinPreview } from "./SkinPreview";
-import { L, translateText } from "./Utils";
+import { isDevSite, L, translateText } from "./Utils";
 
 // terron: имя скина магазина по i18n-ключу shop_skins.<sku> (масштабируемо на
 // любое число языков, без titleEn/titleAr/…), фолбэк на серверный RU title.
@@ -74,7 +92,8 @@ function primeLink(text: string): TemplateResult {
     @click=${(e: MouseEvent) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
       e.preventDefault();
-      window.showPage?.("page-prime");
+      // «назад» со страницы Prime обязано вернуть в магазин, а не на главную
+      openPageFrom("page-shop", "page-prime");
     }}
     >${text}</a
   >`;
@@ -108,6 +127,13 @@ export class ShopPage extends BaseModal {
   @state() private loading = true;
   @state() private busy = "";
   @state() private msg = "";
+  /** terron 20.09: отказ рисуется красным, а не зелёной плашкой успеха
+   *  («Покупка не завершена» в зелёном читалась как удача). */
+  private badMsg = "";
+  private fail(text: string): void {
+    this.badMsg = text;
+    this.msg = text;
+  }
   @state() private tab: "catalog" | "mine" | "earn" | "history" | "topup" =
     "catalog";
   // terron 21.08: ПОПОЛНЕНИЕ ЖИВЁТ В МАГАЗИНЕ (решение владельца). Серверная
@@ -163,38 +189,35 @@ export class ShopPage extends BaseModal {
       value: number,
       onPlus: (() => void) | null,
       plusTitle: string,
-    ) => html`<span class="t-balance t-balance-chip">
-      <button
-        title=${L("История начислений", "Balance history")}
-        @click=${() => this.openTab("history")}
+    ) =>
+      html`<span class="t-balance t-balance-chip">
+        <button
+          title=${L("История начислений", "Balance history")}
+          @click=${() => this.openTab("history")}
+        >
+          ${coin(kind)} ${value.toLocaleString("ru-RU")}
+        </button>
+        ${onPlus
+          ? html`<button
+              class="t-balance-plus"
+              title=${plusTitle}
+              aria-label=${plusTitle}
+              @click=${onPlus}
+            >
+              +
+            </button>`
+          : ""}
+      </span>`;
+    const navBtn = (id: "mine" | "earn" | "history" | "topup", label: string) =>
+      html`<button
+        class="t-btn"
+        style=${`padding:5px 10px;font-size:13px;${
+          this.tab === id ? "" : "background:var(--t-sheet);color:var(--t-ink)"
+        }`}
+        @click=${() => this.openTab(this.tab === id ? "catalog" : id)}
       >
-        ${coin(kind)} ${value.toLocaleString("ru-RU")}
-      </button>
-      ${onPlus
-        ? html`<button
-            class="t-balance-plus"
-            title=${plusTitle}
-            aria-label=${plusTitle}
-            @click=${onPlus}
-          >
-            +
-          </button>`
-        : ""}
-    </span>`;
-    const navBtn = (
-      id: "mine" | "earn" | "history" | "topup",
-      label: string,
-    ) => html`<button
-      class="t-btn"
-      style=${`padding:5px 10px;font-size:13px;${
-        this.tab === id
-          ? ""
-          : "background:var(--t-sheet);color:var(--t-ink)"
-      }`}
-      @click=${() => this.openTab(this.tab === id ? "catalog" : id)}
-    >
-      ${label}
-    </button>`;
+        ${label}
+      </button>`;
     return modalHeader({
       title: L("Магазин", "Store"),
       onBack: () => this.close(),
@@ -202,6 +225,16 @@ export class ShopPage extends BaseModal {
       rightContent: html`<div
         style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"
       >
+        ${this.codesAvailable
+          ? html`<button
+              class="t-btn"
+              style="padding:5px 10px;font-size:13px;background:var(--t-sheet);color:var(--t-ink)"
+              title=${L("Ввести бонус-код", "Enter a bonus code")}
+              @click=${() => this.openCode()}
+            >
+              🎁 ${L("Код", "Code")}
+            </button>`
+          : ""}
         <button
           class="t-btn"
           style="padding:5px 10px;font-size:13px"
@@ -212,7 +245,7 @@ export class ShopPage extends BaseModal {
         </button>
         ${navBtn("mine", L("Мои скины", "My skins"))}
         ${navBtn("history", L("История", "History"))}
-        ${this.embedded ? "" : navBtn("topup", L("Пополнить", "Top up"))}
+        ${this.topupAvailable ? navBtn("topup", L("Пополнить", "Top up")) : ""}
         <!-- terron: баланс кликабельный — ведёт в выписку (/shop/history).
              Самый ожидаемый жест: «откуда это число?». Плюс живёт в той же
              плитке: у ЛТС покупки нет и не будет (их только зарабатывают),
@@ -227,7 +260,7 @@ export class ShopPage extends BaseModal {
           ${balanceChip(
             "pts",
             this.pts,
-            this.embedded ? null : () => this.openTab("topup"),
+            this.topupAvailable ? () => this.openTab("topup") : null,
             L("Пополнить ПТС", "Top up PTS"),
           )}
         </span>
@@ -239,7 +272,10 @@ export class ShopPage extends BaseModal {
     return html`<div class="t-page">
       ${this.msg
         ? html`<div
-            style="margin-bottom:12px;padding:8px 12px;border-radius:8px;background:rgba(58,125,68,.12);color:#3a7d44;font-weight:600"
+            style="margin-bottom:12px;padding:8px 12px;border-radius:8px;font-weight:600;${this.msg ===
+            this.badMsg
+              ? "background:rgba(179,38,30,.10);color:#b3261e"
+              : "background:rgba(58,125,68,.12);color:#3a7d44"}"
           >
             ${this.msg}
           </div>`
@@ -256,6 +292,8 @@ export class ShopPage extends BaseModal {
                 ? this.renderTopup()
                 : this.renderEarn()}
       ${this.namingId ? this.renderNameModal() : ""}
+      ${this.codeOpen ? this.renderCodeModal() : ""}
+      ${this.topupDone ? this.renderTopupDone(this.topupDone) : ""}
     </div>`;
   }
 
@@ -266,10 +304,11 @@ export class ShopPage extends BaseModal {
       style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))"
     >
       ${Array.from({ length: 8 }).map(
-        () => html`<div
-          class="t-skel"
-          style="height:150px;border-radius:12px"
-        ></div>`,
+        () =>
+          html`<div
+            class="t-skel"
+            style="height:150px;border-radius:12px"
+          ></div>`,
       )}
     </div>`;
   }
@@ -286,6 +325,7 @@ export class ShopPage extends BaseModal {
    * подтверждает отказом, но игрок не должен и видеть кнопку.
    */
   private renderTopup(): TemplateResult {
+    if (this.platformShop) return this.renderPlatformTopup();
     if (this.embedded) return html``;
     const pay = this.pay;
     if (!pay) {
@@ -294,7 +334,11 @@ export class ShopPage extends BaseModal {
         style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))"
       >
         ${Array.from({ length: 6 }).map(
-          () => html`<div class="t-skel" style="height:120px;border-radius:12px"></div>`,
+          () =>
+            html`<div
+              class="t-skel"
+              style="height:120px;border-radius:12px"
+            ></div>`,
         )}
       </div>`;
     }
@@ -307,96 +351,32 @@ export class ShopPage extends BaseModal {
       </div>`;
     }
     return html`
-      <div
-        class="t-muted"
-        style="font-size:12.5px;line-height:1.5;margin-bottom:12px"
-      >
-        ${pay.bonus
-          ? L(
-              `Первая покупка в этом месяце — ПТС в ${pay.multiplier} раза больше.`,
-              `First purchase this month — ${pay.multiplier}× the PTS.`,
-            )
-          : L(
-              "ПТС тратятся на скины и слоты. Оплата картой или через СБП.",
-              "PTS buy skins and slots. Card or SBP payment.",
-            )}
-      </div>
+      ${this.renderBonusNote(
+        L(
+          "ПТС тратятся на скины и слоты. Оплата картой или через СБП.",
+          "PTS buy skins and slots. Card or SBP payment.",
+        ),
+      )}
       <!-- terron 26.08 (просьба владельца): пакетов ровно шесть, поэтому сетка
            ЖЁСТКО 3×2, а не auto-fill — иначе на широком экране выходило 4+2, и
            «лестница» пакетов читалась как случайная россыпь. Узкие экраны
            складываются в 2 и 1 колонку (класс .pay-grid в теме). -->
       <div class="t-grid pay-grid">
         ${pay.packs.map((p) => {
-          const pts = pay.bonus ? p.pts * pay.multiplier : p.pts;
           const busy = this.buying === p.sku;
-          // Карточка ровно та же, что у скинов (.t-skincard + .t-skinprev +
-          // .t-skinname + сплит-кнопка цены) — витрина должна выглядеть одним
-          // магазином, а не двумя разными (замечание владельца 21.08).
-          return html`<div class="t-skincard">
-            <!-- ⚠️ terron 26.08: ГОРКА, а не одна цифра. Разницу между 50 и
-                 2000 глаз ловит по РАЗМЕРУ кучи, а число рядом её называет —
-                 поэтому оставлены оба (components/ui/gemPile.ts). -->
-            <div
-              class="t-skinprev"
-              style="background:linear-gradient(135deg,#2b2a24,#4a4230);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding:8px 8px 6px;position:relative;overflow:hidden"
-            >
-              <div style="flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:flex-end;justify-content:center">
-                ${gemPile(pts)}
-              </div>
-              <span
-                style="display:inline-flex;align-items:center;gap:5px;font-family:var(--t-display);font-weight:700;font-size:19px;line-height:1;color:var(--t-parchment,#fdfcf7)"
-                >${coin("pts", 14)} ${pts.toLocaleString("ru-RU")}</span
-              >
-              ${pay.bonus
-                ? html`<span
-                    style="position:absolute;right:5px;top:5px;background:var(--t-red);color:#fff;font-family:var(--t-mono,monospace);font-size:11px;padding:1px 5px"
-                    >×${pay.multiplier}</span
-                  >`
-                : p.badge
-                  ? html`<span
-                      style="position:absolute;right:5px;top:5px;background:var(--t-parchment,#fdfcf7);color:var(--t-ink);font-family:var(--t-mono,monospace);font-size:11px;padding:1px 5px"
-                      >${p.badge}</span
-                    >`
-                  : ""}
-            </div>
-            <div class="t-skinname">
-              ${pay.bonus
-                ? L(`${p.pts} + бонус`, `${p.pts} + bonus`)
-                : L(`${p.pts} алмазов`, `${p.pts} diamonds`)}
-            </div>
-            ${p.primeDays
-              ? html`<div
-                  style="font-family:var(--t-mono,monospace);font-size:11px;padding:0 8px 6px;text-align:center"
-                >
-                  ${primeLink(primeGiftLabel(p.primeDays))}
-                </div>`
-              : ""}
-            <div class="shop-split">
-              <button
-                class="shop-half pts"
-                ?disabled=${busy}
-                @click=${() => void this.startPayment(p.sku)}
-              >
-                ${busy
-                  ? L("Открываем…", "Opening…")
-                  : `${p.priceRub.toLocaleString("ru-RU")} ₽`}
-              </button>
-            </div>
-          </div>`;
+          return this.renderPackCard({
+            nominal: p.pts,
+            badge: p.badge,
+            primeDays: p.primeDays ?? 0,
+            price: busy
+              ? L("Открываем…", "Opening…")
+              : `${p.priceRub.toLocaleString("ru-RU")} ₽`,
+            disabled: busy,
+            onBuy: () => void this.startPayment(p.sku),
+          });
         })}
       </div>
-      <!-- terron 26.08 (просьба владельца): прямым текстом под ВСЕМИ пакетами —
-           прем даётся за каждое пополнение, а не за какой-то особенный. Подписи
-           на карточках это показывают, но их читают как «акцию у этого пакета». -->
-      <div
-        style="margin-top:14px;border:1px solid var(--t-ink);background:var(--t-sheet);padding:10px 14px;font-size:13px;line-height:1.6"
-      >
-        ${L(
-          "Любое пополнение включает TERRON Prime на указанный у пакета срок. Если Prime уже действует — дни прибавляются к остатку.",
-          "Every top-up switches on TERRON Prime for the time shown on the pack. If Prime is already running, the days are added to what is left.",
-        )}
-        ${primeLink(L("Что даёт Prime →", "What Prime does →"))}
-      </div>
+      ${this.renderPrimeNote()}
       <div class="t-muted" style="font-size:11.5px;margin-top:12px">
         ${L(
           "Оплата проходит на стороне платёжного сервиса — карточные данные к нам не попадают. ПТС зачисляются автоматически после подтверждения оплаты.",
@@ -433,6 +413,7 @@ export class ShopPage extends BaseModal {
       ref_play: L("Реферал: сыграл", "Referral: played"),
       ref_register: L("Реферал: регистрация", "Referral: signup"),
       ref_win: L("Реферал: победа", "Referral: win"),
+      bonus_code: L("Бонус-код", "Bonus code"),
     };
     return map[reason] ?? reason;
   }
@@ -446,7 +427,7 @@ export class ShopPage extends BaseModal {
     return html`<div
       style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px"
     >
-      ${this.embedded
+      ${!this.topupAvailable
         ? ""
         : html`<button
             class="t-btn"
@@ -493,37 +474,36 @@ export class ShopPage extends BaseModal {
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:14px">
           ${this.history.map(
-            (t) => html`<tr
-              style="border-bottom:1px solid var(--t-line,#e5e0cf)"
-            >
-              <td style="${td};white-space:normal">
-                ${ShopPage.reasonLabel(t.reason)}
-              </td>
-              <td
-                style="${td};text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${t.amount >=
-                0
-                  ? "#3a7d44"
-                  : "#a8432b"}"
-              >
-                ${t.amount >= 0 ? "+" : ""}${t.amount}
-                ${coin(t.currency === "pts" ? "pts" : "lts", 14)}
-              </td>
-              <td
-                class="t-muted"
-                style="${td};text-align:right;font-variant-numeric:tabular-nums"
-                title=${L("Баланс после операции", "Balance after")}
-              >
-                ${t.balance_after.toLocaleString("ru-RU")}
-              </td>
-              <td class="t-muted" style="${td};text-align:right">
-                ${new Date(t.created_at).toLocaleString(undefined, {
-                  day: "2-digit",
-                  month: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </td>
-            </tr>`,
+            (t) =>
+              html`<tr style="border-bottom:1px solid var(--t-line,#e5e0cf)">
+                <td style="${td};white-space:normal">
+                  ${ShopPage.reasonLabel(t.reason)}
+                </td>
+                <td
+                  style="${td};text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${t.amount >=
+                  0
+                    ? "#3a7d44"
+                    : "#a8432b"}"
+                >
+                  ${t.amount >= 0 ? "+" : ""}${t.amount}
+                  ${coin(t.currency === "pts" ? "pts" : "lts", 14)}
+                </td>
+                <td
+                  class="t-muted"
+                  style="${td};text-align:right;font-variant-numeric:tabular-nums"
+                  title=${L("Баланс после операции", "Balance after")}
+                >
+                  ${t.balance_after.toLocaleString("ru-RU")}
+                </td>
+                <td class="t-muted" style="${td};text-align:right">
+                  ${new Date(t.created_at).toLocaleString(undefined, {
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </td>
+              </tr>`,
           )}
         </table>
       </div>
@@ -541,23 +521,25 @@ export class ShopPage extends BaseModal {
    */
   private renderEarn(): TemplateResult {
     const r = this.rules;
-    const row = (iconName: string, title: string, desc: string) => html`<div
-      style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--t-sheet)"
-    >
-      <div style="line-height:1;opacity:.85">${uiIcon(iconName, 22)}</div>
-      <div>
-        <div style="font-weight:700">${title}</div>
-        <div class="t-muted" style="font-size:13px">${desc}</div>
-      </div>
-    </div>`;
-    const head = (text: string, sub: string) => html`<div style="margin-top:6px">
-      <div
-        style="font-family:var(--t-display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--t-ink)"
+    const row = (iconName: string, title: string, desc: string) =>
+      html`<div
+        style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--t-sheet)"
       >
-        ${text}
-      </div>
-      <div class="t-muted" style="font-size:12.5px">${sub}</div>
-    </div>`;
+        <div style="line-height:1;opacity:.85">${uiIcon(iconName, 22)}</div>
+        <div>
+          <div style="font-weight:700">${title}</div>
+          <div class="t-muted" style="font-size:13px">${desc}</div>
+        </div>
+      </div>`;
+    const head = (text: string, sub: string) =>
+      html`<div style="margin-top:6px">
+        <div
+          style="font-family:var(--t-display);font-weight:700;font-size:15px;letter-spacing:.02em;color:var(--t-ink)"
+        >
+          ${text}
+        </div>
+        <div class="t-muted" style="font-size:12.5px">${sub}</div>
+      </div>`;
     return html`<div
       style="display:flex;flex-direction:column;gap:10px;max-width:560px"
     >
@@ -625,7 +607,7 @@ export class ShopPage extends BaseModal {
             )
           : L("за съеденных игроков", "for eaten players"),
       )}
-      ${this.embedded
+      ${!this.topupAvailable
         ? ""
         : html`<button
             class="t-btn"
@@ -683,7 +665,10 @@ export class ShopPage extends BaseModal {
     return html`<input
       class="t-input"
       style="width:100%;margin-bottom:14px"
-      placeholder=${L("Поиск: флаг, сша, россия, плитка…", "Search: flag, usa, tiled…")}
+      placeholder=${L(
+        "Поиск: флаг, сша, россия, плитка…",
+        "Search: flag, usa, tiled…",
+      )}
       .value=${this.search}
       @input=${(e: Event) =>
         (this.search = (e.target as HTMLInputElement).value)}
@@ -710,9 +695,9 @@ export class ShopPage extends BaseModal {
     const modes = ShopPage.TYPE_MODES[this.catType];
     const typed = skins.filter((i) => modes.includes(i.mode ?? 2));
     // теги, реально присутствующие в этом типе (минус тип-теги) → подфильтр
-    const tags = [
-      ...new Set(typed.flatMap((i) => i.tags ?? [])),
-    ].filter((t) => !["tile", "whole", "free"].includes(t));
+    const tags = [...new Set(typed.flatMap((i) => i.tags ?? []))].filter(
+      (t) => !["tile", "whole", "free"].includes(t),
+    );
     const shown = this.catTag
       ? typed.filter((i) => (i.tags ?? []).includes(this.catTag!))
       : typed;
@@ -761,7 +746,10 @@ export class ShopPage extends BaseModal {
         <button
           class="t-btn"
           style="margin-left:auto;background:var(--t-skin);color:#fff;font-weight:700"
-          title=${L("Создать/загрузить свой скин", "Create/upload your own skin")}
+          title=${L(
+            "Создать/загрузить свой скин",
+            "Create/upload your own skin",
+          )}
           @click=${this.openEditor}
         >
           ${L("Свой скин", "Custom skin")}
@@ -930,7 +918,10 @@ export class ShopPage extends BaseModal {
 
   private editSkinExternal(s: NamedSkin): void {
     const sp = document.querySelector("skins-page") as
-      | (HTMLElement & { startEdit?: (x: NamedSkin) => void; open?: () => void })
+      | (HTMLElement & {
+          startEdit?: (x: NamedSkin) => void;
+          open?: () => void;
+        })
       | null;
     this.close();
     window.showPage?.("page-skins");
@@ -1025,10 +1016,11 @@ export class ShopPage extends BaseModal {
             style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 2px"
           >
             ${i.tags.map(
-              (tg) => html`<span
-                style="font-size:10px;padding:1px 6px;border-radius:999px;background:var(--t-sheet);color:var(--t-muted,#777)"
-                >${tagLabel[tg] ?? tg}</span
-              >`,
+              (tg) =>
+                html`<span
+                  style="font-size:10px;padding:1px 6px;border-radius:999px;background:var(--t-sheet);color:var(--t-muted,#777)"
+                  >${tagLabel[tg] ?? tg}</span
+                >`,
             )}
           </div>`
         : ""}
@@ -1096,6 +1088,305 @@ export class ShopPage extends BaseModal {
   }
 
   // модалка «задай ник скину» (сохранить сейчас или позже)
+  // ── terron 16.09: БОНУС-КОДЫ ────────────────────────────────────────────
+  // Ввёл код — на аккаунт падают ПТС/ЛТС/скины (сервер: platform-api/src/bonusCodes.ts).
+  // ⚠️ В нативных апках поля нет: App Store (3.1.1) запрещает свои механизмы
+  // разблокировки содержимого (промокоды, ключи) в обход их покупок — тот же
+  // гейт хоста, что прячет пополнение. На сайте и площадках — есть.
+  @state() private codeOpen = false;
+  @state() private codeInput = "";
+  // отказ рисуется ВНУТРИ окна кода: общий this.msg живёт на странице под
+  // затемнением, и игрок его не видит, пока окно открыто
+  @state() private codeError = "";
+  // шаг 2 окна: код проверен, игрок видит награду и решает — забрать или отказаться
+  @state() private codePreview: { code: string; rewards: BonusCodeReward[] } | null = null;
+
+  private get codesAvailable(): boolean {
+    return payHost().kind !== "native";
+  }
+
+  private openCode(): void {
+    this.codeInput = "";
+    this.codeError = "";
+    this.codePreview = null;
+    this.codeOpen = true;
+  }
+
+  private static codeRefusalText(r: BonusCodeRefusal): string {
+    switch (r) {
+      case "unauthorized":
+        return L(
+          "Войди в аккаунт — награда по коду зачисляется на него.",
+          "Sign in — code rewards go to your account.",
+        );
+      case "already_redeemed":
+        return L("Ты уже активировал этот код.", "You've already used this code.");
+      case "used_up":
+        return L("Этот код уже использован.", "This code has already been used.");
+      case "expired":
+        return L("Срок действия кода истёк.", "This code has expired.");
+      case "not_started":
+        return L("Код ещё не действует — попробуй позже.", "This code isn't active yet.");
+      case "too_many_attempts":
+        return L(
+          "Лимит неудачных попыток на сутки исчерпан.",
+          "Daily limit of failed attempts reached.",
+        );
+      case "skin_name_taken":
+        return L(
+          "Ник скина из этого кода уже кем-то занят — напиши нам, заменим.",
+          "The skin nickname in this code is already taken — contact us.",
+        );
+      case "network":
+        return L("Нет связи с сервером — попробуй ещё раз.", "Can't reach the server — try again.");
+      default:
+        return L("Такого кода нет.", "No such code.");
+    }
+  }
+
+  /** Текст отказа + сколько попыток осталось / когда можно снова. */
+  private static codeFailureText(f: BonusCodeFailure): string {
+    let t = ShopPage.codeRefusalText(f.reason);
+    if (f.reason === "too_many_attempts" && f.retryAt) {
+      const at = new Date(f.retryAt);
+      if (!Number.isNaN(at.getTime())) {
+        t += L(" Попробуй после ", " Try again after ") +
+          at.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + ".";
+      }
+    } else if (typeof f.attemptsLeft === "number" && f.attemptsLeft <= 3) {
+      t += L(` Осталось попыток на сутки: ${f.attemptsLeft}.`, ` Attempts left today: ${f.attemptsLeft}.`);
+    }
+    return t;
+  }
+
+  // Шаг 1: проверить код — показать награду, ничего не выдавая.
+  private async submitCode(): Promise<void> {
+    const code = this.codeInput.trim();
+    if (code.length < 4 || this.busy) return;
+    this.busy = "code";
+    this.requestUpdate();
+    const r = await checkBonusCode(code);
+    this.busy = "";
+    if (!r.ok) {
+      this.codeError = ShopPage.codeFailureText(r);
+      this.requestUpdate();
+      return;
+    }
+    this.codeError = "";
+    this.codePreview = { code: r.code, rewards: r.rewards };
+    this.requestUpdate();
+  }
+
+  // Шаг 2: забрать.
+  private async claimCode(): Promise<void> {
+    const p = this.codePreview;
+    if (!p || this.busy) return;
+    this.busy = "code";
+    this.requestUpdate();
+    const r = await redeemBonusCode(p.code);
+    this.busy = "";
+    if (!r.ok) {
+      // код успели погасить/выключить между шагами — возвращаем на ввод с причиной
+      this.codePreview = null;
+      this.codeError = ShopPage.codeFailureText(r);
+      this.requestUpdate();
+      return;
+    }
+    const g = r.granted;
+    this.lts = r.balances.lts;
+    this.pts = r.balances.pts;
+    const parts: string[] = [];
+    if (g.pts) parts.push(`+${g.pts.toLocaleString("ru-RU")} ${L("ПТС", "PTS")}`);
+    if (g.lts) parts.push(`+${g.lts.toLocaleString("ru-RU")} ${L("ЛТС", "LTS")}`);
+    for (const s of g.skins) {
+      const title = skinTitle({ sku: s.sku });
+      parts.push(
+        s.name
+          ? L(`скин «${title}» на ник ${s.name}`, `skin “${title}” for ${s.name}`)
+          : L(`скин «${title}»`, `skin “${title}”`),
+      );
+    }
+    const unnamed = g.skins.some((s) => !s.name);
+    this.msg =
+      L("Код активирован: ", "Code redeemed: ") +
+      parts.join(", ") +
+      (unnamed
+        ? L(
+            ". Задай скину ник в «Мои скины».",
+            ". Give the skin a nick in “My skins”.",
+          )
+        : "");
+    this.codeOpen = false;
+    this.codePreview = null;
+    if (g.skins.length) void this.load();
+    this.requestUpdate();
+  }
+
+  private renderCodeReward(p: { code: string; rewards: BonusCodeReward[] }): TemplateResult {
+    const skins = p.rewards.filter(
+      (r): r is Extract<BonusCodeReward, { type: "skin" }> => r.type === "skin",
+    );
+    const sum = (t: "pts" | "lts") =>
+      p.rewards.reduce((a, r) => (r.type === t ? a + r.amount : a), 0);
+    const pts = sum("pts");
+    const lts = sum("lts");
+    return html`
+      <div style="font-weight:800;margin-bottom:2px;color:#2e7d32">
+        ✓ ${L("Верный код", "Valid code")}
+      </div>
+      <div class="t-muted" style="font-size:12px;margin-bottom:12px;letter-spacing:.06em">
+        ${p.code}
+      </div>
+      <div style="font-weight:700;margin-bottom:8px">${L("Награда", "Reward")}</div>
+      ${skins.length
+        ? html`<div
+            style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:10px"
+          >
+            ${skins.map((sk) => {
+              const item = this.items.find((i) => i.sku === sk.sku);
+              // та же подача, что в карточке витрины: плитка — повтором фоном
+              const tile = item?.url && (item.mode === 1 || item.mode === 3);
+              return html`<div
+                style="border:1px solid rgba(0,0,0,.15);padding:6px;background:var(--t-sheet)"
+              >
+                <div
+                  style=${"position:relative;aspect-ratio:4/3;" +
+                  (tile
+                    ? `background:#cdbb93 url("${assetUrl(item!.url!)}") 0 0 / 30px 30px repeat`
+                    : "background:#cdbb93")}
+                >
+                  ${item?.url && !tile
+                    ? html`<img
+                        src=${assetUrl(item.url)}
+                        alt=""
+                        style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"
+                      />`
+                    : ""}
+                </div>
+                <div style="font-weight:700;font-size:13px;margin-top:4px">
+                  ${skinTitle(item ?? { sku: sk.sku })}
+                </div>
+                <div class="t-muted" style="font-size:11px">
+                  ${sk.name
+                    ? L(`ник: ${sk.name}`, `nick: ${sk.name}`)
+                    : L("ник задашь сам", "you pick the nick")}
+                </div>
+              </div>`;
+            })}
+          </div>`
+        : ""}
+      ${pts || lts
+        ? html`<div
+            style="display:flex;gap:14px;flex-wrap:wrap;font-weight:800;font-size:18px;margin-bottom:14px"
+          >
+            ${pts
+              ? html`<span>+${pts.toLocaleString("ru-RU")} ${coin("pts", 18)}</span>`
+              : ""}
+            ${lts
+              ? html`<span>+${lts.toLocaleString("ru-RU")} ${coin("lts", 18)}</span>`
+              : ""}
+          </div>`
+        : ""}
+      <div style="display:flex;gap:8px">
+        <button
+          class="t-btn"
+          style="flex:1"
+          ?disabled=${this.busy !== ""}
+          @click=${() => this.claimCode()}
+        >
+          ${this.busy === "code" ? L("Забираем…", "Claiming…") : L("Забрать", "Claim")}
+        </button>
+        <button
+          class="t-btn"
+          style="flex:1;background:var(--t-sheet);color:var(--t-ink)"
+          ?disabled=${this.busy !== ""}
+          @click=${() => {
+            this.codeOpen = false;
+            this.codePreview = null;
+          }}
+        >
+          ${L("Отказаться", "Decline")}
+        </button>
+      </div>
+    `;
+  }
+
+  private renderCodeModal(): TemplateResult {
+    return html`<div
+      style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)"
+      @click=${() => {
+        this.codeOpen = false;
+      }}
+    >
+      <div
+        @click=${(e: Event) => e.stopPropagation()}
+        style="background:var(--t-bg,#fdfcf7);color:var(--t-ink);border-radius:14px;padding:18px;width:min(92vw,420px);box-shadow:0 20px 60px rgba(0,0,0,.4)"
+      >
+        ${this.codePreview ? this.renderCodeReward(this.codePreview) : this.renderCodeInput()}
+      </div>
+    </div>`;
+  }
+
+  private renderCodeInput(): TemplateResult {
+    return html`
+        <div style="font-weight:800;margin-bottom:6px">
+          🎁 ${L("Бонус-код", "Bonus code")}
+        </div>
+        <div class="t-muted" style="font-size:12px;margin-bottom:10px">
+          ${L(
+            "Введи код — сначала покажем, что он даёт.",
+            "Enter a code — we'll show what it gives first.",
+          )}
+        </div>
+        <input
+          class="t-input"
+          style="width:100%;margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em"
+          placeholder="XXXX-XXXX-XXXX"
+          maxlength="40"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          .value=${this.codeInput}
+          @input=${(e: Event) => {
+            this.codeInput = (e.target as HTMLInputElement).value;
+            this.codeError = "";
+          }}
+          @keydown=${(e: KeyboardEvent) => {
+            if (e.key === "Enter") void this.submitCode();
+          }}
+        />
+        ${this.codeError
+          ? html`<div
+              role="alert"
+              style="margin:-4px 0 10px;font-size:13px;font-weight:600;color:#b3261e"
+            >
+              ${this.codeError}
+            </div>`
+          : ""}
+        <div style="display:flex;gap:8px">
+          <button
+            class="t-btn"
+            style="flex:1"
+            ?disabled=${this.busy !== "" || this.codeInput.trim().length < 4}
+            @click=${() => this.submitCode()}
+          >
+            ${this.busy === "code"
+              ? L("Проверяем…", "Checking…")
+              : L("Проверить", "Check")}
+          </button>
+          <button
+            class="t-btn"
+            style="flex:1;background:var(--t-sheet);color:var(--t-ink)"
+            @click=${() => {
+              this.codeOpen = false;
+            }}
+          >
+            ${L("Отмена", "Cancel")}
+          </button>
+        </div>
+    `;
+  }
+
   private renderNameModal(): TemplateResult {
     return html`<div
       style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)"
@@ -1174,9 +1465,15 @@ export class ShopPage extends BaseModal {
   protected onOpen(args?: Record<string, unknown>): void {
     // /shop/history — роутер кладёт второй сегмент пути в args.tab.
     if (args?.tab === "history") this.openTab("history");
+    if (args?.tab === "code" && this.codesAvailable) this.openCode();
     if (args?.tab === "topup") this.openTab("topup");
     this.showPayResult();
     void this.load();
+    // terron 17.09: на площадке provider спрашиваем ПРИ КАЖДОМ ОТКРЫТИИ. Раньше —
+    // один раз в connectedCallback, а элемент живёт в index.html и подключается
+    // ДО готовности SDK: `platformPurchasesAvailable()` был false, запрос не
+    // уходил вовсе, и витрина площадки не появлялась никогда.
+    if (this.embedded) void this.loadPay();
   }
 
   /** Переключить вкладку и подтянуть данные, если нужно. */
@@ -1206,10 +1503,369 @@ export class ShopPage extends BaseModal {
     return !ourPaymentsAllowed();
   }
 
+  /**
+   * terron 12.09: ВИТРИНА ПЛОЩАДКИ. Внутри площадки своя платёжка запрещена
+   * (embedded), но покупать можно ЧЕРЕЗ площадку — каталог отдаёт её SDK
+   * (PlatformPay), факт оплаты подтверждает наш сервер. Показываем, когда
+   * площадка отдаёт покупки и в каталоге есть наши пакеты; сама кнопка «купить»
+   * работает только если сервер ответил provider = "gamepush" (рубильник).
+   */
+  connectedCallback(): void {
+    super.connectedCallback();
+    // площадка: узнать provider (рубильник покупок) до первого рендера вкладок
+    if (this.embedded) void this.loadPay(); // площадка: узнать provider
+    // SDK поднимается позже страницы — переспрашиваем, когда он готов.
+    window.addEventListener("gp-ready", this.onGpReady);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    window.removeEventListener("gp-ready", this.onGpReady);
+  }
+
+  private onGpReady = (): void => {
+    if (this.embedded) void this.loadPay();
+  };
+
+  private get platformShop(): boolean {
+    // ⚠️ Витрина площадки видна ТОЛЬКО по слову сервера (рубильник
+    // GAMEPUSH_PAYMENTS_ENABLED): товары в панели GamePush уже заведены, и без
+    // этого гейта вкладка с ценами всплыла бы на живых ОК/Пикабу раньше, чем
+    // владелец включил покупки (требование 12.09: «везде всё скрыто до выката»).
+    return (
+      this.embedded &&
+      this.pay?.provider === "gamepush" &&
+      platformPurchasesAvailable() &&
+      platformPtsProducts().length > 0
+    );
+  }
+
+  /** Вкладка «Пополнить» есть либо у своей платёжки, либо у витрины площадки. */
+  private get topupAvailable(): boolean {
+    return !this.embedded || this.platformShop;
+  }
+
+  @state() private platformBuying: string | null = null;
+  /** terron 20.09: окно «баланс пополнен» — строка над витриной терялась
+   *  («можешь не между делом кусок текста, а поздравляем, баланс пополнен?»). */
+  @state() private topupDone: {
+    gained: number;
+    balance: number;
+    /** Сколько дней Prime принесла покупка и до какого числа он теперь. */
+    primeDays: number;
+    primeUntil: number | null;
+  } | null = null;
+
+  /** Дни Prime за пакет — из той же лестницы `/pay/packs`, что на карточках. */
+  private primeDaysOf(tag: string): number {
+    const t = tag.toLowerCase();
+    return this.pay?.packs.find((p) => p.sku === t)?.primeDays ?? 0;
+  }
+
+  /** Сколько реально пришло — по РАЗНИЦЕ баланса: в неё входит и бонус первой
+   *  покупки, которого в ответе сервера нет (там номинал пакета). */
+  private async celebrateTopup(
+    before: number,
+    atLeast: number,
+    primeDays: number,
+  ): Promise<void> {
+    // Срок Prime перечитываем у сервера: дни ПРИБАВЛЯЮТСЯ к остатку, и дату
+    // «активен до» клиент сам не посчитает.
+    // …и /pay/packs: бонус первой покупки после неё гаснет, значки ×2 обязаны уйти.
+    const [, , pay] = await Promise.all([
+      this.load(),
+      primeDays > 0 ? refreshPrimeStatus() : null,
+      getPayPacks(),
+    ]);
+    if (pay) this.pay = pay;
+    this.topupDone = {
+      gained: Math.max(this.pts - before, atLeast),
+      balance: this.pts,
+      primeDays,
+      primeUntil: primeDays > 0 ? primeUntilMs() : null,
+    };
+  }
+
+  private renderTopupDone(d: NonNullable<ShopPage["topupDone"]>): TemplateResult {
+    const close = () => {
+      this.topupDone = null;
+    };
+    return html`<div
+      style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)"
+      @click=${close}
+    >
+      <div
+        @click=${(e: Event) => e.stopPropagation()}
+        style="background:var(--t-bg,#fdfcf7);color:var(--t-ink);border:2px solid var(--t-ink);padding:22px 22px 18px;width:min(92vw,380px);text-align:center;box-shadow:6px 6px 0 rgba(0,0,0,.35)"
+      >
+        <div class="t-muted" style="font-size:12px;letter-spacing:.12em;text-transform:uppercase">
+          ${L("Поздравляем", "Congratulations")}
+        </div>
+        <div style="font-family:Oswald,sans-serif;font-size:26px;letter-spacing:.04em;text-transform:uppercase;margin-top:4px">
+          ${L("Баланс пополнен", "Balance topped up")}
+        </div>
+        <div style="height:120px;margin:14px auto 6px;max-width:220px;background:linear-gradient(135deg,#2b2a24,#4a4130);display:flex;align-items:flex-end;justify-content:center;overflow:hidden">
+          ${gemPile(d.gained)}
+        </div>
+        <div style="font-family:Oswald,sans-serif;font-size:34px;color:var(--t-red,#b3261e);margin-top:8px">
+          +${d.gained.toLocaleString("ru-RU")}
+        </div>
+        <div class="t-muted" style="font-size:13px;margin-top:2px">
+          ${L("кровавых алмазов", "blood diamonds")} ·
+          ${L("на счету", "balance")}: <b style="color:var(--t-ink)">${d.balance.toLocaleString("ru-RU")}</b>
+        </div>
+        ${d.primeDays > 0
+          ? html`<div
+              style="margin-top:14px;padding:10px 12px;border:1px solid var(--t-ink);background:rgba(179,38,30,.06);font-size:13.5px;line-height:1.45"
+            >
+              <div style="font-weight:700">
+                ${primeLink(primeGiftLabel(d.primeDays).replace(/^\+\s*/, "TERRON "))}
+              </div>
+              ${d.primeUntil
+                ? html`<div class="t-muted" style="font-size:12px;margin-top:2px">
+                    ${L("активен до", "active until")}
+                    ${new Date(d.primeUntil).toLocaleDateString(
+                      L("ru-RU", "en-GB"),
+                      { day: "numeric", month: "long", year: "numeric" },
+                    )}
+                  </div>`
+                : ""}
+            </div>`
+          : ""}
+        <button class="t-btn" style="width:100%;margin-top:16px" @click=${close}>
+          ${L("Отлично", "Great")}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  private renderPlatformTopup(): TemplateResult {
+    const products = platformPtsProducts();
+    const live = this.pay?.provider === "gamepush";
+    return html`
+      ${live
+        ? this.pay?.bonus
+          ? this.renderBonusNote("")
+          : ""
+        : html`<div
+            class="t-muted"
+            style="font-size:12.5px;line-height:1.5;margin-bottom:12px"
+          >
+            ${L(
+              "Покупки через площадку скоро откроются — пока витрина только показывает цены.",
+              "Platform purchases are opening soon — for now the showcase only shows prices.",
+            )}
+          </div>`}
+      <div class="t-grid pay-grid">
+        ${products.map((p) => {
+          const busy = this.platformBuying === p.tag;
+          const price = `${p.price ?? "?"} ${p.currencySymbol ?? p.currency ?? ""}`.trim();
+          // Значок «хит» и срок Prime — из той же лестницы /pay/packs, что на
+          // сайте: тег товара площадки = наш sku.
+          const pack = this.pay?.packs.find((k) => k.sku === (p.tag ?? "").toLowerCase());
+          return this.renderPackCard({
+            nominal: ptsOf(p),
+            badge: pack?.badge,
+            primeDays: pack?.primeDays ?? 0,
+            price: busy ? L("Покупаем…", "Buying…") : price,
+            disabled: !live || busy || this.platformBuying !== null,
+            onBuy: () => void this.buyOnPlatform(p.tag ?? ""),
+          });
+        })}
+      </div>
+      ${live ? this.renderPrimeNote() : ""}
+    `;
+  }
+
+  /**
+   * terron 20.09: ОДНА карточка пакета на обе витрины — сайт (Pally) и площадку
+   * (GamePush). Репорт владельца: «где информация про прайм, про удвоение? у нас
+   * единая система должна быть, какого у нас другое окно?» — витрина площадки
+   * была отдельной копией и отстала: ни ×2, ни срока Prime, ни «хита».
+   * Разное у витрин только цена на кнопке и то, что делает клик.
+   */
+  private renderPackCard(o: {
+    nominal: number;
+    badge?: string | null;
+    primeDays: number;
+    price: string;
+    disabled: boolean;
+    onBuy: () => void;
+  }): TemplateResult {
+    const bonus = this.pay?.bonus === true;
+    const mult = this.pay?.multiplier ?? 1;
+    const pts = bonus ? o.nominal * mult : o.nominal;
+    // Карточка ровно та же, что у скинов (.t-skincard + .t-skinprev +
+    // .t-skinname + сплит-кнопка цены) — витрина должна выглядеть одним
+    // магазином, а не двумя разными (замечание владельца 21.08).
+    return html`<div class="t-skincard">
+      <!-- ⚠️ terron 26.08: ГОРКА, а не одна цифра. Разницу между 50 и 2000
+           глаз ловит по РАЗМЕРУ кучи, а число рядом её называет. -->
+      <div
+        class="t-skinprev"
+        style="background:linear-gradient(135deg,#2b2a24,#4a4230);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding:8px 8px 6px;position:relative;overflow:hidden"
+      >
+        <div
+          style="flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:flex-end;justify-content:center"
+        >
+          ${gemPile(pts)}
+        </div>
+        <span
+          style="display:inline-flex;align-items:center;gap:5px;font-family:var(--t-display);font-weight:700;font-size:19px;line-height:1;color:var(--t-parchment,#fdfcf7)"
+          >${coin("pts", 14)} ${pts.toLocaleString("ru-RU")}</span
+        >
+        ${bonus
+          ? html`<span
+              style="position:absolute;right:5px;top:5px;background:var(--t-red);color:#fff;font-family:var(--t-mono,monospace);font-size:11px;padding:1px 5px"
+              >×${mult}</span
+            >`
+          : o.badge
+            ? html`<span
+                style="position:absolute;right:5px;top:5px;background:var(--t-parchment,#fdfcf7);color:var(--t-ink);font-family:var(--t-mono,monospace);font-size:11px;padding:1px 5px"
+                >${o.badge}</span
+              >`
+            : ""}
+      </div>
+      <!-- terron 20.09 (решение владельца): сверху на картинке — ИТОГ (100), снизу
+           под ней — из чего он сложился, пока бонус действует: «50 + 50». Было
+           «50 + бонус» — слово без цифры. Без бонуса — просто «50 алмазов». -->
+      <div class="t-skinname">
+        ${bonus
+          ? html`${o.nominal.toLocaleString("ru-RU")}
+              <span style="color:var(--t-red)"
+                >+ ${(pts - o.nominal).toLocaleString("ru-RU")}</span
+              >`
+          : L(
+              `${o.nominal.toLocaleString("ru-RU")} алмазов`,
+              `${o.nominal.toLocaleString("en-US")} diamonds`,
+            )}
+      </div>
+      ${o.primeDays
+        ? html`<div
+            style="font-family:var(--t-mono,monospace);font-size:11px;padding:0 8px 6px;text-align:center"
+          >
+            ${primeLink(primeGiftLabel(o.primeDays))}
+          </div>`
+        : ""}
+      <div class="shop-split">
+        <button class="shop-half pts" ?disabled=${o.disabled} @click=${o.onBuy}>
+          ${o.price}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  /** Строка про бонус первой покупки — одна на обе витрины. */
+  private renderBonusNote(fallback: string): TemplateResult {
+    const pay = this.pay;
+    return html`<div
+      class="t-muted"
+      style="font-size:12.5px;line-height:1.5;margin-bottom:12px"
+    >
+      ${pay?.bonus
+        ? L(
+            `Первая покупка в этом месяце — ПТС в ${pay.multiplier} раза больше.`,
+            `First purchase this month — ${pay.multiplier}× the PTS.`,
+          )
+        : fallback}
+    </div>`;
+  }
+
+  /** terron 26.08 (просьба владельца): прямым текстом под ВСЕМИ пакетами — прем
+   *  даётся за каждое пополнение, а не за какой-то особенный. */
+  private renderPrimeNote(): TemplateResult {
+    return html`<div
+      style="margin-top:14px;border:1px solid var(--t-ink);background:var(--t-sheet);padding:10px 14px;font-size:13px;line-height:1.6"
+    >
+      ${L(
+        "Любое пополнение включает TERRON Prime на указанный у пакета срок. Если Prime уже действует — дни прибавляются к остатку.",
+        "Every top-up switches on TERRON Prime for the time shown on the pack. If Prime is already running, the days are added to what is left.",
+      )}
+      ${primeLink(L("Что даёт Prime →", "What Prime does →"))}
+    </div>`;
+  }
+
+  /**
+   * Покупка через площадку. Порядок жёсткий: окно площадки → id покупки →
+   * наш сервер проверяет её у GamePush и начисляет → ТОЛЬКО потом погашение.
+   * Клиент нигде не начисляет сам.
+   */
+  private async buyOnPlatform(tag: string): Promise<void> {
+    if (!tag || this.platformBuying || this.pay?.provider !== "gamepush") return;
+    reportPayFunnel("pack_click", tag);
+    this.platformBuying = tag;
+    const before = this.pts;
+    try {
+      const purchaseId = await platformPurchase(tag);
+      if (!purchaseId) {
+        // terron 20.09: «Отмена» в окне площадки — не событие. Игрок ничего не
+        // платил, напоминать ему об этом плашкой незачем (решение владельца).
+        this.msg = "";
+        return;
+      }
+      const r = await claimPlatformPurchase(purchaseId);
+      if (!r || r.refused !== undefined) {
+        // terron 17.09: на деве причину отказа пишем дословно — иначе проверку
+        // платежей приходится вести по серверным логам.
+        if (r?.refused !== undefined && isDevSite()) {
+          this.fail(`Сервер не зачислил покупку: ${r.refused} (id ${purchaseId})`);
+          return;
+        }
+        this.msg = L(
+          "Оплата принята площадкой, но сервер её ещё не подтвердил — алмазы придут в течение минуты.",
+          "The platform accepted the payment but our server hasn't confirmed it yet — diamonds will arrive within a minute.",
+        );
+        return;
+      }
+      if (r.credited) {
+        await platformConsume(tag);
+        this.msg = "";
+        await this.celebrateTopup(before, r.pts, this.primeDaysOf(tag));
+      } else {
+        this.msg = L("Эта покупка уже была зачислена.", "This purchase was already credited.");
+        await platformConsume(tag);
+      }
+    } finally {
+      this.platformBuying = null;
+    }
+  }
+
   private async loadPay(): Promise<void> {
-    if (this.embedded) return;
+    // На площадке /pay/packs спрашиваем всегда: ответ говорит, включены ли
+    // покупки через площадку (provider), без него витрины площадки нет.
+    if (this.embedded && !platformPurchasesAvailable()) return;
     this.pay = await getPayPacks();
     this.requestUpdate();
+    void this.recoverPlatformPurchases();
+  }
+
+  /**
+   * terron 20.09: оплаченная, но не погашенная покупка = прошлый claim не
+   * дошёл. Пока она висит, площадка не даст купить тот же пакет снова, а
+   * алмазов у игрока нет. Сервер добирает сам (идемпотентно), мы гасим.
+   */
+  private recoveringPurchases = false;
+  private async recoverPlatformPurchases(): Promise<void> {
+    if (this.recoveringPurchases || this.pay?.provider !== "gamepush") return;
+    if (platformPendingPtsTags().length === 0) return;
+    this.recoveringPurchases = true;
+    const before = this.pts;
+    try {
+      const items = await recoverPlatformPurchases();
+      if (!items || items.length === 0) return;
+      let pts = 0;
+      let primeDays = 0;
+      for (const it of items) {
+        if (it.credited) {
+          pts += it.pts;
+          primeDays += this.primeDaysOf(it.tag);
+        }
+        await platformConsume(it.tag);
+      }
+      if (pts > 0) await this.celebrateTopup(before, pts, primeDays);
+    } finally {
+      this.recoveringPurchases = false;
+    }
   }
 
   /** Возврат с оплаты: провайдер приводит на /shop?pay=ok|fail. */
@@ -1267,11 +1923,16 @@ export class ShopPage extends BaseModal {
     this.requestUpdate();
     // ОСНОВНОЕ (каталог + кошелёк) — показываем как можно раньше, НЕ ждём
     // тяжёлый /me/skins (~сотни КБ inline) и правила, иначе магазин «висит».
-    const [items, wallet] = await Promise.all([getCatalog(), getWallet()]);
+    const [items, ws] = await Promise.all([getCatalog(), getWalletStatus()]);
     this.items = items;
-    if (wallet) {
-      this.lts = wallet.lts;
-      this.pts = wallet.pts;
+    if (ws.wallet) {
+      this.lts = ws.wallet.lts;
+      this.pts = ws.wallet.pts;
+    } else if (ws.signedOut) {
+      // Сессии нет — чужой/прошлый баланс на экране оставлять нельзя. При сбое
+      // сети (signedOut=false) цифры не трогаем.
+      this.lts = 0;
+      this.pts = 0;
     }
     this.loading = false;
     this.requestUpdate();

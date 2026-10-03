@@ -138,6 +138,16 @@ export const ULT_LORE: Readonly<Record<string, UltLoreEntry>> = {
       text: "The Netherlands dammed off a sea inlet and drained it — fields and towns now stand on a seabed where ships once sailed. The USSR seriously costed turning Siberian rivers south; the scheme was shelved in 1986, but by then the Karakum Canal and the shrinking Aral Sea had already redrawn the map.",
     },
   },
+  terraforming: {
+    ru: {
+      about: "Проект «Плаушер» · Кара-Богаз-Гол",
+      text: "США двадцать лет взрывали ядерные заряды «в мирных целях»: рыли котлованы, пробовали копать каналы и гавани. В СССР тем же занималась программа «Ядерные взрывы для народного хозяйства» — 124 заряда. Землю действительно двигали, но радиация оставалась там же, и обе программы закрыли.",
+    },
+    en: {
+      about: "Project Plowshare · Kara-Bogaz-Gol",
+      text: "For two decades the USA set off nuclear charges «for peaceful purposes»: digging craters, testing canals and harbours. The USSR ran the same idea as «Nuclear Explosions for the National Economy» — 124 charges. The ground really did move, but the radiation stayed put, and both programmes were shut down.",
+    },
+  },
   submarine_base: {
     ru: {
       about: "Волчьи стаи, 1940–1943",
@@ -278,16 +288,7 @@ export const ULT_LORE: Readonly<Record<string, UltLoreEntry>> = {
       text: "The site was picked in the Kazakh steppe for the emptiness around it and for being far south: nearer the equator, the Earth's spin hands a rocket free speed. Two years later Sputnik left from there, and four years after that, Gagarin. A spaceport is measured not by its walls but by what it can reach.",
     },
   },
-  peaceful_sky: {
-    ru: {
-      about: "Свердловск, 1 мая 1960",
-      text: "Высотный разведчик U-2 считался недосягаемым, пока над Свердловском его не сбили зенитной ракетой — вместе с собственным истребителем, попавшим под тот же залп. Сплошная ПВО не разбирает, чей самолёт в небе: она закрывает небо целиком.",
-    },
-    en: {
-      about: "Sverdlovsk, 1 May 1960",
-      text: "The high-altitude U-2 was considered untouchable until a surface-to-air missile brought one down over Sverdlovsk — along with one of the defenders' own fighters caught in the same salvo. Blanket air defence does not ask whose aircraft it is: it closes the whole sky.",
-    },
-  },
+  // terron 01.09: старое «Мирное небо» в архиве — истории у него нет.
   train_depot: {
     ru: {
       about: "«Рельсовая война», 1943",

@@ -10,6 +10,21 @@ export type NukeType =
   | UnitType.MIRV
   | UnitType.MIRVWarhead;
 
+/**
+ * terron 25.08: ТЕРРАФОРМИНГ — ракеты ульты «Реки вспять». В схему архива
+ * (`bombUnits`) они НЕ входят намеренно: расширять zod-схему статистики ради
+ * ульты не стали ещё на первой водяной ракете, а неизвестный код бомбы в
+ * архиве кикает игрока из матча (память stats-clientid-and-bomb-codes).
+ * У ульты своя метрика — `waterTiles`/`landTiles` в ultStats.
+ */
+export type TerraNukeType =
+  | UnitType.TerraFlood
+  | UnitType.LandNuke
+  | UnitType.BlastNuke;
+
+/** Всё, что летит из шахты и подрывается: обычные ядерки + ракеты ульт. */
+export type LaunchableNukeType = NukeType | TerraNukeType | UnitType.WaterNuke;
+
 export const unitTypeToBombUnit = {
   [UnitType.AtomBomb]: "abomb",
   [UnitType.HydrogenBomb]: "hbomb",
@@ -35,7 +50,7 @@ export const otherUnits = [
   "silo",
   "saml",
   "fact",
-  "sats", // terron: запуск ракеты «Сбить спутники» (Небо наше) — пишется при ЗАПУСКЕ, не при сборке
+  "sats", // terron: запуск ракеты «Небо наше» (бывш. «Сбить спутники») (Небо наше) — пишется при ЗАПУСКЕ, не при сборке
 ] as const;
 export const OtherUnitSchema = z.enum(otherUnits);
 export type OtherUnit = z.infer<typeof OtherUnitSchema>;
@@ -149,9 +164,22 @@ export const PlayerStatsSchema = z
     // terron: ШАГАЮЩИЙ ГОРОД — пик суммы уровней всех зданий одновременно.
     buildingLevelsPeak: BigIntStringSchema.optional(),
     // Ключ Доры: поездов отправлено со своих станций за матч.
+    /**
+     * terron 01.09 — КЛЮЧ ТЕРРАФОРМИНГА: сколько ракет «Реки вспять» игрок
+     * пустил В ЭТОМ МАТЧЕ (ачивка «50 за матч», API берёт max по матчам).
+     *
+     * ⚠️ Отдельным СКАЛЯРОМ, а НЕ пятым кодом в `bombUnits`: незнакомый код
+     * бомбы в архиве роняет валидацию и КИКАЕТ игрока из матча (память
+     * stats-clientid-and-bomb-codes). Ровно поэтому водяная ракета и была
+     * выведена из схемы бомб — этот запрет остаётся в силе.
+     */
+    waterNukesLaunched: BigIntStringSchema.optional(),
     trainsSent: BigIntStringSchema.optional(),
     // Ключ Депо смерти: ульт-зданий (чужих И своих) снесено выстрелами Доры.
     railgunUltKills: BigIntStringSchema.optional(),
+    // terron 04.09: «Феникс» — минимум доли карты ПОСЛЕ первого пика ≥50 %
+    // (сотые процента), новым пиком НЕ стирается (в отличие от dipPct).
+    phoenixDip: BigIntStringSchema.optional(),
   })
   .optional();
 export type PlayerStats = z.infer<typeof PlayerStatsSchema>;

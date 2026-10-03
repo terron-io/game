@@ -1,4 +1,6 @@
-import { GameMapType, UnitType } from "../../core/game/Game";
+import { getAssetManifest } from "../../core/AssetUrls";
+import { classicOf, GameMapType, UnitType } from "../../core/game/Game";
+import { displayMap } from "../EqualAreaMaps";
 import { GameConfig } from "../../core/Schemas";
 
 /**
@@ -123,10 +125,30 @@ export function getNationsForCompactMap(
   return nations;
 }
 
+/**
+ * terron 17.09: карта предлагается, только если её файлы есть в манифесте
+ * ассетов. Платформенный билд берёт карты С ПРОДА, и карта, которая лежит
+ * только на деве (Equal Earth, Новый Свет), в пикере вела бы в 404 — для
+ * модерации это «сломанная игра». Пустой манифест (vite dev) — показываем всё.
+ */
+export function mapHasAssets(map: GameMapType): boolean {
+  const manifest = getAssetManifest();
+  if (Object.keys(manifest).length === 0) return true;
+  const key = Object.keys(GameMapType).find(
+    (k) => GameMapType[k as keyof typeof GameMapType] === map,
+  );
+  if (!key) return false;
+  return `maps/${key.toLowerCase()}/manifest.json` in manifest;
+}
+
 export function getRandomMapType(): GameMapType {
-  const maps = Object.values(GameMapType);
+  // terron 26.09: равновеликие версии — не отдельные карты, а пары: тянем из
+  // исходных, а версию выбирает переключатель «Честные размеры».
+  const maps = Object.values(GameMapType)
+    .filter(mapHasAssets)
+    .filter((m) => classicOf(m) === null);
   const randIdx = Math.floor(Math.random() * maps.length);
-  return maps[randIdx] as GameMapType;
+  return displayMap(maps[randIdx] as GameMapType);
 }
 
 export function getUpdatedDisabledUnits(

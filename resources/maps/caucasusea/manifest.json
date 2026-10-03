@@ -1,0 +1,188 @@
+{
+  "name": "Caucasus (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        637,
+        564
+      ],
+      "name": "Georgia",
+      "flag": "ge"
+    },
+    {
+      "coordinates": [
+        476,
+        449
+      ],
+      "name": "Abkhazia",
+      "flag": ""
+    },
+    {
+      "coordinates": [
+        674,
+        437
+      ],
+      "name": "South Ossetia",
+      "flag": ""
+    },
+    {
+      "coordinates": [
+        638,
+        341
+      ],
+      "name": "North Ossetia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1030,
+        698
+      ],
+      "name": "Azerbaijan",
+      "flag": "az"
+    },
+    {
+      "coordinates": [
+        694,
+        740
+      ],
+      "name": "Armenia",
+      "flag": "am"
+    },
+    {
+      "coordinates": [
+        942,
+        957
+      ],
+      "name": "Iran",
+      "flag": "ir"
+    },
+    {
+      "coordinates": [
+        180,
+        694
+      ],
+      "name": "Black Sea Region",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        923,
+        461
+      ],
+      "name": "Dagestan",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        829,
+        303
+      ],
+      "name": "Chechnya",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        731,
+        358
+      ],
+      "name": "Ingushetia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        568,
+        309
+      ],
+      "name": "Kabardino-Balkaria",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        433,
+        294
+      ],
+      "name": "Karachay-Cherkessia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        316,
+        199
+      ],
+      "name": "Adygea",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        317,
+        184
+      ],
+      "name": "Krasnodar Krai",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        547,
+        37
+      ],
+      "name": "Stavropol Krai",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        799,
+        43
+      ],
+      "name": "Kalmykia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        225,
+        25
+      ],
+      "name": "Rostov Oblast",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1198,
+        247
+      ],
+      "name": "Kazakhstan",
+      "flag": "kz"
+    },
+    {
+      "coordinates": [
+        1047,
+        29
+      ],
+      "name": "Astrakhan Oblast",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        519,
+        841
+      ],
+      "name": "Eastern Anatolia",
+      "flag": "tr"
+    }
+  ],
+  "map": {
+    "width": 1272,
+    "height": 980,
+    "num_land_tiles": 811605
+  },
+  "map4x": {
+    "width": 636,
+    "height": 490,
+    "num_land_tiles": 200508
+  },
+  "map16x": {
+    "width": 318,
+    "height": 245,
+    "num_land_tiles": 49024
+  }
+}

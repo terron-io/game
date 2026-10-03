@@ -28,12 +28,17 @@ export interface FrameUploadTarget {
     falloutOwnerState: Uint16Array,
     dirtyRowMin: number,
     dirtyRowMax: number,
+    dirtyRows: Uint8Array | null,
   ): void;
   applyFullTiles(tileState: Uint16Array, trailState: Uint8Array): void;
   applyDelta(changedTiles: TilePair[], trailState: Uint8Array): void;
   uploadRailroadState(data: Uint8Array): void;
   applyRailroadDust(tileRefs: number[]): void;
-  updateUnits(units: ReadonlyMap<number, UnitState>, gameTick: number): void;
+  updateUnits(
+    units: ReadonlyMap<number, UnitState>,
+    gameTick: number,
+    changedIds: readonly number[] | null,
+  ): void;
   updateStructures(units: ReadonlyMap<number, UnitState>): void;
   applyDeadUnits(deadUnits: DeadUnitFx[]): void;
   applyConquestEvents(events: ConquestFx[]): void;
@@ -108,6 +113,7 @@ export function uploadFrameData(
       frame.falloutOwnerState,
       frame.falloutOwnerDirtyRowMin,
       frame.falloutOwnerDirtyRowMax,
+      frame.falloutOwnerDirtyRows,
     );
   }
 
@@ -120,7 +126,7 @@ export function uploadFrameData(
   }
 
   // --- Units + structures ---
-  view.updateUnits(frame.units, frame.tick);
+  view.updateUnits(frame.units, frame.tick, frame.changedUnitIds);
   if (frame.structuresDirty) {
     view.updateStructures(frame.units);
   }

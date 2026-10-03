@@ -2,8 +2,10 @@ import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { isLoggedIn } from "../Auth";
 import { navPath } from "../Navigation";
+import { Host } from "../PlatformHost";
 import { hasReferral } from "../Referral";
-import { brandWordmark, isItchEmbed, L, translateText } from "../Utils";
+import { L, translateText } from "../Utils";
+import { brandLogo } from "./ui/brandLogo";
 import { NavNotificationsController } from "./NavNotificationsController";
 
 @customElement("desktop-nav-bar")
@@ -30,6 +32,10 @@ export class DesktopNavBar extends LitElement {
     window.addEventListener("showPage", this._onShowPage);
     // Адреса разделов появляются после регистрации роутера — перерисуемся.
     window.addEventListener("nav-paths-ready", this._onNavPaths);
+    // terron 09.09: словарь площадки едет кросс-доменно и может прийти позже
+    // таймеров ниже — логотип остался бы на фолбэке «terron» (модерация Яндекса:
+    // «название на английском» в шапке). Перерисовываемся по факту прихода.
+    window.addEventListener("terron-lang-loaded", this._onNavPaths);
     window.addEventListener("terron-auth-changed", this._onAuthChanged);
     window.addEventListener("gp-login-pending", this._onLoginPending);
     window.addEventListener("gp-login-done", this._onLoginDone);
@@ -50,6 +56,7 @@ export class DesktopNavBar extends LitElement {
     super.disconnectedCallback();
     window.removeEventListener("showPage", this._onShowPage);
     window.removeEventListener("nav-paths-ready", this._onNavPaths);
+    window.removeEventListener("terron-lang-loaded", this._onNavPaths);
     window.removeEventListener("terron-auth-changed", this._onAuthChanged);
     window.removeEventListener("gp-login-pending", this._onLoginPending);
     window.removeEventListener("gp-login-done", this._onLoginDone);
@@ -101,12 +108,12 @@ export class DesktopNavBar extends LitElement {
               e.preventDefault();
               void import("../SoftNavigate").then(({ softHome }) => softHome());
             }}
-            >${brandWordmark()}</a
+            >${brandLogo()}</a
           >
         </div>
         <!-- Desktop Navigation Menu Items (справа) -->
         <div class="nav-items flex items-center gap-2.5">
-          ${isItchEmbed()
+          ${Host.isItch()
             ? html`<a
                 class="nav-menu-item nav-openout"
                 href="https://terron.io/?utm_source=itchio&utm_medium=embed"

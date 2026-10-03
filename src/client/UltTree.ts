@@ -12,6 +12,8 @@ import {
   isLockedUltimate,
   isSecretUltimate,
   LOCKED_ULTIMATES,
+  UltCastDef,
+  ultCasts,
   ULTIMATE_REGISTRY,
   Ultimates,
   UnitType,
@@ -21,6 +23,12 @@ import { isLoggedIn } from "./Auth";
 import { refreshDisabledUlts } from "./DisabledUlts";
 import { softGo } from "./SoftNavigate";
 import { confirmDialog, toast } from "./Toast";
+import {
+  submitUltSuggestion,
+  SuggestField,
+  UltSuggestion,
+  validateUltSuggestion,
+} from "./UltSuggest";
 import { ultLore } from "./UltLore";
 import {
   avgWinRate,
@@ -32,7 +40,7 @@ import {
   UltStatRow,
 } from "./UltStats";
 import { refreshUltUnlocks, ultUnlocksView } from "./UltUnlocks";
-import { unitMeta } from "./UnitCatalog";
+import { unitMeta, unitNameI18nKey } from "./UnitCatalog";
 import { L, translateText } from "./Utils";
 import { BUILD_DESC_PARAMS } from "./WikiNumbers";
 
@@ -242,6 +250,20 @@ export class UltTree extends LitElement {
     this.panelMode = e.matches;
     if (this.panelMode) this.pinned = null;
   };
+  // Форма «Предложить ульту» (24.08): 4 поля → POST /ults/suggest →
+  // Telegram-чат «TERRON.io beta». Значения полей живут в sf (нереактивно,
+  // их держат сами инпуты); реактивны только открытие/отправка/ошибка.
+  @state() private suggestOpen = false;
+  @state() private suggestSent = false;
+  @state() private suggestBusy = false;
+  @state() private suggestErr: { field: SuggestField; msg: string } | null =
+    null;
+  private sf: UltSuggestion = {
+    ultName: "",
+    ultDesc: "",
+    castName: "",
+    castDesc: "",
+  };
   // Пан/зум через viewBox (пальцем тянуть, кнопками ±).
   @state() private vb = { x: -400, y: -400, w: 800, h: 800 };
   private drag: { x: number; y: number; vx: number; vy: number } | null = null;
@@ -304,16 +326,68 @@ export class UltTree extends LitElement {
     desc: string;
   } {
     const secret = isSecretUltimate(t);
-    const key = unitMeta(t)?.key ?? "";
-    const name = secret ? "????" : translateText("unit_type." + key);
+    // ⚠️ Пустой ключ дал бы «unit_type.» вместо имени МОЛЧА. Нет записи в
+    // каталоге — печатаем сырой тип: видно, что сломалось, и где.
+    const key = unitMeta(t)?.key;
+    const name = secret
+      ? "????"
+      : key === undefined
+        ? String(t)
+        : translateText("unit_type." + key);
     const desc = secret
       ? "????????"
-      : translateText("build_menu.desc." + key, BUILD_DESC_PARAMS);
+      : key === undefined
+        ? ""
+        : translateText("build_menu.desc." + key, BUILD_DESC_PARAMS);
     return { secret, name, desc };
   }
 
-  private castOf(t: UnitType) {
-    return ULTIMATE_REGISTRY.find((u) => u.type === t)?.cast;
+  private castsOf(t: UnitType): readonly UltCastDef[] {
+    const u = ULTIMATE_REGISTRY.find((x) => x.type === t);
+    return u === undefined ? [] : ultCasts(u);
+  }
+
+  /**
+   * terron 25.08: секция АКТИВ в поповере узла. Раньше рисовалась инлайном для
+   * ЕДИНСТВЕННОГО каста; у Терраформинга их три, и два просто не показывались
+   * бы в дереве — игрок не узнал бы, что ульта вообще умеет.
+   */
+  private renderCast(cast: UltCastDef, hr: TemplateResult) {
+    // Цена из скобок в начале описания — рисуем ЧИПОМ с монетой
+    // (решение владельца 24.08: «100К и иконка золота»), текст
+    // идёт без скобок.
+    const raw = translateText("build_menu.desc." + cast.key, BUILD_DESC_PARAMS);
+    const m = /^\(([^)]{1,40})\)\s*/.exec(raw);
+    const costText = m?.[1] ?? null;
+    const body = m ? raw.slice(m[0].length) : raw;
+    const castIcon = unitMeta(cast.type)?.icon;
+    return html`${hr}
+      <div
+        style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap"
+      >
+        ${castIcon
+          ? html`<span
+              style="width:26px;height:26px;border-radius:50%;background:var(--t-ink,#2b2a24);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto"
+              ><img src=${castIcon} alt="" style="width:16px;height:16px"
+            /></span>`
+          : ""}
+        <span
+          style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.55"
+          >${L("Актив", "Active")} ·
+          ${translateText("unit_type." + cast.key)}</span
+        >
+        ${costText
+          ? html`<span
+              style="display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(0,0,0,.25);border-radius:8px;padding:2px 8px;font-weight:800;font-size:11.5px;flex:0 0 auto"
+              ><img
+                src=${goldIcon}
+                alt=""
+                style="width:12px;height:12px"
+              />${costText}</span
+            >`
+          : ""}
+      </div>
+      <p style="font-size:13.5px;line-height:1.5;margin:0">${body}</p>`;
   }
 
   private select(t: UnitType) {
@@ -451,7 +525,9 @@ export class UltTree extends LitElement {
   private async buy(t: UnitType) {
     const def = LOCKED_ULTIMATES[t];
     if (!def) return;
-    const name = translateText("unit_type." + (unitMeta(t)?.key ?? ""));
+    // Имя — через общий каталог; нет записи → сырой тип, но не чужое имя.
+    const nk = unitNameI18nKey(t);
+    const name = nk === undefined ? String(t) : translateText(nk);
     const ok = await confirmDialog(
       L(
         `Открыть «${name}» за ${def.pricePts} кровавых алмазов?`,
@@ -601,7 +677,7 @@ export class UltTree extends LitElement {
     if (!meta) return html``;
     // Секрет: ни имени, ни описания, ни секций — только «????».
     const { secret, name, desc } = this.displayOf(t);
-    const cast = secret ? undefined : this.castOf(t);
+    const casts = secret ? [] : this.castsOf(t);
     const locked = isLockedUltimate(t) && !secret;
     const def = LOCKED_ULTIMATES[t];
     const info = this.info(t);
@@ -638,53 +714,7 @@ export class UltTree extends LitElement {
           : html`${secret
         ? html`<p style="font-size:14px;line-height:1.5;margin:0">${desc}</p>`
         : html`<p style="font-size:13.5px;line-height:1.5;margin:0">${desc}</p>
-            ${cast
-              ? (() => {
-                  // Цена из скобок в начале описания — рисуем ЧИПОМ с монетой
-                  // (решение владельца 24.08: «100К и иконка золота»), текст
-                  // идёт без скобок.
-                  const raw = translateText(
-                    "build_menu.desc." + cast.key,
-                    BUILD_DESC_PARAMS,
-                  );
-                  const m = /^\(([^)]{1,40})\)\s*/.exec(raw);
-                  const costText = m?.[1] ?? null;
-                  const body = m ? raw.slice(m[0].length) : raw;
-                  const castIcon = unitMeta(cast.type)?.icon;
-                  return html`${hr}
-                    <div
-                      style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap"
-                    >
-                      ${castIcon
-                        ? html`<span
-                            style="width:26px;height:26px;border-radius:50%;background:var(--t-ink,#2b2a24);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto"
-                            ><img
-                              src=${castIcon}
-                              alt=""
-                              style="width:16px;height:16px"
-                          /></span>`
-                        : ""}
-                      <span
-                        style="font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.55"
-                        >${L("Актив", "Active")} ·
-                        ${translateText("unit_type." + cast.key)}</span
-                      >
-                      ${costText
-                        ? html`<span
-                            style="display:inline-flex;align-items:center;gap:4px;border:1.5px solid rgba(0,0,0,.25);border-radius:8px;padding:2px 8px;font-weight:800;font-size:11.5px;flex:0 0 auto"
-                            ><img
-                              src=${goldIcon}
-                              alt=""
-                              style="width:12px;height:12px"
-                            />${costText}</span
-                          >`
-                        : ""}
-                    </div>
-                    <p style="font-size:13.5px;line-height:1.5;margin:0">
-                      ${body}
-                    </p>`;
-                })()
-              : ""}
+            ${casts.map((c) => this.renderCast(c, hr))}
             ${locked && def && !owned
               ? html`${hr}
                   <div style="font-size:13px">
@@ -950,12 +980,222 @@ export class UltTree extends LitElement {
     </div>`;
   }
 
+  private openSuggest() {
+    this.sf = { ultName: "", ultDesc: "", castName: "", castDesc: "" };
+    this.suggestSent = false;
+    this.suggestErr = null;
+    this.suggestOpen = true;
+  }
+
+  private async sendSuggestion() {
+    const err = validateUltSuggestion(this.sf);
+    if (err) {
+      this.suggestErr = err;
+      return;
+    }
+    this.suggestErr = null;
+    this.suggestBusy = true;
+    const res = await submitUltSuggestion(this.sf);
+    this.suggestBusy = false;
+    if (res === "ok") {
+      this.suggestSent = true;
+    } else if (res === "limit_day") {
+      toast(
+        L(
+          "Лимит: не больше 5 предложений в сутки — возвращайся завтра",
+          "Limit: at most 5 suggestions per day — come back tomorrow",
+        ),
+        "error",
+      );
+    } else if (res === "limit_hour") {
+      toast(
+        L(
+          "За этот час предложений уже много — попробуй чуть позже",
+          "Too many suggestions this hour — try again a bit later",
+        ),
+        "error",
+      );
+    } else {
+      toast(
+        L(
+          "Не удалось отправить — попробуй ещё раз чуть позже",
+          "Failed to send — try again in a bit",
+        ),
+        "error",
+      );
+    }
+  }
+
+  private suggestInput(
+    field: SuggestField,
+    label: string,
+    opts: { area?: boolean; placeholder?: string; hint?: string } = {},
+  ): TemplateResult {
+    const bad = this.suggestErr?.field === field;
+    const style =
+      `width:100%;box-sizing:border-box;padding:8px 10px;font:inherit;` +
+      `font-size:13px;background:#fff;color:var(--t-ink,#2b2a24);` +
+      `border:1px solid ${bad ? "var(--t-red,#c0392b)" : "rgba(0,0,0,.3)"}`;
+    const onInput = (e: Event) => {
+      this.sf[field] = (e.target as HTMLInputElement).value;
+      if (this.suggestErr?.field === field) this.suggestErr = null;
+    };
+    return html`<label style="display:block;margin-top:12px">
+      <div style="font-size:12px;font-weight:800;margin-bottom:4px">
+        ${label}
+      </div>
+      ${opts.area
+        ? html`<textarea
+            rows="3"
+            maxlength="600"
+            style="${style};resize:vertical"
+            placeholder=${opts.placeholder ?? ""}
+            @input=${onInput}
+          ></textarea>`
+        : html`<input
+            type="text"
+            maxlength="64"
+            style=${style}
+            placeholder=${opts.placeholder ?? ""}
+            @input=${onInput}
+          />`}
+      ${bad
+        ? html`<div
+            style="font-size:12px;color:var(--t-red,#c0392b);margin-top:3px"
+          >
+            ${this.suggestErr?.msg}
+          </div>`
+        : ""}
+      ${opts.hint
+        ? html`<div style="font-size:11px;opacity:.6;margin-top:3px">
+            ${opts.hint}
+          </div>`
+        : ""}
+    </label>`;
+  }
+
+  private renderSuggestModal(): TemplateResult {
+    if (!this.suggestOpen) return html``;
+    const body = this.suggestSent
+      ? html`<div style="text-align:center;padding:18px 6px">
+          <div style="font-size:34px">📨</div>
+          <div style="font-weight:800;font-size:15px;margin-top:8px">
+            ${L("Предложение отправлено!", "Suggestion sent!")}
+          </div>
+          <div
+            style="font-size:13px;line-height:1.5;margin-top:6px;opacity:.85"
+          >
+            ${L("Оно уже улетело в Telegram-чат ", "It just landed in the ")}
+            <a
+              href="https://t.me/terron_chat"
+              target="_blank"
+              rel="noopener"
+              style="color:var(--t-red,#b3261e);font-weight:800;text-decoration:underline"
+              >TERRON.io beta</a
+            >${L(
+              " — там его обсудят. Спасибо!",
+              " Telegram chat for discussion. Thanks!",
+            )}
+          </div>
+          <button
+            @click=${() => (this.suggestOpen = false)}
+            style="margin-top:16px;padding:9px 22px;border:2px solid var(--t-ink,#2b2a24);background:var(--t-ink,#2b2a24);color:#fff;font-weight:800;font-size:13px;cursor:pointer"
+          >
+            ${L("Закрыть", "Close")}
+          </button>
+        </div>`
+      : html`
+          <div
+            style="font-size:12px;line-height:1.5;opacity:.75;margin-top:6px"
+          >
+            ${L(
+              "Придумал ульту? Опиши её — предложение улетит в Telegram-чат «TERRON.io beta».",
+              "Got an idea for an ultimate? Describe it — it goes straight to the “TERRON.io beta” Telegram chat.",
+            )}
+          </div>
+          ${this.suggestInput("ultName", L("Название ульты", "Ultimate name"), {
+            placeholder: L("Например: «Циклон»", "e.g. “Cyclone”"),
+          })}
+          ${this.suggestInput(
+            "ultDesc",
+            L("Описание ульты", "Ultimate description"),
+            {
+              area: true,
+              placeholder: L(
+                "Что делает, пока стоит штаб?",
+                "What does it do while the HQ stands?",
+              ),
+            },
+          )}
+          ${this.suggestInput(
+            "castName",
+            L("Название активки", "Active ability name"),
+          )}
+          ${this.suggestInput(
+            "castDesc",
+            L("Описание активки", "Active ability description"),
+            {
+              area: true,
+              hint: L(
+                "Не придумал активку? Напиши «не придумал» — так тоже сойдёт. Но лучше постарайся описать.",
+                "No idea for the active? Writing “didn't come up with one” is fine too — but try to describe it.",
+              ),
+            },
+          )}
+          <button
+            ?disabled=${this.suggestBusy}
+            @click=${() => this.sendSuggestion()}
+            style="margin-top:16px;width:100%;padding:11px;border:2px solid var(--t-ink,#2b2a24);background:var(--t-ink,#2b2a24);color:#fff;font-weight:800;font-size:14px;cursor:pointer;opacity:${this
+              .suggestBusy
+              ? ".6"
+              : "1"}"
+          >
+            ${this.suggestBusy
+              ? L("Отправляю…", "Sending…")
+              : L("Отправить предложение", "Send suggestion")}
+          </button>
+        `;
+    return html`<div
+      @click=${(e: Event) => {
+        if (e.target === e.currentTarget) this.suggestOpen = false;
+      }}
+      style="position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:14px"
+    >
+      <div
+        class="ult-pop"
+        style="width:min(440px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain;background:var(--t-sheet,#fff);color:var(--t-ink,#2b2a24);border:2px solid var(--t-ink,#2b2a24);padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.4)"
+      >
+        <div
+          style="display:flex;align-items:center;justify-content:space-between"
+        >
+          <div style="font-weight:800;font-size:16px">
+            💡 ${L("Предложить ульту", "Suggest an ultimate")}
+          </div>
+          <button
+            @click=${() => (this.suggestOpen = false)}
+            aria-label=${L("Закрыть", "Close")}
+            style="border:0;background:none;font-size:20px;font-weight:800;cursor:pointer;color:var(--t-ink,#2b2a24);padding:2px 6px"
+          >
+            ✕
+          </button>
+        </div>
+        ${body}
+      </div>
+    </div>`;
+  }
+
   render() {
     const map = html`<div style="position:relative;flex:1 1 auto;min-width:0">
       ${this.renderSvg()}
       ${this.panelMode
         ? ""
         : html`${this.renderHoverTip()} ${this.renderPinned()}`}
+      <button
+        @click=${() => this.openSuggest()}
+        style="position:absolute;left:10px;top:10px;padding:8px 12px;border:1px solid rgba(0,0,0,.2);background:var(--t-sheet,#fff);color:var(--t-ink,#2b2a24);font-weight:800;font-size:12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)"
+      >
+        💡 ${L("Предложить +", "Suggest +")}
+      </button>
       <div
         style="position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px"
       >
@@ -998,6 +1238,7 @@ export class UltTree extends LitElement {
           "Drag to pan · tap a node for details",
         )}
       </div>
+      ${this.renderSuggestModal()}
     </div>`;
   }
 }

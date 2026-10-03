@@ -130,6 +130,8 @@ export class GameRunner {
   // отставания: сетевые лаги под порог не попадают, режим включается только на
   // реальном догоне (реконнект/F5/поздний вход).
   private static readonly CATCHUP_TURNS = 20;
+  /** В догоне подписи пересчитываем раз в столько тиков (вне догона — раз в 10). */
+  private static readonly CATCHUP_NAMES_EVERY = 50;
   private wasCatchingUp = false;
 
   constructor(
@@ -147,6 +149,8 @@ export class GameRunner {
     if (this.game.config().spawnNations()) {
       this.game.addExecution(...this.execManager.nationExecutions());
     }
+    // terron 23.09: честные боты лобби /fair (конфиг ставит только сервер).
+    this.game.addExecution(...this.execManager.fairBotExecutions());
     if (this.game.config().isRandomSpawn()) {
       this.game.addExecution(...this.execManager.spawnPlayers());
     }
@@ -248,6 +252,13 @@ export class GameRunner {
       // (NameViewData = только x/y/size; текст ника клиент берёт из
       // PlayerView, так что смена имени/предателя тут не при чём.)
       const force = spawnJustEnded || catchupJustEnded || this.game.ticks() < 3;
+      // terron 13.09 (репорт с Android: «размер шрифта — не видно ни буя»): в
+      // догоне подписи не пересчитывались ВООБЩЕ, а медленный телефон (p10 —
+      // 7.7 тика/с при 10 от сервера) сидит в догоне весь матч — подписи
+      // застывали размером со стартовый клочок. Теперь в догоне пересчитываем
+      // реже (раз в CATCHUP_NAMES_EVERY тиков), а не никогда.
+      const evalChanged =
+        !catchingUp || this.game.ticks() % GameRunner.CATCHUP_NAMES_EVERY === 0;
       // terron: playerViewData — накопительная мапа позиций имён. game.players()
       // возвращает только ЖИВЫХ, поэтому мёртвые в ней ЗАВИСАЛИ навсегда и
       // слались клиенту каждый тик (в матче на 400 наций — сотни мёртвых
@@ -259,9 +270,8 @@ export class GameRunner {
         if (
           force ||
           this.playerViewData[p.id()] === undefined ||
-          // В догоне периодический пересчёт пропускаем — только тем, у кого
-          // записи ещё нет вообще.
-          (!catchingUp && p.lastTileChange() >= this.lastNamesTick)
+          // В догоне — реже (evalChanged), а не никогда: см. выше.
+          (evalChanged && p.lastTileChange() >= this.lastNamesTick)
         ) {
           this.playerViewData[p.id()] = placeName(this.game, p);
         }
@@ -269,7 +279,9 @@ export class GameRunner {
       for (const id of Object.keys(this.playerViewData)) {
         if (!alive.has(id)) delete this.playerViewData[id];
       }
-      this.lastNamesTick = this.game.ticks();
+      // Метку сдвигаем, только если изменения реально проверяли: иначе земля,
+      // сменившаяся в пропущенных тиках догона, выпала бы из пересчёта.
+      if (force || evalChanged) this.lastNamesTick = this.game.ticks();
       namesChanged = true;
     }
 

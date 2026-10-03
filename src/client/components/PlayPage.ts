@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { getMyProfile } from "../Api";
 import { L } from "../Utils";
+import { brandLogo } from "./ui/brandLogo";
 import type { UsernameInput } from "../UsernameInput";
 import "../SkinBarPreview";
 import "../SkinInput";
@@ -23,6 +24,8 @@ export class PlayPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // словарь площадки едет кросс-доменно — логотип перерисуем, когда доехал
+    window.addEventListener("terron-lang-loaded", this._onLangLoaded);
     window.addEventListener(
       "username-validity-change",
       this.handleValidityChange,
@@ -72,6 +75,8 @@ export class PlayPage extends LitElement {
     gms?.joinFfa?.();
   };
 
+  private _onLangLoaded = () => this.requestUpdate();
+
   render() {
     return html`
       <div
@@ -116,9 +121,14 @@ export class PlayPage extends LitElement {
             <div
               class="col-start-2 flex items-center justify-center min-w-0"
             >
+              <!-- terron 11.09: ТРЕТЬЕ место логотипа (мобильная верхняя панель) —
+                   именно его модерация Яндекса и снимала как «TERRON»: навбары
+                   давно рисуют имя из словаря, а тут стоял хардкод. Теперь тот же
+                   brandLogo(); капс снимает тема под gp-embed (.terron-logo-top). -->
               <span
-                style="font-family:var(--t-display);font-weight:700;letter-spacing:.18em;text-transform:uppercase;font-size:20px;line-height:1;color:var(--t-ink,#2b2a24)"
-                >terron</span
+                class="terron-logo-top"
+                style="font-family:var(--t-display);font-weight:700;letter-spacing:.18em;font-size:20px;line-height:1;color:var(--t-ink,#2b2a24)"
+                >${brandLogo()}</span
               >
             </div>
 

@@ -13,7 +13,12 @@
  * Новый юнит/каст ничего не рисует «по месту»: он либо попадает под общее
  * правило, либо получает строку в списке исключений ниже.
  */
-import { Structures, ULTIMATE_REGISTRY, UnitType } from "../core/game/Game";
+import {
+  Structures,
+  ultCasts,
+  ULTIMATE_REGISTRY,
+  UnitType,
+} from "../core/game/Game";
 
 export type GhostKind =
   /** Звезда с иконкой (все строения и ульт-штабы) — рисует StructurePass. */
@@ -55,7 +60,9 @@ export function ghostKindFor(type: UnitType, rangeRadius: number): GhostKind {
   if (rangeRadius > 0) return "circle";
   // Каст, объявивший зону в реестре, но пока не получивший радиус (например,
   // орудия ещё нет) — всё равно НЕ крестик: у него своя зона по смыслу.
-  const cast = ULTIMATE_REGISTRY.find((u) => u.cast?.type === type)?.cast;
+  const cast = ULTIMATE_REGISTRY.flatMap((u) => ultCasts(u)).find(
+    (c) => c.type === type,
+  );
   if (cast !== undefined && cast.previewRadius > 0) return "circle";
   return "crosshair";
 }

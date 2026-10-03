@@ -18,19 +18,40 @@
 // Стиль намеренно как у `Toast.confirmDialog` — обычный DOM без Lit: модалка
 // нужна и на сайте, и поверх игрового HUD.
 
+import { gameOrigin } from "./GameHost";
+import { Host } from "./PlatformHost";
 import { L, getCurrentLang } from "./Utils";
 
-export type LegalDoc = "privacy" | "terms";
+// terron 25.09: + "graphics" — гайд «сбоит графика» (/graphics-help). Окно сбоя
+// графики открывает его этой же модалкой поверх матча: игрок читает инструкцию,
+// не уходя из игры, а внутри площадки не появляется ссылки наружу.
+export type LegalDoc = "privacy" | "terms" | "graphics";
 
-const DOC_URL: Record<LegalDoc, string> = {
+// terron 07.09: АДРЕС ДОКУМЕНТА — АБСОЛЮТНЫЙ В ПЛАТФОРМЕННОЙ СБОРКЕ.
+//
+// Было `/privacy` и `/terms` — пути ОТ КОРНЯ. Пока страница лежит на нашем
+// домене, это верно; но билд для дистрибуции лежит на хостинге GamePush
+// (`s3.eponesh.com/games/draft/28774/v1/`), и запрос уходил на `s3.eponesh.com/terms`
+// → 404 → модалка с «Не удалось загрузить документ». Именно это увидела
+// модерация Яндекса 07.09 («ссылки снизу справа не работают»). Тот же класс, что
+// уже чинили у `/exists`, `create_game` и кода воркера: относительный путь на
+// чужом хостинге. `gameOrigin()` в обычной сборке пуст — поведение прежнее.
+const DOC_PATH: Record<LegalDoc, string> = {
   privacy: "/privacy",
   terms: "/terms",
+  graphics: "/graphics-help",
 };
+
+function docUrl(doc: LegalDoc): string {
+  return `${gameOrigin()}${DOC_PATH[doc]}`;
+}
 
 /** Готовый (очищенный) HTML документа — качаем один раз за сессию. */
 const cache = new Map<string, string>();
 
 function docTitle(doc: LegalDoc): string {
+  if (doc === "graphics")
+    return L("Сбоит графика — что делать", "Graphics failing — what to do");
   return doc === "privacy"
     ? L("Политика конфиденциальности", "Privacy Policy")
     : L("Пользовательское соглашение", "Terms of Service");
@@ -38,10 +59,7 @@ function docTitle(doc: LegalDoc): string {
 
 /** Игра внутри iframe площадки — там уводить наружу нельзя вообще. */
 function onPlatform(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("gp-embed")
-  );
+  return Host.inPlatformFrame();
 }
 
 /**
@@ -80,7 +98,15 @@ export function extractDoc(
       const href = a.getAttribute("href") ?? "";
       if (href.startsWith("mailto:")) return;
       const span = document.createElement("span");
-      span.textContent = a.textContent ?? "";
+      // «terron.io/account/delete» текстом модерация тоже читает как ссылку —
+      // внутри площадки называем страницу словами (она открывается из настроек
+      // аккаунта, адрес там не нужен).
+      span.textContent = /\/account\/delete$/.test(href)
+        ? L(
+            "удаления аккаунта (Настройки → Аккаунт)",
+            "account deletion (Settings → Account)",
+          )
+        : (a.textContent ?? "");
       a.replaceWith(span);
     });
   } else {
@@ -96,15 +122,18 @@ async function loadDoc(doc: LegalDoc): Promise<string> {
   const key = `${doc}:${getCurrentLang() === "ru" ? "ru" : "en"}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const res = await fetch(DOC_URL[doc], { credentials: "omit" });
+  const res = await fetch(docUrl(doc), { credentials: "omit" });
   if (!res.ok) throw new Error(`legal doc ${doc}: HTTP ${res.status}`);
   const html = extractDoc(await res.text());
   cache.set(key, html);
   return html;
 }
 
-/** Открыть документ модалкой поверх игры/сайта. */
-export function openLegalDoc(doc: LegalDoc): void {
+/**
+ * Открыть документ модалкой поверх игры/сайта. `section` — раздел гайда
+ * (`data-sec` в разметке страницы): модалка сразу прокручивает к нему.
+ */
+export function openLegalDoc(doc: LegalDoc, section?: string): void {
   const overlay = document.createElement("div");
   overlay.className = "terron-legal-overlay";
   overlay.style.cssText =
@@ -169,17 +198,26 @@ export function openLegalDoc(doc: LegalDoc): void {
     .then((html) => {
       body.innerHTML = html;
       body.scrollTop = 0;
+      const target = section
+        ? body.querySelector<HTMLElement>(`[data-sec="${CSS.escape(section)}"]`)
+        : null;
+      if (target) {
+        body.scrollTop =
+          target.getBoundingClientRect().top -
+          body.getBoundingClientRect().top -
+          8;
+      }
     })
     .catch((e) => {
       console.warn("[legal] документ не загрузился:", e);
       body.textContent = L(
         "Не удалось загрузить документ. Он доступен на terron.io" +
-          (doc === "privacy" ? "/privacy" : "/terms"),
+          DOC_PATH[doc],
         "Failed to load the document. It is available at terron.io" +
-          (doc === "privacy" ? "/privacy" : "/terms"),
+          DOC_PATH[doc],
       );
       // Вне площадки честнее просто показать страницу; внутри — нельзя уводить.
-      if (!onPlatform()) window.open(DOC_URL[doc], "_blank", "noopener");
+      if (!onPlatform()) window.open(docUrl(doc), "_blank", "noopener");
     });
 }
 
@@ -199,6 +237,11 @@ function ensureStyles(): void {
 .terron-legal-body a{color:#b3261e;font-weight:600}
 .terron-legal-body .updated-date{opacity:.6;font-size:12px}
 .terron-legal-body .lang-switch{display:none}
+.terron-legal-body .langbar{display:none}
+.terron-legal-body .sheet{background:#fffdf5;border:1px solid #d8cfa8;border-radius:6px;padding:10px 14px;margin:8px 0 12px}
+.terron-legal-body ol{margin:0 0 12px;padding-left:20px}
+.terron-legal-body code{background:#f1ead2;border:1px solid #d8cfa8;border-radius:3px;padding:0 5px;font:13px/1.4 ui-monospace,Consolas,monospace;user-select:all;word-break:break-word}
+.terron-legal-body .note{opacity:.75;font-size:13px}
 `;
   document.head.appendChild(st);
 }

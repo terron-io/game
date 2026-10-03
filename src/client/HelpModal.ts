@@ -6,8 +6,8 @@ import { UserSettings } from "../core/game/UserSettings";
 import { BaseModal } from "./components/BaseModal";
 import "./components/Difficulties";
 import { modalHeader } from "./components/ui/ModalHeader";
-import { GamePushSDK } from "./GamePushSDK";
 import { isNativeApp, Platform } from "./Platform";
+import { Host } from "./PlatformHost";
 import { TroubleshootingModal } from "./TroubleshootingModal";
 import { launchTutorial, tutorialButton } from "./Tutorial";
 
@@ -15,7 +15,7 @@ import { launchTutorial, tutorialButton } from "./Tutorial";
  *  Вынесено из компонента, чтобы условие было под тестом, а не проверялось
  *  «на глаз» после каждого выката на площадку. */
 export function helpScreenshotsHidden(): boolean {
-  return GamePushSDK.platformType() === "YANDEX";
+  return Host.isYandex();
 }
 
 @customElement("help-modal")

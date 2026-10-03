@@ -37,7 +37,11 @@ export interface Stats {
   dronedBuilding(player: Player): void;
   // terron 24.08: топливная цепочка. Пик суммы уровней фабрик за матч.
   factoryLevels(player: Player, sum: number): void;
+  /** terron: ШАГАЮЩИЙ ГОРОД — пик суммы уровней ВСЕХ зданий одновременно. */
+  buildingLevels(player: Player, sum: number): void;
   // Поезд отправлен со своей станции.
+  /** terron 01.09: пущена ракета «Реки вспять» (ключ Терраформинга). */
+  waterNukeLaunch(player: Player): void;
   trainSent(player: Player): void;
   // Ульт-здание (чужое или своё) снесено выстрелом Доры.
   railgunUltKill(player: Player): void;

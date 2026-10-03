@@ -8,14 +8,32 @@ import { GameMap, TileRef } from "./GameMap";
 
 const WATER_GRAPH_REBUILD_INTERVAL = 20;
 
+/**
+ * terron 25.08: ТЕРРАФОРМИНГ — высота свежеподнятой суши.
+ *
+ * `magnitude` у суши = рельеф: <10 равнина, <20 холмы, ≥20 горы
+ * (`GameMap.terrainType`). Насыпь даёт РАВНИНУ — она же дешевле в проходе
+ * (`GameMap.cost`), а «гора посреди моря» выглядела бы как ошибка генератора.
+ */
+const RAISED_LAND_MAGNITUDE = 5;
+
 export class WaterManager {
   private _miniWaterGraph: AbstractGraph | null = null;
   private _miniWaterHPA: AStarWaterHierarchical | null = null;
   private _waterGraphVersion: number = 0;
+  // terron 30.08 (перф): версия РЕЛЬЕФА — растёт в момент, когда суша стала водой
+  // или наоборот. Отличается от _waterGraphVersion, который бампается только при
+  // пересборке графа путей (по интервалу) и потому для кэшей «берег ли этот
+  // тайл» отстаёт. Читатель: SharedWaterCache.
+  private _terrainVersion: number = 0;
   private _waterGraphDirty: boolean = false;
+  // terron 25.08: ТЕРРАФОРМИНГ — «перестроить граф немедленно» (подъём земли).
+  private _waterGraphUrgent: boolean = false;
   private _waterGraphLastRebuildTick: number = 0;
 
   private _pendingWaterTiles: Set<TileRef> = new Set();
+  // terron 25.08: ТЕРРАФОРМИНГ — очередь обратной конверсии (вода → суша).
+  private _pendingLandTiles: Set<TileRef> = new Set();
   private _dirtyMiniTiles: Set<TileRef> = new Set();
 
   // Reusable stamp-based distance tracking for magnitude BFS (avoids allocation per nuke)
@@ -43,6 +61,11 @@ export class WaterManager {
     this._pendingWaterTiles.add(tile);
   }
 
+  /** terron 25.08: ТЕРРАФОРМИНГ — поднять воду в сушу (флашится в tick). */
+  queueLandTile(tile: TileRef): void {
+    this._pendingLandTiles.add(tile);
+  }
+
   /**
    * Flush pending water conversions, run terrain fixup (ocean/magnitude/shoreline/minimap),
    * and throttled graph rebuild. Returns tiles whose terrain changed (for recording).
@@ -64,7 +87,32 @@ export class WaterManager {
       }
       this._pendingWaterTiles.clear();
       if (converted.length > 0) {
-        this.finalizeWaterChanges(converted, changedTiles);
+        this.finalizeTerrainChanges(converted, changedTiles, true);
+      }
+    }
+
+    // terron 25.08: ТЕРРАФОРМИНГ — обратный флаш (вода → суша). Отдельным
+    // проходом, а не общим списком: фиксапы у направлений разные (растекание
+    // «океана» нужно только затоплению), а смешивать их в одном наборе значит
+    // считать оба каждый раз.
+    if (this._pendingLandTiles.size > 0) {
+      const raised: TileRef[] = [];
+      for (const tile of this._pendingLandTiles) {
+        // Тайл мог стать сушей между постановкой в очередь и флашем
+        // (две «Насыпи» в один тик по пересекающимся воронкам).
+        if (this.map.isWater(tile)) {
+          this.map.setLand(tile, RAISED_LAND_MAGNITUDE);
+          raised.push(tile);
+        }
+      }
+      this._pendingLandTiles.clear();
+      if (raised.length > 0) {
+        this.finalizeTerrainChanges(raised, changedTiles, false);
+        // ⚠️ Подъём земли перестраиваем БЕЗ троттла (в отличие от затопления):
+        // пока граф старый, лодки идут по кэшированным путям СКВОЗЬ новую
+        // сушу. Затопление обратной проблемы не создаёт (лишняя вода никому
+        // не мешает), поэтому там 20-тиковый троттл остаётся.
+        this._waterGraphUrgent = true;
       }
     }
 
@@ -72,10 +120,12 @@ export class WaterManager {
     if (
       this._waterGraphDirty &&
       !this.disableNavMesh &&
-      currentTick - this._waterGraphLastRebuildTick >=
-        WATER_GRAPH_REBUILD_INTERVAL
+      (this._waterGraphUrgent ||
+        currentTick - this._waterGraphLastRebuildTick >=
+          WATER_GRAPH_REBUILD_INTERVAL)
     ) {
       this._waterGraphDirty = false;
+      this._waterGraphUrgent = false;
       this._waterGraphLastRebuildTick = currentTick;
       const graphBuilder = new AbstractGraphBuilder(
         this.miniMap,
@@ -98,6 +148,10 @@ export class WaterManager {
 
   waterGraphVersion(): number {
     return this._waterGraphVersion;
+  }
+
+  terrainVersion(): number {
+    return this._terrainVersion;
   }
 
   miniWaterHPA(): PathFinder<number> | null {
@@ -178,12 +232,24 @@ export class WaterManager {
     return false;
   }
 
-  private finalizeWaterChanges(
+  /**
+   * Пересчёт всего, что зависит от рельефа, вокруг изменённых тайлов:
+   * бит «океан», magnitude воды, береговые биты, мини-карта, водный граф.
+   *
+   * terron 25.08: раньше функция называлась `finalizeWaterChanges` и умела
+   * только «суша → вода». `toWater` разделяет ДВА прохода, которые у
+   * направлений разные (растекание океана и правило мини-карты); остальные —
+   * пересчёт magnitude и берегов — написаны по ТЕКУЩЕМУ состоянию карты и
+   * работают в обе стороны без единой правки.
+   */
+  private finalizeTerrainChanges(
     convertedTiles: TileRef[],
     changedTiles: TileRef[],
+    toWater: boolean,
   ): void {
     const converted = new Set<TileRef>(convertedTiles);
     if (converted.size === 0) return;
+    this._terrainVersion++;
 
     const map = this.map;
     const w = map.width();
@@ -212,17 +278,23 @@ export class WaterManager {
     const nb: TileRef[] = new Array(8);
 
     // ── 1. Propagate ocean bit ─────────────────────────────────────
+    // terron: только при затоплении. Поднятая суша бита «океан» не несёт
+    // (setLand пишет байт целиком), а ОТНИМАТЬ его у отрезанного насыпью
+    // моря мы намеренно не пытаемся: это заливка всего водоёма, до пол-карты
+    // на каждый каст. Известное ограничение — отрезанное море считается
+    // океаном (вышку/блокаду там ставить можно). new-units/TERRA.md
     const oceanQueue: TileRef[] = [];
-    for (const tile of converted) {
-      const end = pushNeighbors(tile, nb, 0);
-      for (let i = 0; i < end; i++) {
-        if (!converted.has(nb[i]) && map.isOcean(nb[i])) {
-          map.setOcean(tile);
-          oceanQueue.push(tile);
-          break;
+    if (toWater)
+      for (const tile of converted) {
+        const end = pushNeighbors(tile, nb, 0);
+        for (let i = 0; i < end; i++) {
+          if (!converted.has(nb[i]) && map.isOcean(nb[i])) {
+            map.setOcean(tile);
+            oceanQueue.push(tile);
+            break;
+          }
         }
       }
-    }
     let oHead = 0;
     while (oHead < oceanQueue.length) {
       const tile = oceanQueue[oHead++];
@@ -397,6 +469,11 @@ export class WaterManager {
     }
 
     // ── 4. Update minimap terrain ──────────────────────────────────
+    // ИНВАРИАНТ мини-карты (апстрим): клетка 2×2 считается ВОДОЙ, только если
+    // воды в ней ≥3 из 4. Затопление проверяет его «сверху» (стало ≥3 — топим
+    // клетку), подъём земли — «снизу»: воды осталось <3 → клетка обязана
+    // стать сушей. Правило ОДНО, просто применяется с двух сторон; иначе
+    // насыпь оставила бы на мини-карте проход, которого на карте уже нет.
     const miniTilesToCheck = new Set<TileRef>();
     const convertedMiniTiles = new Set<TileRef>();
     for (const tile of converted) {
@@ -407,7 +484,10 @@ export class WaterManager {
       }
     }
     for (const miniTile of miniTilesToCheck) {
-      if (!this.miniMap.isLand(miniTile)) continue;
+      if (
+        toWater ? !this.miniMap.isLand(miniTile) : this.miniMap.isLand(miniTile)
+      )
+        continue;
       const fx = this.miniMap.x(miniTile) * 2;
       const fy = this.miniMap.y(miniTile) * 2;
       let waterCount = 0;
@@ -422,16 +502,26 @@ export class WaterManager {
           }
         }
       }
-      if (waterCount >= Math.min(3, totalCount)) {
+      const stillWater = waterCount >= Math.min(3, totalCount);
+      if (toWater && stillWater) {
         this.miniMap.setWater(miniTile);
+        convertedMiniTiles.add(miniTile);
+      } else if (!toWater && !stillWater) {
+        this.miniMap.setLand(miniTile, RAISED_LAND_MAGNITUDE);
         convertedMiniTiles.add(miniTile);
       }
     }
 
     // ── 5. Mark water graph dirty (rebuilt lazily, throttled) ─────
-    if (convertedMiniTiles.size > 0) {
+    // terron: при ПОДЪЁМЕ земли грязными помечаем ВСЕ задетые клетки, даже
+    // те, что не перевернулись: пересборка графа бампает версию, а по версии
+    // корабли бросают кэшированные пути. Иначе флот ещё секунды идёт сквозь
+    // свежий перешеек. Пустой набор грязных клеток = ПОЛНАЯ пересборка графа
+    // (см. AbstractGraphBuilder) — поэтому список важен, а не только флаг.
+    const dirty = toWater ? convertedMiniTiles : miniTilesToCheck;
+    if (dirty.size > 0) {
       this._waterGraphDirty = true;
-      for (const mt of convertedMiniTiles) {
+      for (const mt of dirty) {
         this._dirtyMiniTiles.add(mt);
       }
     }

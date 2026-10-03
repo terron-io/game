@@ -1,6 +1,7 @@
 import { Centrifuge, type Subscription } from "centrifuge";
 import { getApiBase } from "./Api";
 import { getAuthHeader } from "./Auth";
+import { deviceTraceHeaders } from "./DeviceTrace";
 import {
   acceptFriendRequest,
   claimFriendRequests,
@@ -49,7 +50,10 @@ class FriendsNotifierImpl {
 
   private async fetchToken(): Promise<string> {
     const res = await fetch(`${getApiBase()}/realtime/token`, {
-      headers: { authorization: await getAuthHeader() },
+      headers: {
+        authorization: await getAuthHeader(),
+        ...deviceTraceHeaders(),
+      },
     });
     if (!res.ok) throw new Error("token failed");
     const j = (await res.json()) as {
@@ -129,6 +133,12 @@ class FriendsNotifierImpl {
       requestId?: string;
       by?: string;
     };
+    // terron 22.09: новое ЛС в закрытом диалоге — отдаём панели чатов
+    // (SiteChatPanel слушает window-событие); свой поп-ап не рисуем.
+    if (d?.kind === "dm") {
+      window.dispatchEvent(new CustomEvent("terron-dm", { detail: d }));
+      return;
+    }
     if (d?.kind === "friend_lobby" && d.gameID) {
       const name = d.friend?.name || L("Друг", "Friend");
       this.lobbies.set(d.gameID, {

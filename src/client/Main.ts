@@ -68,7 +68,6 @@ import "./FriendsPage";
 import { GameInfoModal } from "./GameInfoModal";
 import "./GameModeSelector";
 import { GameModeSelector } from "./GameModeSelector";
-import { GamePushSDK } from "./GamePushSDK";
 import { GameStartingModal } from "./GameStartingModal";
 import { HelpModal } from "./HelpModal";
 import { HostLobbyModal as HostPrivateLobbyModal } from "./HostLobbyModal";
@@ -82,8 +81,14 @@ import "./LobbyDock";
 import { loadLocalGame, pruneLocalGames } from "./LocalGameStore";
 import { applyNamedSkinWithTimeout, namedSkinRef } from "./NamedSkin";
 import { captureLobbyReferral, captureReferralFromUrl } from "./Referral";
+import { siteChat } from "./SiteChatPanel";
 import { launchTestGround, TEST_GROUND_PATH } from "./TestGround";
 import { launchTutorial } from "./Tutorial";
+import {
+  launchVisualLab,
+  remountVisualLabPanel,
+  VISUAL_LAB_PATH,
+} from "./VisualLab";
 import { YandexGamesSDK } from "./YandexGamesSDK";
 // terron: движковый сайт-лидерборд заменён нашими рейтинг-таблицами (RATING.md).
 // import "./LeaderboardModal";
@@ -94,6 +99,7 @@ import { modalRouter } from "./ModalRouter";
 import { initNavigation } from "./Navigation";
 import "./NewsModal";
 import "./PatternInput";
+import { installPlatformHistoryGuard } from "./PlatformHistoryGuard";
 import "./RatingPage";
 import { StoreModal } from "./Store";
 import "./TerritoryPatternsModal";
@@ -120,6 +126,8 @@ import {
 } from "./Utils";
 import { installSafariPinchZoomBlocker } from "./utilities/DisableSafariPinchZoom";
 
+import { gameOrigin } from "./GameHost";
+import { Host } from "./PlatformHost";
 import "./components/DesktopNavBar";
 import "./components/Footer";
 import "./components/MainLayout";
@@ -348,49 +356,46 @@ class Client {
         mountDevAudioBadge(),
       );
     }
-    GamePushSDK.maybeInit().then(() => {
-      // Чек-лист модерации GamePush: «игра загрузилась» — шлём СРАЗУ после init
-      // (меню на этот момент уже смонтировано), затем логиним игрока площадки.
-      GamePushSDK.gameStart();
-      // Язык площадки: если SDK доинициализировался ПОЗЖЕ старта UI — догоняем
-      // (при явном выборе игрока в настройках — no-op).
-      GamePushSDK.applyPlatformLanguage();
-      // Чек-лист: PRELOADER-реклама «при старте игры». Показываем сразу после
-      // init — карта и бандл в это время догружаются фоном, так что ролик
-      // ничего не задерживает (решение владельца: «пусть посмотрят рекламку»).
-      GamePushSDK.showPreloaderAd();
-      // Sticky-баннер висит ТОЛЬКО в меню (решение владельца): в матче карта на
-      // весь экран, баннер поверх неё мешал бы. Прячем на старте матча и
-      // возвращаем при выходе в меню.
-      GamePushSDK.showStickyAd();
-      // Поднимаем СВОЮ сессию только под УЖЕ вошедшим на площадке игроком.
-      // У гостя вход всё равно не пройдёт (нечего подтверждать), а челлендж
-      // сгорит и столкнётся с настоящим входом секундой позже — ровно так
-      // ломался вход в песочнице 31.07.
-      // После ЯВНОГО выхода тихо не перезаходим (ТЗ 31.07): площадка игрока
-      // по-прежнему знает, и без этой проверки «выход» жил до первой загрузки.
-      // allowCreate:false — автовход ВОЗОБНОВЛЯЕТ аккаунт, но не создаёт:
-      // Яндекс авторизует игрока сам, и без этого первый заход молча заводил
-      // аккаунт без единого действия (репорт владельца 31.07).
-      // ⚠️ 25.08.2026, замечание модерации ВК: на площадках, где игрок
-      // авторизован ВСЕГДА (ВК, ОК, Телеграм — «Always Authenticated» у
-      // GamePush), окна входа не существует, нажать «Войти» игроку негде, и
-      // правило «не заводим молча» превращало его в вечного гостя. Там аккаунт
-      // ЗАВОДИМ сразу. Яндекс и остальные — как раньше: только возобновление.
-      if (
-        GamePushSDK.isPlayerLoggedIn() &&
-        !GamePushSDK.autoLoginSuppressed()
-      ) {
-        void GamePushSDK.loginToBackend({
-          allowCreate: GamePushSDK.platformAlwaysAuthorized(),
-        });
+    // terron 05.09: SDK площадок, реклама меню, тихий автовход — всё в PlatformHost.
+    Host.bootstrap();
+
+    // terron 30.08: ДАТЧИК ПУСТОЙ ГЛАВНОЙ. Репорт владельца: в Яндекс.Браузере
+    // главная открылась без витрины лобби, в Chrome та же сборка рисуется. Все
+    // объективные проверки были чисты (ассеты 200, 404 в логах нет, js-ошибок в
+    // телеметрии ноль), воспроизвести не удалось — значит случай надо ловить.
+    // ⚠️ Смотрим ФАКТ ВЁРСТКИ (высота витрины), а не наличие элемента в DOM:
+    // элемент на месте и в сломанном случае — на скрине владельца он был.
+    // ⚠️ Только когда игрок ДЕЙСТВИТЕЛЬНО на главной: открытая страница сайта
+    // или матч прячут витрину законно, и репортить это значит завалить трубу
+    // ложными срабатываниями.
+    setTimeout(() => {
+      try {
+        if (document.body.classList.contains("in-game")) return;
+        const openPage = [...document.querySelectorAll(".page-content")].some(
+          (e) => !e.classList.contains("hidden"),
+        );
+        if (openPage) return;
+        const sel = document.querySelector("game-mode-selector");
+        const h = sel?.getBoundingClientRect().height ?? 0;
+        if (h > 0) return;
+        reportHealth(
+          "empty_home",
+          `витрина ${sel ? "есть в DOM, высота 0" : "отсутствует"} · ` +
+            `${window.innerWidth}x${window.innerHeight} · ${navigator.userAgent.slice(0, 120)}`,
+        );
+      } catch {
+        /* датчик не имеет права ломать загрузку */
       }
-    });
+    }, 8000);
 
     // terron реферал: захватить реф-код из URL (/invite/<код> или ?ref=) ДО
     // обработки token-login — чтобы регистрация по ссылке дала бонус 200 ЛТС.
     // Навбар сам покажет «+200» под кнопкой входа (читает localStorage).
     captureReferralFromUrl();
+
+    // Playgama: их SDK обязателен по требованиям площадки, но игра от него не
+    // зависит — зовём и идём дальше (в обычной сборке это no-op).
+    // Playgama-мост поднимает Host.bootstrap() (ниже, вместе с GamePush).
 
     // terron 24.08: прогрев рубильника раскатки ульт (TERRON_DISABLED_ULTS) —
     // одиночка читает кэш синхронно в LocalServer.start().
@@ -471,11 +476,23 @@ class Client {
       load: () => import("./UltTreePage"),
       pageId: "page-ults",
     });
+    // terron 26.08: /history — ПРОТОТИП биографии монарха (5 этапов × 5 вариантов).
+    modalRouter.register("history", {
+      tag: "history-page",
+      load: () => import("./HistoryPage"),
+      pageId: "page-history",
+    });
     // TERRON Prime — /prime (что даёт, откуда берётся; ссылка из магазина).
     modalRouter.register("prime", {
       tag: "prime-page",
       load: () => import("./PrimePage"),
       pageId: "page-prime",
+    });
+    // Десктопные сборки — /download (Windows/macOS/Linux, см. terron-game/desktop).
+    modalRouter.register("download", {
+      tag: "download-page",
+      load: () => import("./DownloadPage"),
+      pageId: "page-download",
     });
     // Гайды — /guide (/guide/stack: выгодно ли стакать здания).
     modalRouter.register("guide", {
@@ -508,13 +525,13 @@ class Client {
       pageId: "page-hall-of-fame",
     });
     // terron 28.08: АДМИНКА И МОДЕРАЦИЯ ВЫНЕСЕНЫ ИЗ ИГРОВОГО КЛИЕНТА в отдельное
-    // приложение (свой репозиторий, свой контейнер, свой домен). Здесь были восемь
-    // регистраций: /admin, /admin/balance, /admin/news, /admin/petri-bonus,
-    // /admin/ru-ban, /admin/ios, /moder-skin, /moder-achievements. Причины:
-    // (1) игровой бандл публикуется под AGPL — модерации и админ-инструментам в
-    // открытом коде делать нечего; (2) страницы ехали в бандл каждому игроку.
-    // Настоящий гейт всегда был на сервере (platform-api отдаёт 403/404
-    // не-админу) — он не изменился.
+    // приложение (свой репозиторий, свой контейнер, свой домен).
+    // Здесь были восемь регистраций: /admin, /admin/balance, /admin/news,
+    // /admin/petri-bonus, /admin/ru-ban, /admin/ios, /moder-skin,
+    // /moder-achievements. Причины: (1) игровой бандл публикуется под AGPL —
+    // модерации и админ-инструментам в открытом коде делать нечего; (2) страницы
+    // ехали в бандл каждому игроку. Настоящий гейт всегда был на сервере
+    // (platform-api отдаёт 403/404 не-админу) — он не изменился.
     // terron: страница /money временно убрана (закомментирована).
     // Деньги — /money (баланс ЛТС/ПТС, правила начислений, тест-кнопки).
     // modalRouter.register("money", {
@@ -614,12 +631,24 @@ class Client {
     // terron спидран: из рейтинга «Создать лобби» → открыть хост-лобби с
     // пресетом (карта Мира + сложность + стандарт). См. RatingPage/HostLobbyModal.
     window.addEventListener("terron-open-speedrun-lobby", (e: Event) => {
+      // ⚠️ terron 01.10 (Smart: «выбрал невозможную — лобби лёгкое»): БЕЗ showPage
+      // перед open() — он открывал окно без аргументов, и то создавало лобби с
+      // сохранённой сложностью раньше пресета. open() показывает страницу сам.
       const d = (e as CustomEvent).detail?.difficulty;
-      window.showPage?.("page-host-lobby");
       this.hostModal?.open({ speedrunDifficulty: d });
     });
 
     document.addEventListener("join-lobby", this.handleJoinLobby.bind(this));
+    // terron 26.09: F5 в своём приватном лобби — окно входа передаёт управление
+    // хост-окну (JoinLobbyModal.maybeHandOffToHost); соединение не рвём.
+    document.addEventListener("resume-host-lobby", (e) => {
+      const gameID = (e as CustomEvent<{ gameID: string }>).detail?.gameID;
+      if (!gameID) return;
+      // ⚠️ Без showPage: он сам открывает окно БЕЗ аргументов, и то успевает
+      // создать НОВОЕ лобби (поймано вживую на деве). open() показывает
+      // страницу сам.
+      this.hostModal?.open({ resumeLobbyId: gameID, skipShareCopy: true });
+    });
     document.addEventListener("leave-lobby", this.handleLeaveLobby.bind(this));
     // Позывной привязан к аккаунту: вход под ДРУГИМ аккаунтом заменяет ник в
     // лобби именем нового аккаунта. Раньше localStorage-ник жил поверх любой
@@ -759,6 +788,8 @@ class Client {
         );
         // terron (друзья): сайт-уведомления «друг зашёл в лобби» / входящие заявки.
         friendsNotifier.start();
+        // terron 22.09: ЛС + чат клана (список диалогов, непрочитанные, канал).
+        void siteChat()?.start();
       }
     };
 
@@ -926,6 +957,9 @@ class Client {
   }
 
   private async handleUrl() {
+    // terron: полигон визуалов — панель переживает перезагрузку (адрес к тому
+    // моменту уже `/game/<id>`, см. VisualLab.remountVisualLabPanel).
+    remountVisualLabPanel();
     // Wait for modal custom elements to be defined
     await Promise.all([
       customElements.whenDefined("join-lobby-modal"),
@@ -1056,6 +1090,20 @@ class Client {
       return;
     }
 
+    // terron: /v2 — тот же полигон + переключалка визуальных стилей карты
+    // (VisualLab.ts). Гейт «уже заходим» тот же, что у /test: без него двойной
+    // джойн убивает первую игру на полпути (память lobby-create-cant-join).
+    // terron 13.09: лаборатория только на дев-сайте (владелец: «стили не нужны»).
+    // Сервер отдаёт на /v2 оболочку даже со статусом 404 — без гейта адрес
+    // запустил бы лабораторию и на проде.
+    if (isDevSite() && VISUAL_LAB_PATH.test(window.location.pathname)) {
+      if (this.lobbyHandle !== null || this.gameStarting || this.joinInFlight) {
+        return;
+      }
+      void launchVisualLab(document.body);
+      return;
+    }
+
     // terron: /tutorial — сразу запускаем обучающую песочницу (без лобби/модалок)
     if (/^\/(?:w\d+\/)?tutorial\/?$/.test(window.location.pathname)) {
       void launchTutorial(document.body);
@@ -1071,7 +1119,7 @@ class Client {
       if (this.lobbyHandle !== null || this.gameStarting || this.joinInFlight) {
         return;
       }
-      window.showPage?.("page-host-lobby");
+      // terron 01.10: без showPage — он создавал ОНЛАЙН-лобби до forceOffline.
       this.hostModal?.open({ skipShareCopy: true, forceOffline: true });
       return;
     }
@@ -1147,11 +1195,10 @@ class Client {
   // НЕ блокируем (false негативы хуже, чем один заход в мёртвую игру).
   private async publicLobbyExists(gameID: string): Promise<boolean> {
     try {
-      const url = `/${ClientEnv.workerPath(gameID)}/api/game/${gameID}/exists`;
-      const r = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const url = `${gameOrigin()}/${ClientEnv.workerPath(gameID)}/api/game/${gameID}/exists`;
+      // ⚠️ Без Content-Type — см. JoinLobbyModal.fetchWithTimeout: на GET он
+      // лишний и включает preflight, который на чужом origin режет CORS.
+      const r = await fetch(url, { method: "GET" });
       if (!r.ok) return true; // сеть/сервер шалит — не мешаем джойну
       if (!(r.headers.get("content-type") ?? "").includes("application/json"))
         return true;
@@ -1310,6 +1357,9 @@ class Client {
           ? "/diamond"
           : "/gold",
       );
+    } else if ((lobby.publicLobbyInfo?.gameConfig?.fairBots?.length ?? 0) > 0) {
+      // terron 23.09: лобби честных ботов — тот же приём, постоянная ссылка /fair.
+      history.replaceState(null, "", "/fair");
     } else if (lobby.source !== "public") {
       this.updateJoinUrlForShare(lobby.gameID);
     }
@@ -1450,8 +1500,7 @@ class Client {
 
       crazyGamesSDK.loadingStop();
       crazyGamesSDK.gameplayStart();
-      GamePushSDK.gameplayStart(); // границы раунда для площадки (чек-лист)
-      GamePushSDK.hideStickyAd(); // баннер не висит поверх карты
+      Host.gameplayStart(); // границы раунда для площадки + баннер долой
       // terron: снять оверлей «Загрузка карты…» (показан в HostLobbyModal на офлайн-старте)
       document.getElementById("terron-loading")?.remove();
       document.body.classList.add("in-game");
@@ -1561,8 +1610,9 @@ class Client {
 
     document.body.classList.remove("in-game");
     setNativeStatusBarHidden(false); // iOS: статус-бар обратно в меню
-    GamePushSDK.gameplayStop(); // конец раунда для площадки (чек-лист)
-    GamePushSDK.showStickyAd(); // вернулись в меню — баннер снова уместен
+    // Конец раунда + реклама «в конце» (модерация ОК 02.09): возврат из матча в
+    // меню — единственный перерыв, где площадки разрешают ролик и баннер.
+    Host.gameplayStop(true);
 
     // terron: юзер сыграл матч и вышел в меню → теперь (и только теперь) уместно
     // догреть офлайн-кэш (World/иконки). См. политику в OfflinePrefetch.ts.
@@ -1698,7 +1748,18 @@ const bootstrap = () => {
   // terron: ловушки необработанных ошибок → телеметрия client_health
   // (проблемы, которые игроки не репортят). Ставим ПЕРВЫМИ — чтобы поймать
   // падения самой инициализации.
+  // ⚠️ ПЕРВЫМ ДЕЛОМ: на чужом хостинге (билд площадки лежит в подпапке) адрес
+  // страницы не трогаем вовсе — иначе клик по разделу уводит адрес фрейма на
+  // корень их домена (см. PlatformHistoryGuard.ts). Ставим до всего, что может
+  // записать историю.
+  installPlatformHistoryGuard();
   installGlobalHealthHandlers();
+  // Картинки по манифесту после сбоя сети повторяются сами (см. ImgRetry.ts).
+  void import("./ImgRetry").then(({ installImgRetry }) => installImgRetry());
+  // Диагностика «интерфейс сырыми ключами» с устройства игрока (LangStateProbe.ts).
+  void import("./LangStateProbe").then(({ installLangStateProbe }) =>
+    installLangStateProbe(),
+  );
 
   // Prevent Safari's page-level pinch-zoom, which ignores `user-scalable=no`
   // on iOS and can softlock the HUD. See issue #2330.

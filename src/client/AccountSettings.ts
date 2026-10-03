@@ -13,19 +13,23 @@ import {
   sendMagicLink,
 } from "./Auth";
 import { platformIcon, platformLabel } from "./components/ui/platformBadge";
-import { GamePushSDK } from "./GamePushSDK";
+import {
+  platformAlreadyAuthorized,
+  platformLoginPending,
+  platformAuthAvailable,
+  platformSignIn,
+} from "./PlatformAuth";
+import { Host } from "./PlatformHost";
+import { platformLoginPreview } from "./PlatformLoginPreview";
 import { toast } from "./Toast";
 import type { UsernameInput } from "./UsernameInput";
-import { brandDisplay, L, translateText } from "./Utils";
+import { brandDisplay, L, onPlatformSurface, translateText } from "./Utils";
 
 /** Игра открыта внутри iframe площадки (Яндекс.Игры/VK/…). Класс ставит
  *  index.html синхронно, ещё до загрузки SDK — годится для первого рендера.
  *  Требование модерации: внутри площадки СВОЕЙ формы входа быть не должно. */
 function isOnGamePlatform(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("gp-embed")
-  );
+  return Host.inPlatformFrame();
 }
 
 /** terron: документы открываем модалкой — не уводим игрока из игры (LegalModal).
@@ -75,6 +79,9 @@ export class AccountSettings extends LitElement {
     // остаться без кнопки входа. Перерисовываемся, когда он готов.
     window.addEventListener("gp-ready", this.onGpReady);
     window.addEventListener("gp-login", this.onGpReady);
+    // То же для площадок не-GamePush: их SDK готов позже первой отрисовки, и
+    // без этого кнопка входа не появлялась вовсе (репорт владельца 30.08).
+    window.addEventListener("platform-auth-ready", this.onGpReady);
     // Сессию гасят и МИМО этой страницы (выход на площадке, сверка на старте) —
     // без подписки тут оставалась форма уже мёртвого аккаунта (ТЗ 31.07).
     window.addEventListener("terron-auth-changed", this.onGpReady);
@@ -102,6 +109,7 @@ export class AccountSettings extends LitElement {
     if (this.resendTimer) clearInterval(this.resendTimer);
     window.removeEventListener("gp-ready", this.onGpReady);
     window.removeEventListener("gp-login", this.onGpReady);
+    window.removeEventListener("platform-auth-ready", this.onGpReady);
     window.removeEventListener("terron-auth-changed", this.onGpReady);
     window.removeEventListener("gp-login-pending", this.onLoginPending);
     window.removeEventListener("gp-login-done", this.onLoginDone);
@@ -122,6 +130,14 @@ export class AccountSettings extends LitElement {
 
   render(): TemplateResult {
     if (this.loading) {
+      // ⚠️ ВНУТРИ ПЛОЩАДКИ ПУСТОГО ЭКРАНА БЫТЬ НЕ ДОЛЖНО. Автовход идёт сам и на
+      // телефоне занимает секунды, а игрок за это время видел три разных экрана
+      // подряд: голое «Загрузка…» → каркас со «Входим…» → аккаунт (скрины
+      // владельца 09.09: «всё ну очень не плавно»). Рисуем сразу тот же каркас,
+      // что и после загрузки, — меняется только его карточка входа.
+      if (onPlatformSurface()) return html`<div class="t-page">
+        ${this.renderLoginOptions()}
+      </div>`;
       return html`<div class="t-page">
         <div class="t-muted">${L("Загрузка…", "Loading…")}</div>
       </div>`;
@@ -479,6 +495,10 @@ export class AccountSettings extends LitElement {
   }
 
   private renderLoginOptions(): TemplateResult {
+    // terron 11.09: тест-режим площадки (`?embed=1&platform=…`) — SDK не поднят,
+    // показываем превью платформенного экрана с описанием развилки.
+    const preview = platformLoginPreview(this.renderBenefits());
+    if (preview) return preview;
     return html`
       <div style="max-width:760px;margin:0 auto">
         <!-- айдентика -->
@@ -512,25 +532,34 @@ export class AccountSettings extends LitElement {
               ${translateText("account_modal.sign_in_desc")}
             </p>
             <!-- terron: вход через Discord временно отключён (бэкенд 404). -->
-            ${isOnGamePlatform()
-              ? this.renderPlatformLogin()
-              : html`
-                  ${this.sent
-                    ? this.renderCodeStage()
-                    : this.renderEmailStage()}
-                  ${this.sent ? "" : this.renderTerms()}
+            <!-- ⚠️ ПЛОЩАДКА БЕЗ СВОЕГО ВХОДА = ПУСТАЯ КАРТОЧКА. Раньше условие
+                 было просто «мы на площадке», и там, где платформенный вход
+                 невозможен (наш сервер не может подтвердить игрока), человек
+                 видел текст без единой кнопки — войти нельзя вообще никак
+                 (репорт владельца 30.08 из их QA-инструмента). Теперь в таком
+                 случае показываем ОБЫЧНЫЙ вход по почте: он наш собственный,
+                 работает везде и никуда игрока не уводит. -->
+            ${platformAlreadyAuthorized() && !platformAuthAvailable()
+              ? this.renderPlatformKnowsYou()
+              : isOnGamePlatform() && platformAuthAvailable()
+                ? this.renderPlatformLogin()
+                : html`
+                    ${this.sent
+                      ? this.renderCodeStage()
+                      : this.renderEmailStage()}
+                    ${this.sent ? "" : this.renderTerms()}
 
-                  <!-- успокаивающий текст: вход у НАС, не «хз где» -->
-                  <div
-                    class="t-muted"
-                    style="font-size:11.5px;line-height:1.5;margin-top:14px;text-align:center"
-                  >
-                    ${L(
-                      "Без пароля. Вход по коду из письма — прямо на TERRON.io, не через сторонние сервисы. Хранится только почта; играть можно и без аккаунта.",
-                      "No password. Sign in with an email code — right on TERRON.io, no third parties. We store only your email; you can play without an account.",
-                    )}
-                  </div>
-                `}
+                    <!-- успокаивающий текст: вход у НАС, не «хз где» -->
+                    <div
+                      class="t-muted"
+                      style="font-size:11.5px;line-height:1.5;margin-top:14px;text-align:center"
+                    >
+                      ${L(
+                        "Без пароля. Вход по коду из письма — прямо на TERRON.io, не через сторонние сервисы. Хранится только почта; играть можно и без аккаунта.",
+                        "No password. Sign in with an email code — right on TERRON.io, no third parties. We store only your email; you can play without an account.",
+                      )}
+                    </div>
+                  `}
           </div>
         </div>
 
@@ -557,8 +586,8 @@ export class AccountSettings extends LitElement {
         // владельца: «вход через вк — так и пиши»). GamePush тут посредник, и
         // игроку он ничего не говорит. Пока SDK не поднялся, тип неизвестен —
         // тогда остаётся прежняя общая фраза.
-        const type = GamePushSDK.platformType();
-        return type && type !== "NONE"
+        const type = Host.platformId();
+        return type
           ? platformLabel(type)
           : L("Игровую площадку", "the game platform");
       }
@@ -581,7 +610,9 @@ export class AccountSettings extends LitElement {
   private renderPlatformLogin(): TemplateResult {
     // Идёт вход (нашей кнопкой ИЛИ через окно площадки) — вместо кнопок
     // крутилка: молчание на 2 секунды читалось как «ничего не происходит».
-    if (this.platformLoggingIn) {
+    // ⚠️ Крутилка и ПОКА SDK ПОДНИМАЕТСЯ: иначе игрок видит кнопку «Войти», она
+    // сама сменяется крутилкой и лишь потом аккаунтом — читается как сбой.
+    if (this.loading || this.platformLoggingIn || platformLoginPending()) {
       return html`<div style="text-align:center;padding:14px 0">
         <span class="t-login-spin"></span>
         <div class="t-muted" style="margin-top:12px;font-size:13px">
@@ -589,7 +620,7 @@ export class AccountSettings extends LitElement {
         </div>
       </div>`;
     }
-    if (GamePushSDK.isPlayerLoggedIn()) {
+    if (platformAlreadyAuthorized()) {
       // ⚠️ ЭТОТ ЭКРАН РИСУЕТСЯ ТОЛЬКО КОГДА НАШЕЙ СЕССИИ НЕТ (залогиненным
       // показывается renderSettings). «Площадка знает игрока, а мы нет» —
       // не повод писать «всё сохраняется» и не давать НИ ОДНОЙ кнопки (тупик,
@@ -617,17 +648,24 @@ export class AccountSettings extends LitElement {
         </div>
       `;
     }
-    const canLogin = GamePushSDK.canPlatformLogin();
+    // ⚠️ Через ФАСАД: у GamePush признак «мы на площадке» — это просто «мы в
+    // чужом iframe», поэтому в сборке под Playgama кнопка показывалась, а вход
+    // падал («Вход не удался»). Фасад знает, есть ли вход на ЭТОЙ площадке.
+    // terron 20.09: главная кнопка — только где у площадки СВОЁ окно входа.
+    // Где есть лишь код, она открывала пустое окно площадки, а мы вечно
+    // крутили «Входим…».
+    const canLogin = platformAuthAvailable() && Host.canNativeLogin();
     // Вход по коду GamePush — ВТОРАЯ КНОПКА У НАС, а не пункт в их модалке.
     // Раньше клик по «Войти» открывал промежуточный экран площадки со списком
     // способов; мы этот выбор делаем сами (просьба владельца 31.07), а SDK
     // зовём уже с готовым ответом. Кнопку показываем только если площадка
     // код принимает — иначе она бы вела в никуда.
-    const canCode = GamePushSDK.canSecretCodeLogin();
+    // Вход по коду — механика GamePush; на других площадках её нет вовсе.
+    const canCode = Host.canSecretCodeLogin();
     // Имя и значок берём у площадки: «Войти через Яндекс Игры» вместо
     // обезличенного «через площадку» (просьба владельца 31.07). Незнакомая
     // площадка и момент до готовности SDK — фолбэк и в имени, и в значке.
-    const pType = GamePushSDK.platformType();
+    const pType = Host.platformId() ?? undefined;
     return html`
       ${canLogin
         ? html`<button
@@ -647,8 +685,8 @@ export class AccountSettings extends LitElement {
         : ""}
       ${canCode
         ? html`<button
-            class="t-btn ghost"
-            style="width:100%;margin-top:8px"
+            class=${canLogin ? "t-btn ghost" : "t-btn"}
+            style="width:100%;margin-top:${canLogin ? "8px" : "0"}"
             ?disabled=${this.platformLoggingIn}
             @click=${() => this.handlePlatformLogin(true)}
           >
@@ -657,7 +695,8 @@ export class AccountSettings extends LitElement {
         : ""}
       <div
         class="t-muted"
-        style="font-size:11.5px;line-height:1.5;margin-top:${canLogin
+        style="font-size:11.5px;line-height:1.5;margin-top:${canLogin ||
+        canCode
           ? "14px"
           : "0"};text-align:center"
       >
@@ -677,11 +716,37 @@ export class AccountSettings extends LitElement {
   private async handlePlatformLogin(withSecretCode = false): Promise<void> {
     this.platformLoggingIn = true;
     try {
-      const ok = await GamePushSDK.platformLogin(withSecretCode);
+      // У площадок без своего окна выбора способа (Playgama) вход — один шаг;
+      // у GamePush остаётся прежний путь с их модалкой и кодом.
+      const ok = await Host.platformLogin(withSecretCode);
       await this.finishPlatformLogin(ok);
     } finally {
       this.platformLoggingIn = false;
     }
+  }
+
+  /**
+   * ПЛОЩАДКА УЖЕ ЗНАЕТ ИГРОКА, А ВОЙТИ К НАМ ЧЕРЕЗ НЕЁ НЕЛЬЗЯ.
+   *
+   * ⚠️ Требование их сертификации дословно: «Are all authorization buttons
+   * hidden for the logged-in player?» — у залогиненного площадкой не должно
+   * торчать НИ ОДНОЙ формы входа. Раньше мы в этом случае показывали почтовый
+   * вход и проваливали шаг (репорт владельца 31.08).
+   * ⚠️ Почтовый вход остаётся там, где площадка игрока НЕ авторизовала — иначе
+   * гость остался бы вообще без способа завести аккаунт.
+   */
+  private renderPlatformKnowsYou(): TemplateResult {
+    return html`
+      <div
+        class="t-muted"
+        style="font-size:12.5px;line-height:1.6;text-align:center"
+      >
+        ${L(
+          "Ты вошёл через игровую площадку — отдельный аккаунт TERRON тут не нужен. Прогресс сохраняется на площадке.",
+          "You're signed in through the game platform — no separate TERRON account needed here. Progress is saved on the platform.",
+        )}
+      </div>
+    `;
   }
 
   /** Игрок УЖЕ авторизован на площадке, а нашей сессии нет — окно площадки не
@@ -689,8 +754,10 @@ export class AccountSettings extends LitElement {
   private async handleBackendRelogin(): Promise<void> {
     this.platformLoggingIn = true;
     try {
-      GamePushSDK.clearExplicitLogout(); // клик «Войти» = явное намерение
-      const ok = await GamePushSDK.loginToBackend();
+      // ⚠️ 05.09 (ревью фасада): здесь НЕ Host.platformLogin() — тот у GamePush
+      // открывает окно входа площадки, а игрок на площадке уже авторизован:
+      // дожимаем только наш бэкенд (PlatformAuth.platformSignIn → loginToBackend).
+      const ok = await platformSignIn();
       await this.finishPlatformLogin(ok);
     } finally {
       this.platformLoggingIn = false;
@@ -700,13 +767,17 @@ export class AccountSettings extends LitElement {
   private async finishPlatformLogin(ok: boolean): Promise<void> {
     if (!ok) {
       // Молчание при отказе = «жму и ничего не происходит» (репорт владельца
-      // 31.07). Причина уже в консоли ([gp] /auth/ya вернул …) — игроку хватит
-      // честного «не вышло, попробуй ещё».
+      // 31.07). Причина уже в консоли — игроку хватит честного «не вышло».
+      // ⚠️ «Попробуй ещё раз» — ЛОЖЬ, когда отказала САМА ПЛОЩАДКА: пробовать
+      // незачем, дело не в нас. Если причина известна — называем её (репорт
+      // владельца 30.08: жмёт «Войти» и видит бессмысленное «попробуй ещё»).
+      const why = Host.lastAuthFailure();
       toast(
-        L(
-          "Вход не удался — попробуй ещё раз.",
-          "Sign-in failed — please try again.",
-        ),
+        why ??
+          L(
+            "Вход не удался — попробуй ещё раз.",
+            "Sign-in failed — please try again.",
+          ),
         "error",
       );
       return;
@@ -726,7 +797,7 @@ export class AccountSettings extends LitElement {
   /** Ставит имя с площадки позывным, если своего осмысленного ника ещё нет
    *  (пусто или автоген «Anon####»). Явно выбранный ник игрока не трогаем. */
   private adoptPlatformName(): void {
-    const name = GamePushSDK.platformName();
+    const name = Host.platformName();
     if (!name) return;
     const input = document.querySelector(
       "username-input",
@@ -970,12 +1041,11 @@ export class AccountSettings extends LitElement {
   private async handleLogout(): Promise<void> {
     // ТЗ (31.07): выход = «вышел сам». Без пометки автовход на старте тут же
     // возвращал в тот же аккаунт — площадка-то игрока по-прежнему знает.
-    GamePushSDK.noteExplicitLogout();
     // Сперва выходим У ПЛОЩАДКИ (замечание модерации: кнопка выхода обязана
     // звать Logout в СДК), потом гасим свою сессию. Порядок важен: после
     // нашего logOut клиент уже не считает себя вошедшим и мог бы пропустить
     // вызов площадки.
-    await GamePushSDK.logoutPlatform();
+    await Host.logoutPlatform(); // пометка «сам вышел» + выход у площадки
     await logOut();
     void import("./SoftNavigate").then(({ softReload }) => softReload());
   }

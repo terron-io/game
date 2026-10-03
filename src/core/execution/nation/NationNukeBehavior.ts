@@ -56,7 +56,7 @@ export class NationNukeBehavior {
   ) {}
 
   // terron: «Небо наше» (антиспутник) — контрплей телеграфа. Пока вражеская
-  // ракета «Сбить спутники» СОБИРАЕТСЯ (60с, сносибельна; реворк 21.08 — цель
+  // ракета «Небо наше» (бывш. «Сбить спутники») СОБИРАЕТСЯ (60с, сносибельна; реворк 21.08 — цель
   // теперь носитель-каст, а не постоянный штаб), ближние враждебные нации
   // пытаются сбить её ядеркой (снос до запуска = отмена блэкаута). Каждая нация
   // бьёт по конкретному носителю один раз (id-трекинг) — суммарно набегает
@@ -66,7 +66,7 @@ export class NationNukeBehavior {
   maybeCounterOurSky() {
     // terron ПЕРФ (21.08): game.units(type) — проход по юнитам ВСЕХ игроков
     // (включая мёртвых), а зовётся это с каждой нации на каждом её attack-тике.
-    // 99.9% матча носителей «Сбить спутники» нет — счётчик без аллокаций.
+    // 99.9% матча носителей «Небо наше» (бывш. «Сбить спутники») нет — счётчик без аллокаций.
     if (this.game.unitCount(UnitType.SatelliteStrike) === 0) return;
     const config = this.game.config();
     if (
@@ -116,7 +116,13 @@ export class NationNukeBehavior {
     }
   }
 
-  maybeSendNuke() {
+  /**
+   * terron 23.09: `forcedTarget` — бить ИМЕННО его (честный бот v2: ядерка по
+   * тому, на кого уже наступаешь, — так играют топы, new-units/FAIRBOT.md).
+   * Остальные гейты (племя, команда, shouldAttack, деньги, ПВО) те же. Нации
+   * зовут без аргумента — поведение прежнее.
+   */
+  maybeSendNuke(forcedTarget: Player | null = null) {
     const silos = this.player.units(UnitType.MissileSilo);
     const config = this.game.config();
     if (
@@ -128,7 +134,7 @@ export class NationNukeBehavior {
       return;
     }
 
-    const nukeTarget = this.findBestNukeTarget();
+    const nukeTarget = forcedTarget ?? this.findBestNukeTarget();
     if (nukeTarget === null) {
       return;
     }

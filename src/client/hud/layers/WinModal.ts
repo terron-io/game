@@ -8,7 +8,10 @@ import {
   translateText,
 } from "../../../client/Utils";
 import { assetUrl } from "../../../core/AssetUrls";
-import { eventRewardOf } from "../../../core/configuration/TerronTuning";
+import {
+  eveningOf,
+  eventPerPersonOf,
+} from "../../../core/configuration/TerronTuning";
 import { EventBus } from "../../../core/EventBus";
 import {
   GameMapType,
@@ -26,13 +29,15 @@ import {
   getSpeedrunLeaderboard,
   type MatchReward,
 } from "../../Api";
-import { isLoggedIn, hadSessionBefore } from "../../Auth";
+import { hadSessionBefore, isLoggedIn } from "../../Auth";
 import "../../components/Difficulties";
 import { coin } from "../../components/ui/coin";
 import { statIcon } from "../../components/ui/statIcons";
 import { Controller } from "../../Controller";
 import { crazyGamesSDK } from "../../CrazyGamesSDK";
-import { GamePushSDK } from "../../GamePushSDK";
+import { localizeAIName } from "../../LocalizeNames";
+import { rewardedAvailable, showRewarded } from "../../PlatformAds";
+import { Host } from "../../PlatformHost";
 import { softHome } from "../../SoftNavigate";
 import { isMuted, setMutedByUser } from "../../sound/AudioBus";
 import {
@@ -191,6 +196,12 @@ export class WinModal extends LitElement implements Controller {
     return this.game?.config()?.gameConfig()?.golden === true;
   }
 
+  /** terron 29.09: сколько получит победитель; у золотого — по числу людей. */
+  private eventPayout(): number {
+    // terron 30.09: точная сумма золотого лежит в конфиге матча (пик лобби).
+    return eventPerPersonOf(this.game?.config()?.gameConfig());
+  }
+
   /** terron: алмазный матч — событие раз в сутки, награда на порядок больше. */
   private isDiamondMatch(): boolean {
     return (
@@ -296,7 +307,7 @@ export class WinModal extends LitElement implements Controller {
     this.rewardBusy = true;
     this.requestUpdate();
     try {
-      const watched = await GamePushSDK.showRewardedAd();
+      const watched = await showRewarded();
       if (!watched) {
         // Ролик закрыли раньше времени — молчать нельзя, иначе выглядит как
         // будто кнопка не сработала.
@@ -379,8 +390,7 @@ export class WinModal extends LitElement implements Controller {
     // Ролик посмотрели раньше начисления (редкий случай: обрыв связи в момент
     // смерти) — удвоение применится вместе с наградой, повторно не предлагаем.
     const doublePending = r.doublePending === true;
-    const canDouble =
-      r.canDouble && !doublePending && GamePushSDK.isRewardedAvailable();
+    const canDouble = r.canDouble && !doublePending && rewardedAvailable();
     // Иконка ролика вместо надписи «×2 за рекламу»: подпись занимала всю
     // ширину кнопки, а сама кнопка ушла ВБОК от суммы (решение владельца 30.07).
     const adIcon = html`<svg
@@ -940,7 +950,13 @@ export class WinModal extends LitElement implements Controller {
                 ${this.isDiamondMatch()
                   ? L("💎 Алмазный матч выигран", "💎 Diamond match won")
                   : L("⭐ Золотой матч выигран", "⭐ Golden match won")}
-                (+${eventRewardOf(this.game?.config()?.gameConfig())}
+                ${eveningOf(this.game?.config()?.gameConfig()) !== null &&
+                this.game?.myPlayer()?.isAlive() === false
+                  ? L("— погибшим награды нет (", "— no reward if you died (")
+                  : "("}${eveningOf(this.game?.config()?.gameConfig()) ===
+                "team"
+                  ? L("до ", "up to ")
+                  : ""}+${this.eventPayout()}
                 <img
                   src=${bloodDiamondIcon}
                   alt=""
@@ -1244,7 +1260,12 @@ export class WinModal extends LitElement implements Controller {
    *  игнорируется) и возвращает адрес на «/» — без этого меню оставалось с
    *  адресом мёртвого матча, и следующий F5 уводил в никуда. */
   private leaveSoftly(): boolean {
-    if (!GamePushSDK.isOnPlatform()) return false;
+    // ⚠️ Признак площадки берём У SOFTNAVIGATE, а не у GamePush: в сборке под
+    // Playgama их SDK не грузится вовсе, `isOnPlatform()` там всегда false —
+    // и выход из матча делал полную перезагрузку, то есть повторную
+    // инициализацию Bridge (прямой запрет их сертификации). Второго ответа на
+    // вопрос «мы на площадке?» в клиенте быть не должно.
+    if (!Host.isPlatform()) return false;
     softHome("/");
     return true;
   }
@@ -1358,6 +1379,14 @@ export class WinModal extends LitElement implements Controller {
    *     поверх прошлого матча, то есть итоги показывали чужие цифры.
    */
   init() {
+    // terron 11.09: НОВЫЙ МАТЧ НАЧИНАЕТСЯ БЕЗ СТАРОЙ МОДАЛКИ. Элемент живёт в
+    // index.html и переживает матчи, а init() сбрасывал всё, кроме isVisible:
+    // экран смерти, с которого нажали «Обучение» (кнопка живёт прямо в нём),
+    // оставался висеть поверх стартующего обучения — уже без isDeath, голой
+    // карточкой с «выйти». Телеметрия: exit_ingame_early на /tutorial через
+    // 2–4 с после старта, 455 сессий за 14 дней, 62 % — трафик Яндекс-Директа.
+    this.isVisible = false;
+    this.showButtons = false;
     this.isDeath = false;
     this.hasShownDeathModal = false;
     this.isWin = false;
@@ -1432,7 +1461,10 @@ export class WinModal extends LitElement implements Controller {
         this.show();
       } else if (wu.winner[0] === "nation") {
         this._title = translateText("win_modal.nation_won", {
-          nation: wu.winner[1],
+          // terron 09.09: имя нации — ключ из манифеста карты (EN); на экране
+          // тот же RU-оверлей, что в ленте и на карте. Модерация Яндекса:
+          // «Нация Beijing победила!» — «не полный перевод».
+          nation: localizeAIName(wu.winner[1]),
         });
         this.isWin = false;
         this.show();

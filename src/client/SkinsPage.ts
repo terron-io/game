@@ -13,14 +13,14 @@ import {
   type NamedSkin,
   type SkinBake,
 } from "./Api";
+import { BaseModal } from "./components/BaseModal";
+import { coin } from "./components/ui/coin";
+import { modalHeader } from "./components/ui/ModalHeader";
 import {
   FALLOUT_SKIN_COUNT,
   falloutSkinPreviewUrl,
   falloutSkinTitle,
 } from "./FalloutSkinPreview";
-import { BaseModal } from "./components/BaseModal";
-import { coin } from "./components/ui/coin";
-import { modalHeader } from "./components/ui/ModalHeader";
 import { getPreviewGeo, renderSkinPreview } from "./SkinPreview";
 import { L, translateText } from "./Utils";
 
@@ -32,6 +32,26 @@ const usernameKey = "username";
  * надевается им. «Мои скины» — список (Надеть / Редактировать). Живой предпросмотр
  * на фейк-территории (как в игре). Создание 512=30 / HD=125 ПТС, правка=50.
  */
+/**
+ * terron 28.09: цена правки скина — ЗЕРКАЛО platform-api shop.skinEditPrice
+ * (списывает сервер; менять ОБЕ). Своя картинка на скине из каталога = цена
+ * создания своего (200 / HD 400); переход своего 512 → HD доплачивает до цены
+ * HD (200); остальное — 50 / HD 100.
+ */
+export function skinEditPrice(o: {
+  fromCatalog: boolean;
+  newRaster: boolean;
+  hd: boolean;
+  wasHd: boolean;
+}): number {
+  if (o.fromCatalog) {
+    if (o.newRaster) return o.hd ? 400 : 200;
+    return 50;
+  }
+  if (o.hd && !o.wasHd) return 200;
+  return o.hd ? 100 : 50;
+}
+
 @customElement("skins-page")
 export class SkinsPage extends BaseModal {
   protected routerName = "skins";
@@ -82,6 +102,10 @@ export class SkinsPage extends BaseModal {
   // шлём visual=null, сервер перегенерит sample из сохранённого мастера БЕЗ
   // перезаливки (смена HD/ползунков). true → шлём новый мастер.
   private imageReplaced = true;
+  // terron 28.09: для цены правки (skinEditPrice) — скин ещё каталожный и был
+  // ли он HD до правки. Ставит startEdit.
+  private editFromCatalog = false;
+  private editWasHd = false;
 
   private static readonly RAW_CAP = 4096; // потолок мастера (4K — храним как «формат скина»)
 
@@ -163,8 +187,8 @@ export class SkinsPage extends BaseModal {
           class="t-balance"
           style="display:inline-flex;align-items:center;gap:5px"
           title=${L("Золото · Серебро", "Gold · Silver")}
-          >${coin("lts")} ${this.lts.toLocaleString("ru-RU")} ·
-          ${coin("pts")} ${this.pts.toLocaleString("ru-RU")}</span
+          >${coin("lts")} ${this.lts.toLocaleString("ru-RU")} · ${coin("pts")}
+          ${this.pts.toLocaleString("ru-RU")}</span
         >
       </div>`,
     });
@@ -179,24 +203,26 @@ export class SkinsPage extends BaseModal {
             ${this.msg}
           </div>`
         : ""}
-
       ${this.renderEditor()}
 
-      <h3 class="t-h3" style="margin-top:22px">${L("Мои скины", "My skins")}</h3>
+      <h3 class="t-h3" style="margin-top:22px">
+        ${L("Мои скины", "My skins")}
+      </h3>
       ${this.loading
         ? html`<div
             class="t-grid"
             style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:20px"
           >
             ${[0, 1, 2, 3].map(
-              () => html`<div class="t-skincard">
-                <div class="t-skinprev t-skel"></div>
-                <div
-                  class="t-skel"
-                  style="height:12px;margin-top:8px;width:70%"
-                ></div>
-                <div class="t-skel" style="height:30px;margin-top:8px"></div>
-              </div>`,
+              () =>
+                html`<div class="t-skincard">
+                  <div class="t-skinprev t-skel"></div>
+                  <div
+                    class="t-skel"
+                    style="height:12px;margin-top:8px;width:70%"
+                  ></div>
+                  <div class="t-skel" style="height:30px;margin-top:8px"></div>
+                </div>`,
             )}
           </div>`
         : this.mine.length === 0
@@ -399,21 +425,22 @@ export class SkinsPage extends BaseModal {
     const editing = this.editingId !== "";
     const staged = this.stagedUrl !== "";
     // compact=true — мелкая светлая (как кнопки-иконки), для «Заменить» в ряду правок.
-    const fileInput = (label: string, compact = false) => html`<label
-      class=${compact ? "" : "t-btn"}
-      style=${compact
-        ? "cursor:pointer;height:34px;display:inline-flex;align-items:center;padding:0 12px;border-radius:0;border:1px solid var(--t-line,rgba(0,0,0,.18));color:var(--t-ink);font-size:13px;background:transparent;box-shadow:none;font-weight:500;text-transform:none"
-        : "cursor:pointer"}
-      @click=${this.onFilePickerTap}
-    >
-      ${label}
-      <input
-        type="file"
-        accept="image/*"
-        style="display:none"
-        @change=${(e: Event) => this.onPick(e)}
-      />
-    </label>`;
+    const fileInput = (label: string, compact = false) =>
+      html`<label
+        class=${compact ? "" : "t-btn"}
+        style=${compact
+          ? "cursor:pointer;height:34px;display:inline-flex;align-items:center;padding:0 12px;border-radius:0;border:1px solid var(--t-line,rgba(0,0,0,.18));color:var(--t-ink);font-size:13px;background:transparent;box-shadow:none;font-weight:500;text-transform:none"
+          : "cursor:pointer"}
+        @click=${this.onFilePickerTap}
+      >
+        ${label}
+        <input
+          type="file"
+          accept="image/*"
+          style="display:none"
+          @change=${(e: Event) => this.onPick(e)}
+        />
+      </label>`;
     return html`<h3
         class="t-h3"
         style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"
@@ -460,9 +487,12 @@ export class SkinsPage extends BaseModal {
                 </div>
                 ${this.origW > 0
                   ? html`<div style="font-size:12px;line-height:1.4">
-                      <span class="t-muted">${this.origW}×${this.origH}px · </span>
+                      <span class="t-muted"
+                        >${this.origW}×${this.origH}px ·
+                      </span>
                       <span
-                        style="color:${this.qualityHint().color};font-weight:600"
+                        style="color:${this.qualityHint()
+                          .color};font-weight:600"
                         >${this.qualityHint().text}</span
                       >
                       ${this.bakedW > 0
@@ -482,12 +512,18 @@ export class SkinsPage extends BaseModal {
                         : ""}
                     </div>`
                   : ""}
-                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <div
+                  style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"
+                >
                   ${fileInput(L("Заменить", "Replace"), true)}
-                  ${this.iconBtn("↻", L("повернуть на 90°", "rotate 90°"), () => {
-                    this.rot = (this.rot + 90) % 360;
-                    void this.bake();
-                  })}
+                  ${this.iconBtn(
+                    "↻",
+                    L("повернуть на 90°", "rotate 90°"),
+                    () => {
+                      this.rot = (this.rot + 90) % 360;
+                      void this.bake();
+                    },
+                  )}
                   ${this.iconBtn(
                     "⇄",
                     L("отразить по горизонтали", "flip horizontally"),
@@ -499,67 +535,88 @@ export class SkinsPage extends BaseModal {
                   )}
                   ${this.iconBtn(
                     "⟳",
-                    L("другая форма территории в превью", "different territory shape in preview"),
+                    L(
+                      "другая форма территории в превью",
+                      "different territory shape in preview",
+                    ),
                     () => this.randomizePreview(),
                   )}
-                  ${this.iconBtn("✕", L("убрать картинку", "remove image"), () =>
-                    this.resetEditor(),
+                  ${this.iconBtn(
+                    "✕",
+                    L("убрать картинку", "remove image"),
+                    () => this.resetEditor(),
                   )}
                 </div>`
             : html`<div
-                  @dragover=${(e: DragEvent) => {
-                    e.preventDefault();
-                    this.dragOver = true;
-                  }}
-                  @dragleave=${() => (this.dragOver = false)}
-                  @drop=${(e: DragEvent) => this.onDrop(e)}
-                  style=${`flex:1;min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;border:2px dashed ${
-                    this.dragOver ? "var(--t-ink)" : "var(--t-line,rgba(0,0,0,.25))"
-                  };background:${this.dragOver ? "rgba(0,0,0,.04)" : "var(--t-sheet)"}`}
+                @dragover=${(e: DragEvent) => {
+                  e.preventDefault();
+                  this.dragOver = true;
+                }}
+                @dragleave=${() => (this.dragOver = false)}
+                @drop=${(e: DragEvent) => this.onDrop(e)}
+                style=${`flex:1;min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;border:2px dashed ${
+                  this.dragOver
+                    ? "var(--t-ink)"
+                    : "var(--t-line,rgba(0,0,0,.25))"
+                };background:${this.dragOver ? "rgba(0,0,0,.04)" : "var(--t-sheet)"}`}
+              >
+                <div style="font-weight:700;color:var(--t-ink)">
+                  ${L("Перетащи картинку сюда", "Drag an image here")}
+                </div>
+                <div class="t-muted" style="font-size:13px">
+                  ${L(
+                    "или вставь из буфера (⌘/Ctrl + V)",
+                    "or paste from clipboard (⌘/Ctrl + V)",
+                  )}
+                </div>
+                ${fileInput(L("Выбрать файл", "Choose file"))}
+                <div
+                  style="display:flex;gap:6px;width:100%;max-width:360px;margin-top:4px"
                 >
-                  <div style="font-weight:700;color:var(--t-ink)">
-                    ${L("Перетащи картинку сюда", "Drag an image here")}
-                  </div>
-                  <div class="t-muted" style="font-size:13px">
-                    ${L("или вставь из буфера (⌘/Ctrl + V)", "or paste from clipboard (⌘/Ctrl + V)")}
-                  </div>
-                  ${fileInput(L("Выбрать файл", "Choose file"))}
-                  <div
-                    style="display:flex;gap:6px;width:100%;max-width:360px;margin-top:4px"
+                  <input
+                    class="t-input"
+                    style="flex:1"
+                    placeholder=${L(
+                      "…или ссылка на картинку",
+                      "…or an image link",
+                    )}
+                    .value=${this.urlInput}
+                    @input=${(e: Event) =>
+                      (this.urlInput = (e.target as HTMLInputElement).value)}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === "Enter" && this.urlInput.trim())
+                        void this.stageFromUrl(this.urlInput.trim());
+                    }}
+                  />
+                  <button
+                    class="t-btn"
+                    ?disabled=${!this.urlInput.trim()}
+                    @click=${() => void this.stageFromUrl(this.urlInput.trim())}
                   >
-                    <input
-                      class="t-input"
-                      style="flex:1"
-                      placeholder=${L("…или ссылка на картинку", "…or an image link")}
-                      .value=${this.urlInput}
-                      @input=${(e: Event) =>
-                        (this.urlInput = (e.target as HTMLInputElement).value)}
-                      @keydown=${(e: KeyboardEvent) => {
-                        if (e.key === "Enter" && this.urlInput.trim())
-                          void this.stageFromUrl(this.urlInput.trim());
-                      }}
-                    />
-                    <button
-                      class="t-btn"
-                      ?disabled=${!this.urlInput.trim()}
-                      @click=${() => void this.stageFromUrl(this.urlInput.trim())}
-                    >
-                      ${L("Загрузить", "Load")}
-                    </button>
-                  </div>
-                </div>`}
+                    ${L("Загрузить", "Load")}
+                  </button>
+                </div>
+              </div>`}
         </div>
 
         <!-- ПРАВО: параметры -->
         <div
-          style="flex:0 0 280px;min-width:260px;display:flex;flex-direction:column;gap:10px;opacity:${staged ? "1" : ".5"};pointer-events:${staged ? "auto" : "none"}"
+          style="flex:0 0 280px;min-width:260px;display:flex;flex-direction:column;gap:10px;opacity:${staged
+            ? "1"
+            : ".5"};pointer-events:${staged ? "auto" : "none"}"
         >
           <label class="t-label">
             ${this.tilingS === 0
-              ? L("Режим: тянется за зоной (cover)", "Mode: stretches with the zone (cover)")
+              ? L(
+                  "Режим: тянется за зоной (cover)",
+                  "Mode: stretches with the zone (cover)",
+                )
               : this.tilingS >= 94
                 ? html`<span style="font-weight:700"
-                    >${L("Статичный — вписан в карту", "Static — fit into the map")}</span
+                    >${L(
+                      "Статичный — вписан в карту",
+                      "Static — fit into the map",
+                    )}</span
                   >`
                 : L(
                     `Режим: плитка (${this.tilingS < 48 ? "крупно" : "мелко"})`,
@@ -582,7 +639,8 @@ export class SkinsPage extends BaseModal {
             class="t-muted"
             style="display:flex;justify-content:space-between;font-size:11px"
           >
-            <span>${L("тянется", "stretch")}</span><span>${L("плитка", "tiled")}</span
+            <span>${L("тянется", "stretch")}</span
+            ><span>${L("плитка", "tiled")}</span
             ><span>${L("статик", "static")}</span>
           </div>
           <label class="t-label"
@@ -600,8 +658,16 @@ export class SkinsPage extends BaseModal {
               this.regenPreview();
             }}
           />
-          ${this.filterSlider(L("Яркость", "Brightness"), this.fB, (n) => (this.fB = n))}
-          ${this.filterSlider(L("Контраст", "Contrast"), this.fC, (n) => (this.fC = n))}
+          ${this.filterSlider(
+            L("Яркость", "Brightness"),
+            this.fB,
+            (n) => (this.fB = n),
+          )}
+          ${this.filterSlider(
+            L("Контраст", "Contrast"),
+            this.fC,
+            (n) => (this.fC = n),
+          )}
           ${this.filterSlider(
             L("Насыщенность", "Saturation"),
             this.fS,
@@ -619,7 +685,10 @@ export class SkinsPage extends BaseModal {
           </button>
           <input
             class="t-input"
-            placeholder=${L("Имя скина = ник (3–27)", "Skin name = nick (3–27)")}
+            placeholder=${L(
+              "Имя скина = ник (3–27)",
+              "Skin name = nick (3–27)",
+            )}
             maxlength="27"
             ?disabled=${editing}
             .value=${this.skinName}
@@ -659,8 +728,10 @@ export class SkinsPage extends BaseModal {
                     ? L("Сохраняю…", "Saving…")
                     : L("Создаю…", "Creating…"))}`
               : editing
-                ? html`${L("Сохранить", "Save")} (${this.hd ? 100 : 50} ${coin("pts")})`
-                : html`${L("Создать", "Create")} (${this.hd ? 400 : 200} ${coin("pts")})`}
+                ? html`${L("Сохранить", "Save")} (${this.editPrice()}
+                  ${coin("pts")})`
+                : html`${L("Создать", "Create")} (${this.hd ? 400 : 200}
+                  ${coin("pts")})`}
           </button>
         </div>
       </div>`;
@@ -683,29 +754,32 @@ export class SkinsPage extends BaseModal {
       label: string,
       value: TemplateResult | string | null,
       onClick: () => void,
-    ) => html`<button
-      ?disabled=${!on}
-      @click=${onClick}
-      title=${on
-        ? label
-        : L(
-            "Сначала создай скин — потом добавишь",
-            "Create the skin first — then add this",
-          )}
-      style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:1px solid var(--t-line,rgba(0,0,0,.18));background:transparent;color:var(--t-ink);font-size:13px;cursor:${on
-        ? "pointer"
-        : "not-allowed"};opacity:${on ? "1" : ".45"};text-align:left;line-height:1"
-    >
-      <img
-        src=${assetUrl(icon)}
-        style="width:16px;height:16px;flex:0 0 auto;object-fit:contain"
-        alt=""
-      />
-      <span style="flex:1">${label}</span>
-      <span style="font-weight:600;display:flex;align-items:center;gap:5px"
-        >${value ?? L("+50 💎", "+50 💎")}</span
+    ) =>
+      html`<button
+        ?disabled=${!on}
+        @click=${onClick}
+        title=${on
+          ? label
+          : L(
+              "Сначала создай скин — потом добавишь",
+              "Create the skin first — then add this",
+            )}
+        style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:1px solid var(--t-line,rgba(0,0,0,.18));background:transparent;color:var(--t-ink);font-size:13px;cursor:${on
+          ? "pointer"
+          : "not-allowed"};opacity:${on
+          ? "1"
+          : ".45"};text-align:left;line-height:1"
       >
-    </button>`;
+        <img
+          src=${assetUrl(icon)}
+          style="width:16px;height:16px;flex:0 0 auto;object-fit:contain"
+          alt=""
+        />
+        <span style="flex:1">${label}</span>
+        <span style="font-weight:600;display:flex;align-items:center;gap:5px"
+          >${value ?? L("+50 💎", "+50 💎")}</span
+        >
+      </button>`;
     return html`<div
       style="display:flex;flex-direction:column;gap:6px;margin-top:2px"
     >
@@ -754,7 +828,10 @@ export class SkinsPage extends BaseModal {
       this.stageImage(img);
     } catch {
       this.processing = false;
-      this.msg = L("Не удалось обработать картинку.", "Couldn't process the image.");
+      this.msg = L(
+        "Не удалось обработать картинку.",
+        "Couldn't process the image.",
+      );
     }
   }
 
@@ -857,12 +934,18 @@ export class SkinsPage extends BaseModal {
     if (m <= 0) return { text: "", color: "" };
     if (m < 400)
       return {
-        text: L("низкое качество (можно, но мыльно)", "low quality (works, but blurry)"),
+        text: L(
+          "низкое качество (можно, но мыльно)",
+          "low quality (works, but blurry)",
+        ),
         color: "#c0392b",
       };
     if (m < 900)
       return { text: L("хорошее качество", "good quality"), color: "#3a7d44" };
-    return { text: L("отличное качество", "excellent quality"), color: "#3a7d44" };
+    return {
+      text: L("отличное качество", "excellent quality"),
+      color: "#3a7d44",
+    };
   }
 
   // terron: на iOS нативный файл-пикер открывается с задержкой → юзер думает «не
@@ -895,7 +978,8 @@ export class SkinsPage extends BaseModal {
     if (file) {
       void this.stageFile(file);
     } else {
-      const url = e.dataTransfer?.getData("text/uri-list") ||
+      const url =
+        e.dataTransfer?.getData("text/uri-list") ||
         e.dataTransfer?.getData("text/plain");
       if (url) void this.stageFromUrl(url.trim());
     }
@@ -930,7 +1014,10 @@ export class SkinsPage extends BaseModal {
   // загрузка по ссылке → рисуем в canvas → data-URL (нормализуем; нужен CORS у хоста).
   private async stageFromUrl(url: string): Promise<void> {
     if (!/^https?:\/\//i.test(url) && !url.startsWith("data:")) {
-      this.msg = L("Нужна ссылка http(s) на картинку.", "Need an http(s) image link.");
+      this.msg = L(
+        "Нужна ссылка http(s) на картинку.",
+        "Need an http(s) image link.",
+      );
       return;
     }
     this.msg = L("Загружаю по ссылке…", "Loading from link…");
@@ -966,7 +1053,19 @@ export class SkinsPage extends BaseModal {
   }
 
   // полный сброс: убрать картинку, вернуться к зоне загрузки.
+  /** Цена сохранения правки — тем же правилом, что спишет сервер. */
+  private editPrice(): number {
+    return skinEditPrice({
+      fromCatalog: this.editFromCatalog,
+      newRaster: this.imageReplaced,
+      hd: this.hd,
+      wasHd: this.editWasHd,
+    });
+  }
+
   private resetEditor(): void {
+    this.editFromCatalog = false;
+    this.editWasHd = false;
     this.stagedUrl = "";
     this.stagedVisual = "";
     this.stagedRaw = "";
@@ -1084,6 +1183,8 @@ export class SkinsPage extends BaseModal {
     } catch {
       this.hd = false;
     }
+    this.editWasHd = this.hd;
+    this.editFromCatalog = s.from_catalog === true;
     // источник правки: предпочитаем ЧИСТЫЙ мастер (живое превью ползунков по
     // оригиналу + смена HD/размера без перезаливки). Нет мастера (legacy/пресет) →
     // материализуем текущий визуал (на сохранении зальётся как новый мастер).
@@ -1092,15 +1193,24 @@ export class SkinsPage extends BaseModal {
     if (s.has_master) src = (await getSkinMaster(s.id)) ?? "";
     if (!src) {
       src = await this.materializeVisual(s.data_url);
-      replaced = true;
+      // terron 28.09: картинку скина из каталога НЕ шлём заново, пока игрок не
+      // поставил свою: иначе любая правка ползунка считалась бы «своей
+      // картинкой» по цене нового скина (skinEditPrice). Legacy-скин без
+      // мастера по-прежнему перезаливаем — у него появится мастер.
+      replaced = !this.editFromCatalog;
     }
     try {
       const img = await this.loadImg(src);
       this.stageImage(img, { reset: false, replaced });
-      this.msg = L(
-        `Редактируешь «${s.name}». Меняй визуал/опции; сохранение = 50 алмазов (HD — 100).`,
-        `Editing “${s.name}”. Change visuals/options; saving = 50 diamonds (HD — 100).`,
-      );
+      this.msg = this.editFromCatalog
+        ? L(
+            `Редактируешь «${s.name}» (скин из каталога). Опции — 50 алмазов; своя картинка — как новый свой скин: 200 (HD — 400).`,
+            `Editing “${s.name}” (catalog skin). Options — 50 diamonds; your own image costs the same as a new custom skin: 200 (HD — 400).`,
+          )
+        : L(
+            `Редактируешь «${s.name}». Сохранение = 50 алмазов (HD — 100, переход на HD — 200).`,
+            `Editing “${s.name}”. Saving = 50 diamonds (HD — 100, upgrading to HD — 200).`,
+          );
     } catch {
       this.msg = L(
         "Не удалось загрузить скин для правки.",
@@ -1125,7 +1235,10 @@ export class SkinsPage extends BaseModal {
       });
       if (!img || !img.naturalWidth) return visual;
       const cap = 1024;
-      const sc = Math.min(1, cap / Math.max(img.naturalWidth, img.naturalHeight));
+      const sc = Math.min(
+        1,
+        cap / Math.max(img.naturalWidth, img.naturalHeight),
+      );
       const w = Math.max(1, Math.round(img.naturalWidth * sc));
       const h = Math.max(1, Math.round(img.naturalHeight * sc));
       const cv = document.createElement("canvas");

@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index,follow" />
+    <title>Сбоит графика — что делать · TERRON</title>
+    <!--
+      terron 25.09: гайд «видеокарта сбросила графику». Открывается:
+      (1) отдельной страницей /graphics-help — чистая статика, работает, даже
+          когда WebGL у игрока мёртв;
+      (2) модалкой ПОВЕРХ МАТЧА из окна сбоя (client/LegalModal.ts, doc
+          "graphics") — фетчем этой же страницы. Поэтому:
+          • блоки языков — [data-lang="ru"|"en"] (их выбирает модалка),
+            у кнопок переключения атрибут data-switch, НЕ data-lang;
+          • разделы помечены data-sec="light|driver|tabs|hardware|restart" —
+            по нему модалка прокручивает к нужному совету (id в двух языках
+            задублировались бы);
+          • внешние ссылки внутри площадки модалка превращает в текст — поэтому
+            всё, что игрок должен ввести, написано текстом в <code>.
+    -->
+    <style>
+      :root {
+        --bg: #efe6c8;
+        --sheet: #fffdf5;
+        --ink: #2b2a24;
+        --red: #b91c1c;
+        --blue: #1d4ed8;
+        --line: #d8cfa8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        line-height: 1.55;
+        font-size: 16px;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 64px; }
+      header { border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 20px; }
+      .brand { font-weight: 800; letter-spacing: 2px; font-size: 14px; }
+      h1 { font-size: 26px; margin: 8px 0 4px; }
+      h2 { font-size: 20px; margin: 28px 0 8px; border-left: 4px solid var(--red); padding-left: 10px; }
+      h3 { font-size: 16px; margin: 16px 0 6px; }
+      .sheet { background: var(--sheet); border: 1px solid var(--line); border-radius: 4px; padding: 14px 18px; margin: 12px 0; }
+      code {
+        background: #f1ead2; border: 1px solid var(--line); border-radius: 3px;
+        padding: 1px 6px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 14px;
+        word-break: break-word; user-select: all;
+      }
+      a { color: var(--blue); }
+      ol, ul { padding-left: 22px; }
+      li { margin: 6px 0; }
+      .langbar { display: flex; gap: 8px; margin-top: 10px; }
+      .langbar button {
+        font: inherit; font-weight: 700; cursor: pointer;
+        border: 1px solid var(--ink); background: var(--sheet); color: var(--ink);
+        padding: 6px 14px; border-radius: 3px;
+      }
+      .langbar button.active { background: var(--ink); color: var(--sheet); }
+      .toc { margin: 0; padding-left: 20px; }
+      .note { font-size: 14px; opacity: .8; }
+      .help { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .js [data-lang="en"] { display: none; }
+      .js.show-en [data-lang="ru"] { display: none; }
+      .js.show-en [data-lang="en"] { display: block; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">TERRON</div>
+        <div class="langbar">
+          <button type="button" data-switch="ru" class="active">Русский</button>
+          <button type="button" data-switch="en">English</button>
+        </div>
+      </header>
+
+      <!-- ============ РУССКИЙ ============ -->
+      <section data-lang="ru">
+        <h1>Сбоит графика: экран белеет или чернеет посреди матча</h1>
+        <p>
+          Так бывает, когда драйвер видеокарты не выдерживает нагрузку и браузер
+          сбрасывает графику у вкладки. Чаще всего — на встроенной графике
+          <strong>Intel</strong> (UHD / HD Graphics) и на ноутбуках в режиме
+          экономии. Матч при этом <strong>не прерывается</strong>: после
+          перезагрузки страницы вы вернётесь в него.
+        </p>
+        <p>Что помогает — по порядку, от самого простого:</p>
+        <ol class="toc">
+          <li>Включить лёгкую графику</li>
+          <li>Полностью перезапустить браузер</li>
+          <li>Закрыть лишние вкладки и программы</li>
+          <li>Включить аппаратное ускорение в браузере</li>
+          <li>Обновить драйвер видеокарты</li>
+        </ol>
+
+        <h2 data-sec="light">1. Лёгкая графика</h2>
+        <div class="sheet">
+          <p>
+            Игра рисует карту в меньшем разрешении и без эффектов света и
+            свечения. Видеокарте нужно заметно меньше памяти и работы — на
+            слабой графике сбои часто пропадают совсем.
+          </p>
+          <ul>
+            <li>В окне сбоя нажмите <strong>«Лёгкая графика и перезагрузить»</strong>.</li>
+            <li>Или в матче: кнопка настроек (шестерёнка) → <strong>«Лёгкая графика»</strong>.</li>
+          </ul>
+          <p class="note">Настройка начинает действовать со следующего матча и запоминается. Выключить её можно там же.</p>
+        </div>
+
+        <h2 data-sec="restart">2. Полностью перезапустить браузер</h2>
+        <div class="sheet">
+          <p>
+            После двух-трёх сбоев подряд браузер может <strong>запретить</strong>
+            графику для сайта до своего перезапуска — тогда не помогает ни
+            перезагрузка страницы, ни новая вкладка.
+          </p>
+          <ol>
+            <li>Закройте <strong>все окна</strong> браузера, а не только вкладку с игрой.</li>
+            <li>На Windows убедитесь, что браузер не остался в трее (значок у часов) — если остался, правый клик → «Выход».</li>
+            <li>Откройте браузер заново и зайдите в игру.</li>
+          </ol>
+        </div>
+
+        <h2 data-sec="tabs">3. Закрыть лишние вкладки и программы</h2>
+        <div class="sheet">
+          <p>
+            Встроенная видеокарта берёт память из общей оперативной, и её делят
+            все вкладки и программы. Видео, стримы, другие игры и тяжёлые сайты
+            отнимают её у TERRON.
+          </p>
+          <ul>
+            <li>Закройте вкладки с видео, стримами и другими играми.</li>
+            <li>Закройте программы, которые рисуют графику: игры, OBS, видеоредакторы.</li>
+            <li>
+              Узнать, какая вкладка «ест» больше всех, можно в диспетчере задач
+              браузера: <code>Shift + Esc</code> в Chrome, Яндекс Браузере и Edge.
+              Нажмите на заголовок «Объём памяти», чтобы отсортировать.
+            </li>
+            <li>
+              Ноутбук: подключите зарядку. От батареи Windows урезает мощность
+              видеокарты, и сбоев становится больше.
+            </li>
+          </ul>
+        </div>
+
+        <h2 data-sec="hardware">4. Аппаратное ускорение в браузере</h2>
+        <div class="sheet">
+          <p>
+            Это настройка, которая разрешает браузеру рисовать через видеокарту.
+            Если она выключена, игра рисуется процессором — медленно и со сбоями.
+            Проверьте, что она <strong>включена</strong>.
+          </p>
+          <p class="note">
+            Адреса вида <code>chrome://…</code> нельзя открыть ссылкой — браузер
+            это запрещает. Скопируйте адрес и вставьте его в адресную строку.
+          </p>
+
+          <h3>Google Chrome</h3>
+          <ol>
+            <li>Вставьте в адресную строку <code>chrome://settings/system</code> и нажмите Enter.</li>
+            <li>Найдите переключатель <strong>«Использовать графическое ускорение (при наличии)»</strong> и включите его.</li>
+            <li>Нажмите появившуюся кнопку <strong>«Перезапустить»</strong>.</li>
+          </ol>
+
+          <h3>Яндекс Браузер</h3>
+          <ol>
+            <li>Вставьте в адресную строку <code>browser://settings/system</code> и нажмите Enter.</li>
+            <li>В разделе «Производительность» включите <strong>«Использовать аппаратное ускорение, если возможно»</strong>.</li>
+            <li>Полностью закройте браузер и откройте снова.</li>
+          </ol>
+
+          <h3>Microsoft Edge</h3>
+          <ol>
+            <li>Вставьте в адресную строку <code>edge://settings/system</code> и нажмите Enter.</li>
+            <li>Включите <strong>«Использовать графическое ускорение, если оно доступно»</strong>.</li>
+            <li>Нажмите <strong>«Перезапустить»</strong>.</li>
+          </ol>
+
+          <h3>Opera</h3>
+          <ol>
+            <li>Вставьте в адресную строку <code>opera://settings/system</code> и нажмите Enter.</li>
+            <li>Включите <strong>«Использовать аппаратное ускорение, если доступно»</strong>.</li>
+            <li>Нажмите <strong>«Перезапустить»</strong>.</li>
+          </ol>
+
+          <h3>Firefox</h3>
+          <ol>
+            <li>Меню <strong>≡</strong> → <strong>Настройки</strong> → вкладка «Основные».</li>
+            <li>Прокрутите до раздела <strong>«Производительность»</strong>.</li>
+            <li>Снимите галочку «Использовать рекомендуемые параметры производительности».</li>
+            <li>Поставьте галочку <strong>«По возможности использовать аппаратное ускорение»</strong>.</li>
+            <li>Полностью закройте Firefox и откройте снова.</li>
+          </ol>
+
+          <h3>Как проверить, что заработало (Chrome, Яндекс, Edge, Opera)</h3>
+          <p>
+            Вставьте в адресную строку <code>chrome://gpu</code> (в Яндексе —
+            <code>browser://gpu</code>, в Edge — <code>edge://gpu</code>). В
+            начале страницы найдите строку <strong>WebGL2</strong>: должно быть
+            написано «Hardware accelerated». Если там «Software only» или
+            «Disabled» — ускорение не работает, дело в драйвере (пункт 5).
+          </p>
+        </div>
+
+        <h2 data-sec="driver">5. Обновить драйвер видеокарты</h2>
+        <div class="sheet">
+          <p>
+            Самая частая причина сбоев — старый драйвер. Браузеры обновляются
+            часто, а драйвер из коробки может быть трёхлетней давности.
+          </p>
+
+          <h3>Как узнать свою видеокарту (Windows)</h3>
+          <ol>
+            <li>Нажмите <code>Win + R</code>, введите <code>dxdiag</code>, нажмите Enter.</li>
+            <li>Откройте вкладку <strong>«Экран»</strong> — там написаны название видеокарты и версия драйвера.</li>
+          </ol>
+          <p class="note">Название видеокарты есть и в окне сбоя в игре, в строке «Код для поддержки».</p>
+
+          <h3>Самый простой способ — через Windows</h3>
+          <ol>
+            <li>Windows 11: Пуск → <strong>Параметры</strong> → <strong>Центр обновления Windows</strong> → «Дополнительные параметры» → <strong>«Необязательные обновления»</strong>.</li>
+            <li>Windows 10: Пуск → <strong>Параметры</strong> → «Обновление и безопасность» → <strong>«Просмотреть необязательные обновления»</strong>.</li>
+            <li>Раскройте «Обновления драйверов».</li>
+            <li>Отметьте драйвер видеокарты (Intel, AMD или NVIDIA), установите и перезагрузите компьютер.</li>
+          </ol>
+
+          <h3>Intel (UHD Graphics, HD Graphics, Iris)</h3>
+          <p>
+            Скачайте программу <strong>Intel Driver &amp; Support Assistant</strong>
+            с сайта intel.ru (поиск «Intel Driver Support Assistant»). Она сама
+            найдёт и поставит свежий драйвер. На ноутбуке, если программа пишет,
+            что драйвер «от производителя устройства», берите драйвер на сайте
+            производителя ноутбука (Lenovo, HP, ASUS, Acer…) в разделе
+            поддержки вашей модели.
+          </p>
+
+          <h3>AMD (Radeon)</h3>
+          <p>
+            Программа <strong>AMD Software: Adrenalin Edition</strong> с сайта
+            amd.com (раздел «Драйверы и поддержка») — она определит видеокарту
+            и поставит драйвер.
+          </p>
+
+          <h3>NVIDIA (GeForce)</h3>
+          <p>
+            Программа <strong>NVIDIA App</strong> (раньше — GeForce Experience) с
+            сайта nvidia.com, раздел «Драйверы». Или вручную выберите свою
+            модель в поиске драйверов на том же сайте.
+          </p>
+
+          <h3>Mac</h3>
+          <p>
+            Драйверы входят в macOS: обновите систему в <strong>Системных
+            настройках → Основные → Обновление ПО</strong>.
+          </p>
+        </div>
+
+        <div class="help">
+          <p>
+            <strong>Не помогло?</strong> Напишите нам — пришлите строку «Код для
+            поддержки» из окна сбоя или скриншот:
+            Telegram <a href="https://t.me/terron_chat">@terron_chat</a> ·
+            почта <a href="mailto:support@terron.io">support@terron.io</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ ENGLISH ============ -->
+      <section data-lang="en">
+        <h1>Graphics fail: the screen goes white or black mid-match</h1>
+        <p>
+          This happens when the graphics driver can't keep up and the browser
+          resets graphics for the tab. It's most common on integrated
+          <strong>Intel</strong> graphics (UHD / HD Graphics) and on laptops in
+          power-saving mode. The match <strong>keeps going</strong>: reload the
+          page and you'll be back in it.
+        </p>
+        <p>What helps, simplest first:</p>
+        <ol class="toc">
+          <li>Turn on light graphics</li>
+          <li>Fully restart the browser</li>
+          <li>Close extra tabs and programs</li>
+          <li>Turn on hardware acceleration in the browser</li>
+          <li>Update the graphics driver</li>
+        </ol>
+
+        <h2 data-sec="light">1. Light graphics</h2>
+        <div class="sheet">
+          <p>
+            The game draws the map at a lower resolution, without lighting and
+            glow effects. The graphics card needs much less memory and work —
+            on weak graphics the failures often stop completely.
+          </p>
+          <ul>
+            <li>In the failure window, press <strong>“Light graphics and reload”</strong>.</li>
+            <li>Or in a match: the settings button (gear) → <strong>“Light graphics”</strong>.</li>
+          </ul>
+          <p class="note">It takes effect from the next match and is remembered. You can turn it off in the same place.</p>
+        </div>
+
+        <h2 data-sec="restart">2. Fully restart the browser</h2>
+        <div class="sheet">
+          <p>
+            After two or three failures in a row the browser may <strong>block</strong>
+            graphics for the site until it restarts — reloading the page or a new
+            tab won't help then.
+          </p>
+          <ol>
+            <li>Close <strong>all browser windows</strong>, not just the game tab.</li>
+            <li>On Windows, check the browser isn't still in the tray (icon by the clock) — if it is, right-click → “Exit”.</li>
+            <li>Open the browser again and go back to the game.</li>
+          </ol>
+        </div>
+
+        <h2 data-sec="tabs">3. Close extra tabs and programs</h2>
+        <div class="sheet">
+          <p>
+            Integrated graphics take their memory from your shared RAM, and every
+            tab and program shares it. Videos, streams, other games and heavy
+            sites take it away from TERRON.
+          </p>
+          <ul>
+            <li>Close tabs with videos, streams and other games.</li>
+            <li>Close programs that draw graphics: games, OBS, video editors.</li>
+            <li>
+              To see which tab uses the most, open the browser's task manager:
+              <code>Shift + Esc</code> in Chrome, Yandex Browser and Edge. Click
+              the “Memory footprint” header to sort.
+            </li>
+            <li>
+              Laptop: plug in the charger. On battery, Windows cuts graphics
+              power and failures get more frequent.
+            </li>
+          </ul>
+        </div>
+
+        <h2 data-sec="hardware">4. Hardware acceleration in the browser</h2>
+        <div class="sheet">
+          <p>
+            This setting lets the browser draw with the graphics card. If it's
+            off, the game is drawn by the processor — slowly and with failures.
+            Make sure it's <strong>on</strong>.
+          </p>
+          <p class="note">
+            Addresses like <code>chrome://…</code> can't be opened from a link —
+            the browser forbids it. Copy the address and paste it into the
+            address bar.
+          </p>
+
+          <h3>Google Chrome</h3>
+          <ol>
+            <li>Paste <code>chrome://settings/system</code> into the address bar and press Enter.</li>
+            <li>Find <strong>“Use graphics acceleration when available”</strong> and turn it on.</li>
+            <li>Press the <strong>“Relaunch”</strong> button that appears.</li>
+          </ol>
+
+          <h3>Yandex Browser</h3>
+          <ol>
+            <li>Paste <code>browser://settings/system</code> into the address bar and press Enter.</li>
+            <li>Under “Performance”, turn on <strong>“Use hardware acceleration when possible”</strong>.</li>
+            <li>Fully close the browser and open it again.</li>
+          </ol>
+
+          <h3>Microsoft Edge</h3>
+          <ol>
+            <li>Paste <code>edge://settings/system</code> into the address bar and press Enter.</li>
+            <li>Turn on <strong>“Use graphics acceleration when available”</strong>.</li>
+            <li>Press <strong>“Restart”</strong>.</li>
+          </ol>
+
+          <h3>Opera</h3>
+          <ol>
+            <li>Paste <code>opera://settings/system</code> into the address bar and press Enter.</li>
+            <li>Turn on <strong>“Use hardware acceleration when available”</strong>.</li>
+            <li>Press <strong>“Relaunch”</strong>.</li>
+          </ol>
+
+          <h3>Firefox</h3>
+          <ol>
+            <li>Menu <strong>≡</strong> → <strong>Settings</strong> → “General” tab.</li>
+            <li>Scroll to <strong>“Performance”</strong>.</li>
+            <li>Untick “Use recommended performance settings”.</li>
+            <li>Tick <strong>“Use hardware acceleration when available”</strong>.</li>
+            <li>Fully close Firefox and open it again.</li>
+          </ol>
+
+          <h3>How to check it works (Chrome, Yandex, Edge, Opera)</h3>
+          <p>
+            Paste <code>chrome://gpu</code> into the address bar (Yandex —
+            <code>browser://gpu</code>, Edge — <code>edge://gpu</code>). Near the
+            top, find the <strong>WebGL2</strong> line: it should say “Hardware
+            accelerated”. If it says “Software only” or “Disabled”, acceleration
+            isn't working — it's the driver (step 5).
+          </p>
+        </div>
+
+        <h2 data-sec="driver">5. Update the graphics driver</h2>
+        <div class="sheet">
+          <p>
+            An old driver is the most common cause. Browsers update often, but
+            the driver that came with the computer can be three years old.
+          </p>
+
+          <h3>Find out your graphics card (Windows)</h3>
+          <ol>
+            <li>Press <code>Win + R</code>, type <code>dxdiag</code>, press Enter.</li>
+            <li>Open the <strong>“Display”</strong> tab — it shows the card name and driver version.</li>
+          </ol>
+          <p class="note">The card name is also in the game's failure window, in the “Support code” line.</p>
+
+          <h3>The easiest way — through Windows</h3>
+          <ol>
+            <li>Windows 11: Start → <strong>Settings</strong> → <strong>Windows Update</strong> → “Advanced options” → <strong>“Optional updates”</strong>.</li>
+            <li>Windows 10: Start → <strong>Settings</strong> → “Update &amp; Security” → <strong>“View optional updates”</strong>.</li>
+            <li>Expand “Driver updates”.</li>
+            <li>Tick the graphics driver (Intel, AMD or NVIDIA), install it and restart the computer.</li>
+          </ol>
+
+          <h3>Intel (UHD Graphics, HD Graphics, Iris)</h3>
+          <p>
+            Download <strong>Intel Driver &amp; Support Assistant</strong> from
+            intel.com (search “Intel Driver Support Assistant”). It finds and
+            installs a fresh driver. On a laptop, if it says the driver is
+            “provided by the device manufacturer”, get it from your laptop
+            maker's site (Lenovo, HP, ASUS, Acer…) in the support section for
+            your model.
+          </p>
+
+          <h3>AMD (Radeon)</h3>
+          <p>
+            <strong>AMD Software: Adrenalin Edition</strong> from amd.com
+            (“Drivers &amp; Support”) — it detects your card and installs the driver.
+          </p>
+
+          <h3>NVIDIA (GeForce)</h3>
+          <p>
+            <strong>NVIDIA App</strong> (formerly GeForce Experience) from
+            nvidia.com, “Drivers” section. Or pick your model in the driver
+            search on the same site.
+          </p>
+
+          <h3>Mac</h3>
+          <p>
+            Drivers come with macOS: update the system in <strong>System
+            Settings → General → Software Update</strong>.
+          </p>
+        </div>
+
+        <div class="help">
+          <p>
+            <strong>Didn't help?</strong> Write to us — send the “Support code”
+            line from the failure window or a screenshot:
+            Telegram <a href="https://t.me/terron_chat">@terron_chat</a> ·
+            email <a href="mailto:support@terron.io">support@terron.io</a>
+          </p>
+        </div>
+      </section>
+    </div>
+    <script>
+      (function () {
+        var root = document.documentElement;
+        root.classList.add("js");
+        function setLang(lang) {
+          root.classList.toggle("show-en", lang === "en");
+          root.lang = lang;
+          var btns = document.querySelectorAll(".langbar button");
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("active", btns[i].getAttribute("data-switch") === lang);
+          }
+        }
+        var qs = new URLSearchParams(location.search).get("lang");
+        var nav = (navigator.language || "").toLowerCase();
+        setLang(qs === "en" || qs === "ru" ? qs : nav.indexOf("ru") === 0 ? "ru" : "en");
+        document.querySelector(".langbar").addEventListener("click", function (e) {
+          var b = e.target.closest("button[data-switch]");
+          if (b) setLang(b.getAttribute("data-switch"));
+        });
+        // Раздел по якорю (#hardware и т. п.) — в видимом языке.
+        var sec = location.hash.replace("#", "");
+        if (sec) {
+          var lang = root.classList.contains("show-en") ? "en" : "ru";
+          var el = document.querySelector('[data-lang="' + lang + '"] [data-sec="' + sec + '"]');
+          if (el) el.scrollIntoView();
+        }
+      })();
+    </script>
+  </body>
+</html>

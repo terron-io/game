@@ -3,7 +3,8 @@ import { Config } from "../configuration/Config";
 import {
   TERRON_GREENS_DEBUFF_MAX_STACKS,
   TERRON_GREENS_NUKE_WEIGHT,
- TERRON_PEACE_TRAITOR_TICKS } from "../configuration/TerronTuning";
+  TERRON_PEACE_TRAITOR_TICKS,
+} from "../configuration/TerronTuning";
 import { SharedWaterCache } from "../execution/nation/SharedWaterCache";
 import { AbstractGraph } from "../pathfinding/algorithms/AbstractGraph";
 import { PathFinder } from "../pathfinding/types";
@@ -36,6 +37,7 @@ import {
   Quads,
   SatelliteBlackout,
   SpawnArea,
+  Structures,
   Team,
   TeamGameSpawnAreas,
   TerrainType,
@@ -58,6 +60,7 @@ import { StatsImpl } from "./StatsImpl";
 import { assignTeams } from "./TeamAssignment";
 import { TerraNulliusImpl } from "./TerraNulliusImpl";
 import { UnitGrid, UnitPredicate } from "./UnitGrid";
+import { UnitImpl } from "./UnitImpl";
 import { WaterManager } from "./WaterManager";
 
 export function createGame(
@@ -83,6 +86,15 @@ export function createGame(
 export type CellString = string;
 
 import { GreenInspectionExecution } from "../execution/GreenInspectionExecution";
+
+// terron 04.09 ПЕРФ: см. GameImpl.indexUnitAdded.
+const EMPTY_GAME_UNITS: readonly Unit[] = Object.freeze([]) as readonly Unit[];
+function unitGlobalOrder(a: Unit, b: Unit): number {
+  const pa = (a.owner() as PlayerImpl).playerOrder;
+  const pb = (b.owner() as PlayerImpl).playerOrder;
+  if (pa !== pb) return pa - pb;
+  return (a as UnitImpl).listSeq - (b as UnitImpl).listSeq;
+}
 
 export class GameImpl implements Game {
   private _ticks = 0;
@@ -187,9 +199,12 @@ export class GameImpl implements Game {
           throw new Error(`Unknown TeamCountConfig ${numPlayerTeams}`);
       }
     }
-    if (numPlayerTeams < 2) {
-      throw new Error(`Too few teams: ${numPlayerTeams}`);
-    } else if (numPlayerTeams < 8) {
+    // terron 04.09: «Дуэты» на двоих давали ceil(2/2)=1 команду и бросали
+    // «Too few teams: 1» из конструктора — матч не поднимался НИ У КОГО
+    // (game_error_modal у обоих клиентов, 03.09). Меньше двух команд не бывает:
+    // при нехватке игроков составы просто короче.
+    if (numPlayerTeams < 2) numPlayerTeams = 2;
+    if (numPlayerTeams < 8) {
       this.playerTeams = [ColoredTeams.Red, ColoredTeams.Blue];
       if (numPlayerTeams >= 3) this.playerTeams.push(ColoredTeams.Yellow);
       if (numPlayerTeams >= 4) this.playerTeams.push(ColoredTeams.Green);
@@ -334,9 +349,7 @@ export class GameImpl implements Game {
       // ульту можно ЗАХВАТИТЬ, и тогда пассив достался бы бомбящему.
       if (greens === culprit) continue;
       const inFlight = this.units(UnitType.GreenInspection).filter(
-        (u) =>
-          u.owner() === greens &&
-          u.culpritSmallID() === culprit.smallID(),
+        (u) => u.owner() === greens && u.culpritSmallID() === culprit.smallID(),
       ).length;
       if (inFlight >= TERRON_GREENS_DEBUFF_MAX_STACKS) continue;
       this.addExecution(
@@ -398,6 +411,20 @@ export class GameImpl implements Game {
     this._waterManager.queueTile(tile);
   }
 
+  // terron 25.08: ТЕРРАФОРМИНГ — «Насыпь». Флага лобби тут нет вовсе: подъём
+  // земли существует ТОЛЬКО как каст ульты, апстримовского аналога у него не
+  // было. Владельца у воды не бывает, поэтому проверки hasOwner (как у
+  // затопления) не нужно. new-units/TERRA.md
+  setLand(tile: TileRef, magnitude: number): void {
+    this._map.setLand(tile, magnitude);
+    this.recordTileUpdate(tile);
+  }
+
+  queueLandConversion(tile: TileRef): void {
+    if (this.isLand(tile)) return;
+    this._waterManager.queueLandTile(tile);
+  }
+
   unit(id: number): Unit | undefined {
     return this._unitMap.get(id);
   }
@@ -433,32 +460,87 @@ export class GameImpl implements Game {
       }
       return out;
     }
+    // terron 04.09 ПЕРФ: по типам — ГЛОБАЛЬНЫЙ индекс (см. indexUnitAdded),
+    // а не обход всех игроков. На карте мира сотни наций, и каждая звала
+    // units(TransportShip) каждый тик — квадрат по игрокам, 8 с из 70 в
+    // профиле. Порядок прежний: игроки в порядке `_players`, внутри — `_units`.
     if (types.length === 1) {
-      const t0 = types[0];
-      for (const p of this._players.values()) {
-        const us = p.units();
-        for (let i = 0; i < us.length; i++) {
-          if (us[i].type() === t0) out.push(us[i]);
-        }
-      }
-      return out;
+      return (this._unitsByType.get(types[0]) ?? EMPTY_GAME_UNITS).slice();
     }
-    const wanted = new Set(types);
-    for (const p of this._players.values()) {
-      const us = p.units();
-      for (let i = 0; i < us.length; i++) {
-        if (wanted.has(us[i].type())) out.push(us[i]);
-      }
+    const seen = new Set<UnitType>();
+    for (let i = 0; i < types.length; i++) {
+      const t = types[i];
+      if (seen.has(t)) continue;
+      seen.add(t);
+      const arr = this._unitsByType.get(t);
+      if (arr === undefined) continue;
+      for (let j = 0; j < arr.length; j++) out.push(arr[j]);
     }
+    if (seen.size > 1 && out.length > 1) out.sort(unitGlobalOrder);
     return out;
   }
 
-  unitCount(type: UnitType): number {
-    let total = 0;
-    for (const player of this._players.values()) {
-      total += player.unitCount(type);
+  /** terron 04.09 ПЕРФ: глобальный индекс юнитов по типу. Массив каждого типа
+   *  держится ОТСОРТИРОВАННЫМ по (порядок игрока, listSeq) — ровно тот порядок,
+   *  который давал старый обход «по игрокам, внутри по _units». Зовётся из
+   *  PlayerImpl.indexUnitAdded/Removed (те же три места, где меняется _units).
+   *  Сторож — tests/UnitIndexByType.test.ts. */
+  private _unitsByType = new Map<UnitType, Unit[]>();
+  indexUnitAdded(u: Unit): void {
+    const t = u.type();
+    let arr = this._unitsByType.get(t);
+    if (arr === undefined) {
+      arr = [];
+      this._unitsByType.set(t, arr);
     }
-    return total;
+    // Бинарный поиск места: почти всегда — конец массива.
+    let lo = 0;
+    let hi = arr.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (unitGlobalOrder(arr[mid], u) < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo === arr.length) arr.push(u);
+    else arr.splice(lo, 0, u);
+  }
+  indexUnitRemoved(u: Unit): void {
+    const arr = this._unitsByType.get(u.type());
+    if (arr === undefined) return;
+    const i = arr.indexOf(u);
+    if (i >= 0) arr.splice(i, 1);
+  }
+
+  /** terron 04.09 ПЕРФ: ГЛОБАЛЬНЫЙ СЧЁТ ЮНИТОВ ЧЕРЕЗ КЭШ С ИНВАЛИДАЦИЕЙ.
+   *
+   *  Профиль боевого реплея (World, 8 игроков, 19К тиков): unitCount +
+   *  гейт «в небе пусто» в SAMLauncherExecution.tick = 23 % всей симуляции.
+   *  Каждое ПВО каждый тик звало unitCount ~десять раз, а тот обходил ВСЕ
+   *  юниты ВСЕХ игроков (≈500) — четверть миллиона визитов за тик.
+   *
+   *  Кэш точный, а не «раз в тик»: любая мутация состава/уровня (addUnit,
+   *  removeUnit, смена уровня, сброс уровня при захвате) сбрасывает его, и
+   *  следующий вызов пересчитывает. Значит ответ БАЙТ-В-БАЙТ тот же, что у
+   *  прямого обхода, — детерминизм не задет (хэши реплея совпали). */
+  private unitCountCache: Map<UnitType, number> | null = null;
+  invalidateUnitCounts(): void {
+    this.unitCountCache = null;
+  }
+  unitCount(type: UnitType): number {
+    let cache = this.unitCountCache;
+    if (cache === null) {
+      cache = new Map<UnitType, number>();
+      for (const player of this._players.values()) {
+        const units = player.units();
+        for (let i = 0; i < units.length; i++) {
+          const u = units[i];
+          const t = u.type();
+          cache.set(t, (cache.get(t) ?? 0) + u.level());
+        }
+      }
+      this.unitCountCache = cache;
+    }
+    return cache.get(type) ?? 0;
   }
 
   unitInfo(type: UnitType): UnitInfo {
@@ -876,11 +958,18 @@ export class GameImpl implements Game {
           for (const reg of ULTIMATE_REGISTRY) {
             if (reg.actsAs !== UnitType.Factory) continue;
             for (const u of p.units(reg.type)) {
-              if (!u.isUnderConstruction())
-                factorySum += reg.actsAsCount ?? 1;
+              if (!u.isUnderConstruction()) factorySum += reg.actsAsCount ?? 1;
             }
           }
           this._stats.factoryLevels(p, factorySum);
+          // terron 25.08: ключ ШАГАЮЩЕГО ГОРОДА — пик СУММЫ УРОВНЕЙ ВСЕХ
+          // зданий одновременно (порог 2000). Считаем в том же редком проходе,
+          // что и фабрики: отдельного обхода юнитов не заводим.
+          let buildingSum = 0;
+          for (const u of p.units(...Structures.types)) {
+            if (!u.isUnderConstruction()) buildingSum += u.level();
+          }
+          this._stats.buildingLevels(p, buildingSum);
         }
       }
     }
@@ -1034,6 +1123,7 @@ export class GameImpl implements Game {
     );
     this._playersBySmallID.push(player);
     this.nextPlayerID++;
+    player.playerOrder = this._players.size;
     this._players.set(playerInfo.id, player);
     return player;
   }
@@ -1098,26 +1188,30 @@ export class GameImpl implements Game {
   }
 
   // Zero-allocation neighbor iteration for performance-critical code
+  // terron 04.09 ПЕРФ: соседи АРИФМЕТИКОЙ по ref, без `_map.ref(x, y)` (тот на
+  // каждого соседа делал два Number.isInteger и четыре сравнения). ⚠️ ПОРЯДОК
+  // соседей сохранён БАЙТ-В-БАЙТ (dx внешний, dy внутренний) — от него зависит
+  // детерминизм; хэши реплея совпали.
   forEachNeighborWithDiag(
     tile: TileRef,
     callback: (neighbor: TileRef) => void,
   ): void {
-    const x = this.x(tile);
-    const y = this.y(tile);
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        if (dx === 0 && dy === 0) continue; // Skip the center tile
-        const newX = x + dx;
-        const newY = y + dy;
-        if (
-          newX >= 0 &&
-          newX < this._width &&
-          newY >= 0 &&
-          newY < this._height
-        ) {
-          callback(this._map.ref(newX, newY));
-        }
-      }
+    const w = this._width;
+    const x = tile % w;
+    const y = (tile / w) | 0;
+    const up = y > 0;
+    const down = y + 1 < this._height;
+    if (x > 0) {
+      if (up) callback(tile - w - 1);
+      callback(tile - 1);
+      if (down) callback(tile + w - 1);
+    }
+    if (up) callback(tile - w);
+    if (down) callback(tile + w);
+    if (x + 1 < w) {
+      if (up) callback(tile - w + 1);
+      callback(tile + 1);
+      if (down) callback(tile + w + 1);
     }
   }
 
@@ -1165,46 +1259,53 @@ export class GameImpl implements Game {
     this.recordTileUpdate(tile);
   }
 
-  private updateBorders(tile: TileRef) {
-    const updateBorderStatus = (t: TileRef) => {
-      if (!this.hasOwner(t)) {
-        return;
-      }
-      const owner = this.owner(t) as PlayerImpl;
-      if (this.calcIsBorder(t)) {
-        owner._borderTiles.add(t);
-      } else {
-        owner._borderTiles.delete(t);
-      }
-    };
+  // terron 30.08 (перф): обновление границ — самый горячий путь движка. Замер
+  // боевых матчей: `conquer` идёт 4.2 млн раз за матч, и каждый раз статус границы
+  // пересчитывается у тайла И четырёх соседей. Раньше каждое такое обновление
+  // перечитывало владельца ТРИЖДЫ (`hasOwner`, `owner`, потом ещё раз внутри
+  // `calcIsBorder`) — отсюда 120 млн вызовов `owner` и 176 млн `ownerID` за матч.
+  // Теперь владелец читается ОДИН раз и передаётся дальше. Логика не изменилась.
+  private readonly updateBorderStatus = (t: TileRef) => {
+    const ownerId = this._map.ownerID(t);
+    if (ownerId === 0) return;
+    const owner = this._playersBySmallID[ownerId - 1] as PlayerImpl;
+    if (this.calcIsBorder(t, ownerId)) {
+      owner._borderTiles.add(t);
+    } else {
+      owner._borderTiles.delete(t);
+    }
+  };
 
-    updateBorderStatus(tile);
-    this.forEachNeighbor(tile, updateBorderStatus);
+  private updateBorders(tile: TileRef) {
+    this.updateBorderStatus(tile);
+    this.forEachNeighbor(tile, this.updateBorderStatus);
   }
 
-  private calcIsBorder(tile: TileRef): boolean {
-    if (!this.hasOwner(tile)) {
+  // ownerId передаётся вызывающим, когда уже прочитан — на горячем пути это
+  // экономит два чтения карты на каждый тайл.
+  private calcIsBorder(tile: TileRef, knownOwnerId?: number): boolean {
+    const ownerId = knownOwnerId ?? this._map.ownerID(tile);
+    if (ownerId === 0) {
       return false;
     }
-    const ownerId = this.ownerID(tile);
-    const x = this.x(tile);
-    const y = this.y(tile);
-    if (x > 0 && this.ownerID(this._map.ref(x - 1, y)) !== ownerId) {
+    // terron 04.09 ПЕРФ: соседи арифметикой по ref (ref = y*w + x) и чтение
+    // владельца прямо у карты — вместо x()/y()/ref()/ownerID() через обёртки
+    // (пять вызовов на каждый захваченный тайл, 1.2 с из 53 в профиле).
+    // Порядок проверок (лево, право, верх, низ) и результат прежние.
+    const w = this._width;
+    const map = this._map;
+    const x = tile % w;
+    const y = (tile / w) | 0;
+    if (x > 0 && map.ownerID(tile - 1) !== ownerId) {
       return true;
     }
-    if (
-      x + 1 < this._width &&
-      this.ownerID(this._map.ref(x + 1, y)) !== ownerId
-    ) {
+    if (x + 1 < w && map.ownerID(tile + 1) !== ownerId) {
       return true;
     }
-    if (y > 0 && this.ownerID(this._map.ref(x, y - 1)) !== ownerId) {
+    if (y > 0 && map.ownerID(tile - w) !== ownerId) {
       return true;
     }
-    if (
-      y + 1 < this._height &&
-      this.ownerID(this._map.ref(x, y + 1)) !== ownerId
-    ) {
+    if (y + 1 < this._height && map.ownerID(tile + w) !== ownerId) {
       return true;
     }
     return false;
@@ -1453,10 +1554,14 @@ export class GameImpl implements Game {
   }
 
   addUnit(u: Unit) {
+    this.unitCountCache = null;
+    (u.owner() as PlayerImpl).invalidateUnitCounts();
     this.unitGrid.addUnit(u);
     this._unitMap.set(u.id(), u);
   }
   removeUnit(u: Unit) {
+    this.unitCountCache = null;
+    (u.owner() as PlayerImpl).invalidateUnitCounts();
     this.unitGrid.removeUnit(u);
     this._unitMap.delete(u.id());
     this.planDrivenUnitIds.delete(u.id());
@@ -1601,12 +1706,15 @@ export class GameImpl implements Game {
   }
   // Zero-allocation neighbor iteration (cardinal only)
   forEachNeighbor(tile: TileRef, callback: (neighbor: TileRef) => void): void {
-    const x = this.x(tile);
-    const y = this.y(tile);
-    if (x > 0) callback(this._map.ref(x - 1, y));
-    if (x + 1 < this._width) callback(this._map.ref(x + 1, y));
-    if (y > 0) callback(this._map.ref(x, y - 1));
-    if (y + 1 < this._height) callback(this._map.ref(x, y + 1));
+    // terron 04.09 ПЕРФ: арифметика по ref (см. forEachNeighborWithDiag),
+    // порядок лево/право/верх/низ сохранён.
+    const w = this._width;
+    const x = tile % w;
+    const y = (tile / w) | 0;
+    if (x > 0) callback(tile - 1);
+    if (x + 1 < w) callback(tile + 1);
+    if (y > 0) callback(tile - w);
+    if (y + 1 < this._height) callback(tile + w);
   }
   isWater(ref: TileRef): boolean {
     return this._map.isWater(ref);
@@ -1671,6 +1779,10 @@ export class GameImpl implements Game {
   }
   waterGraphVersion(): number {
     return this._waterManager.waterGraphVersion();
+  }
+
+  terrainVersion(): number {
+    return this._waterManager.terrainVersion();
   }
   getWaterComponent(tile: TileRef): number | null {
     return this._waterManager.getWaterComponent(tile);

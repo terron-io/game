@@ -1,4 +1,4 @@
-import { GamePushSDK } from "./GamePushSDK";
+import { Host } from "./PlatformHost";
 import { isDevSite } from "./Utils";
 
 // terron 01.08: ПЛАШКА СОСТОЯНИЯ ВХОДА — ТОЛЬКО НА ДЕВЕ.
@@ -31,7 +31,7 @@ async function refreshOurAccount(): Promise<void> {
 
 function render(): void {
   if (!el) return;
-  const d = GamePushSDK.loginDebug();
+  const d = Host.loginDebug();
   const platform = d.sdk
     ? `${d.loggedIn ? "ВОШЁЛ" : "гость"}` +
       (d.playerId ? ` #${d.playerId}` : "") +

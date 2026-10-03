@@ -3,10 +3,17 @@ import { customElement, state } from "lit/decorators.js";
 import { assetUrl } from "../../../core/AssetUrls";
 import { EventBus } from "../../../core/EventBus";
 import {
+  BUILD_SLOTS,
+  BuildSlotDef,
+  defaultHotkeyLabel,
+  ULT_SLOT_DEF,
+  ULT_SLOT_KEYBIND,
+} from "../../../core/game/BuildSlots";
+import {
   actingAs,
   BuildableUnit,
-  CAST_UNLOCKED_BY,
   Gold,
+  Nukes,
   PlayerBuildableUnitType,
   ULT_MAX_COUNT,
   Ultimates,
@@ -27,37 +34,22 @@ import { toast } from "../../Toast";
 import { UIState } from "../../UIState";
 import {
   buildUltimateGrid,
-  getUltRefreshOffset,
   bumpUltRefreshOffset,
   effectiveUltSeed,
+  getUltRefreshOffset,
   UltGridSlot,
   ultPrimeUnlocked,
   ultRefreshDisplayPrice,
 } from "../../UltimateGrid";
 import { syncUltRefreshOnce } from "../../UltRefreshSync";
+import { buttonFor, ultSlotUnitType } from "../../UltSlots";
 import { refreshUltUnlocks, ultLockedForMe } from "../../UltUnlocks";
-import {
-  ultStatLines,
-  unitMeta,
-  unitSkinFor,
-  warshipIconFor,
-} from "../../UnitCatalog";
+import { ultStatLines, unitMeta } from "../../UnitCatalog";
 import { L, renderNumber, translateText } from "../../Utils";
 import { BUILD_DESC_PARAMS } from "../../WikiNumbers";
 import { cooldownOverlay } from "../CooldownBadge";
 import { tutBlocked, tutHighlighted } from "../tutHighlight";
-// terron: ПОДЛОДКИ — иконку корабля берём через warshipIconFor(): со штабом
-// «Подводный флот» это подлодка. Прямой константы больше нет специально.
-const cityIcon = assetUrl("images/CityIconWhite.svg");
-const factoryIcon = assetUrl("images/FactoryIconWhite.svg");
 const goldCoinIcon = assetUrl("images/GoldCoinIcon.svg");
-const missileSiloIcon = assetUrl("images/MissileSiloIconWhite.svg");
-const hydrogenBombIcon = assetUrl("images/MushroomCloudIconWhite.svg");
-const atomBombIcon = assetUrl("images/NukeIconWhite.svg");
-const portIcon = assetUrl("images/PortIcon.svg");
-const airportIcon = assetUrl("images/AirportIconWhite.svg"); // terron: авиация
-const samLauncherIcon = assetUrl("images/SamLauncherIconWhite.svg");
-const defensePostIcon = assetUrl("images/ShieldIconWhite.svg");
 // terron: ультимейты — звезда слота выбора. Иконки самих ульт-зданий/атак
 // берём из ЕДИНОГО реестра UnitCatalog (unitMeta), а не дублируем здесь.
 // new-units/ULTIMATES.md
@@ -70,14 +62,8 @@ export class UnitDisplay extends LitElement implements Controller {
   public uiState: UIState;
   private playerBuildables: BuildableUnit[] | null = null;
   private keybinds: Record<string, { value: string; key: string }> = {};
-  private _cities = 0;
-  private _warships = 0;
-  private _factories = 0;
-  private _missileSilo = 0;
-  private _port = 0;
-  private _defensePost = 0;
-  private _samLauncher = 0;
-  private _airports = 0; // terron: авиация
+  /** Уровни построенного по типу кнопки (счётчик на кнопке). */
+  private builtLevels = new Map<UnitType, number>();
   private allDisabled = false;
   private _hoveredUnit: PlayerBuildableUnitType | null = null;
   // terron: ультимейты — локальный пре-выбор до фиксации ядром (первое
@@ -116,10 +102,13 @@ export class UnitDisplay extends LitElement implements Controller {
       (available.length === 1 ? available[0] : null);
     if (chosen !== null) {
       // Активировать: тоггл ghost постройки/атаки (как клик по слоту-юниту).
+      // Штаб достроен → в слоте его КАСТ (тот же расчёт, что у кнопки).
+      const inSlot: UnitType =
+        ultSlotUnitType(chosen, (t) => this.hqBuilt(t)) ?? chosen;
       this.uiState.ghostStructure =
-        this.uiState.ghostStructure === chosen
+        this.uiState.ghostStructure === inSlot
           ? null
-          : (chosen as PlayerBuildableUnitType);
+          : (inSlot as PlayerBuildableUnitType);
       this._ultimateChooserOpen = false;
     } else {
       this._ultimateChooserOpen = !this._ultimateChooserOpen;
@@ -191,9 +180,31 @@ export class UnitDisplay extends LitElement implements Controller {
     }
   };
 
+  // terron 13.09 (тест владельца): шаг обучения меняет body-класс (tut-city →
+  // tut-income …), а на этом шаге игра стоит на ПАУЗЕ — тиков слоя нет, и панель
+  // держала блокировку прошлого шага: фабрика серая и без мигания, пока наведение
+  // мыши не перерисует. Смена шага = немедленный перезапрос и перерисовка.
+  private _tutKey = "";
+  private _tutObserver: MutationObserver | null = null;
+  private readonly onBodyClass = (): void => {
+    let key = "";
+    for (const c of document.body.classList) {
+      if (c.startsWith("tut-")) key += c + " ";
+    }
+    if (key === this._tutKey) return;
+    this._tutKey = key;
+    this.refreshBuildables();
+    this.requestUpdate();
+  };
+
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener("terron-toggle-ultimate-chooser", this.onUltHotkey);
+    this._tutObserver = new MutationObserver(this.onBodyClass);
+    this._tutObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
   }
 
   disconnectedCallback() {
@@ -201,7 +212,21 @@ export class UnitDisplay extends LitElement implements Controller {
       "terron-toggle-ultimate-chooser",
       this.onUltHotkey,
     );
+    this._tutObserver?.disconnect();
+    this._tutObserver = null;
     super.disconnectedCallback();
+  }
+
+  /** Спросить воркер, что сейчас можно строить, и перерисоваться по ответу.
+   *  Ответ асинхронный: без перерисовки в .then он ждал следующего тика, а на
+   *  паузе следующего тика нет. */
+  private refreshBuildables(): void {
+    const player = this.game?.myPlayer();
+    if (!player) return;
+    player.buildables(undefined, VISIBLE_BUILD_TYPES).then((buildables) => {
+      this.playerBuildables = buildables;
+      this.requestUpdate();
+    });
   }
 
   init() {
@@ -262,6 +287,11 @@ export class UnitDisplay extends LitElement implements Controller {
       case UnitType.AtomBomb:
       case UnitType.HydrogenBomb:
       case UnitType.MIRV:
+      // terron 25.08: ТЕРРАФОРМИНГ — три ракеты ульты пускаются из шахты и
+      // подчиняются тому же правилу «шахта должна быть ДОСТРОЕНА».
+      case UnitType.WaterNuke:
+      case UnitType.LandNuke:
+      case UnitType.BlastNuke:
         // terron: ядерка доступна (иконка белая), только когда силос ДОСТРОЕН —
         // не считаем силосы в стройке (иначе МИРВ/бомба «активны» сразу при
         // постановке силоса, хотя пуск нельзя — sim требует !isUnderConstruction).
@@ -311,17 +341,11 @@ export class UnitDisplay extends LitElement implements Controller {
     if (this._ultimateChooserOpen && player.ultimateChoice() !== null) {
       this._ultimateChooserOpen = false;
     }
-    player.buildables(undefined, VISIBLE_BUILD_TYPES).then((buildables) => {
-      this.playerBuildables = buildables;
-    });
-    this._cities = player.totalUnitLevels(UnitType.City);
-    this._missileSilo = player.totalUnitLevels(UnitType.MissileSilo);
-    this._port = player.totalUnitLevels(UnitType.Port);
-    this._defensePost = player.totalUnitLevels(UnitType.DefensePost);
-    this._samLauncher = player.totalUnitLevels(UnitType.SAMLauncher);
-    this._factories = player.totalUnitLevels(UnitType.Factory);
-    this._warships = player.totalUnitLevels(UnitType.Warship);
-    this._airports = player.totalUnitLevels(UnitType.Airport); // terron: авиация
+    this.refreshBuildables();
+    // terron 01.09: счётчики кнопок — по той же разметке, что и сами кнопки.
+    for (const slot of BUILD_SLOTS) {
+      this.builtLevels.set(slot.type, player.totalUnitLevels(slot.type));
+    }
     // terron 06.08: Мин правды влита в МЕДИА — счётчик считаем по МЕДИА.
     this._ministries = player.totalUnitLevels(UnitType.Media);
     this.requestUpdate();
@@ -370,91 +394,64 @@ export class UnitDisplay extends LitElement implements Controller {
         <!-- terron: ОДИН ряд (flex-nowrap), ширина по контенту (w-max) → панель
              снаружи прижата вправо и растёт влево при росте счётчиков. -->
         <div class="flex flex-nowrap justify-end gap-0.5 w-max ml-auto">
-          ${this.renderUnitItem(
-            cityIcon,
-            this._cities,
-            UnitType.City,
-            "city",
-            this.keybinds["buildCity"]?.key ?? "1",
-          )}
-          ${this.renderUnitItem(
-            factoryIcon,
-            this._factories,
-            UnitType.Factory,
-            "factory",
-            this.keybinds["buildFactory"]?.key ?? "2",
-          )}
-          ${this.renderUnitItem(
-            portIcon,
-            this._port,
-            UnitType.Port,
-            "port",
-            this.keybinds["buildPort"]?.key ?? "3",
-          )}
-          ${this.renderUnitItem(
-            defensePostIcon,
-            this._defensePost,
-            UnitType.DefensePost,
-            "defense_post",
-            this.keybinds["buildDefensePost"]?.key ?? "4",
-          )}
-          ${this.renderUnitItem(
-            airportIcon,
-            this._airports,
-            UnitType.Airport,
-            "airport",
-            this.keybinds["buildAirport"]?.key ?? "5",
-          )}
-          ${this.renderUnitItem(
-            missileSiloIcon,
-            this._missileSilo,
-            UnitType.MissileSilo,
-            "missile_silo",
-            this.keybinds["buildMissileSilo"]?.key ?? "6",
-          )}
-          ${this.renderUnitItem(
-            samLauncherIcon,
-            this._samLauncher,
-            UnitType.SAMLauncher,
-            "sam_launcher",
-            this.keybinds["buildSamLauncher"]?.key ?? "7",
-          )}
-          ${this.renderUnitItem(
-            // terron 23.08: иконка И НАЗВАНИЕ кнопки корабля берутся из реестра
-            // подмен (`replaces`): Подводный флот → подлодка, Пиратство →
-            // пиратская лодка. Раньше это был флаг «есть ли Подводный флот», и
-            // пират строил лодки, глядя на линкор.
-            warshipIconFor((t: UnitType) => this.hasUlt(t)),
-            this._warships,
-            UnitType.Warship,
-            unitSkinFor(UnitType.Warship, (t) => this.hasUlt(t))?.key ??
-              "warship",
-            this.keybinds["buildWarship"]?.key ?? "8",
-          )}
-          ${this.renderUnitItem(
-            atomBombIcon,
-            null,
-            UnitType.AtomBomb,
-            "atom_bomb",
-            this.keybinds["buildAtomBomb"]?.key ?? "9",
-          )}
-          ${this.renderUnitItem(
-            hydrogenBombIcon,
-            null,
-            UnitType.HydrogenBomb,
-            "hydrogen_bomb",
-            this.keybinds["buildHydrogenBomb"]?.key ?? "0",
-          )}
+          ${BUILD_SLOTS.map((s) => this.renderBuildSlot(s))}
           ${this.renderUltimateSlot()}
         </div>
       </div>
     `;
   }
 
+  /**
+   * terron 01.09: ОДНА кнопка панели по записи единой разметки
+   * (`core/game/BuildSlots`). Иконка и название — из общего каталога (с учётом
+   * подмены ультой), счётчик — уровни построенного, клавиша — из настроек по
+   * имени действия из той же записи.
+   *
+   * ⚠️ Раньше все десять кнопок были выписаны здесь руками, и каждая несла
+   * СВОЮ пару «иконка + имя действия» — то есть панель и обработчик клавиш
+   * договаривались вслепую. Именно так слот ульты остался с мёртвой клавишей.
+   */
+  private renderBuildSlot(slot: BuildSlotDef) {
+    // Обе подмены ульты (чужой слот кастом и подмена самого юнита) — ОДНИМ
+    // ответом: иначе кнопка корабля у Пиратства снова покажет линкор.
+    const btn = buttonFor(slot.type, (t) => this.hasUlt(t));
+    // ⚠️ 01.09 — РЕГРЕССИЯ, найденная владельцем: раньше у каждой кнопки был
+    // ЖЁСТКИЙ фолбэк на свою цифру (`?? "1"`, `?? "2"` …), а единый рендер
+    // падал в ПУСТУЮ строку. `parsedUserKeybinds()` возвращает {} у всех, кто
+    // клавиши не переназначал, — то есть цифры пропали с панели практически у
+    // ВСЕХ игроков. Фолбэк теперь берётся из того же реестра, где живут
+    // дефолты клавиатуры, — второй копии цифр нет.
+    const hotkey = this.keybinds[slot.keybind]?.key ?? defaultHotkeyLabel(slot);
+    // Счётчик — у всего, что НАКАПЛИВАЕТСЯ (города, порты, корабли…). У ракет
+    // его нет и быть не может: их не держат, их пускают.
+    // ⚠️ Первая версия правила была `Structures.has(...)` и молча убрала
+    // счётчик у КОРАБЛЯ — он юнит, а не строение. Поймал сторож.
+    const count = Nukes.has(slot.type)
+      ? null
+      : (this.builtLevels.get(slot.type) ?? 0);
+    return this.renderUnitItem(
+      btn.icon,
+      count,
+      btn.type as PlayerBuildableUnitType,
+      btn.nameKey,
+      hotkey,
+    );
+  }
+
   // terron: ультимейты — метаданные карточки ульты (иконка/i18n-ключ/счётчик).
   /** Есть ли у меня эта ульта (короткая форма для реестра подмен). */
   private hasUlt(t: UnitType): boolean {
     return this.game?.myPlayer()?.hasUltimate(t) ?? false;
+  }
+
+  /** Штаб этой ульты у меня ДОСТРОЕН (не в стройке). */
+  private hqBuilt(t: UnitType): boolean {
+    return (
+      this.game
+        ?.myPlayer()
+        ?.units(t)
+        .some((u) => !u.isUnderConstruction()) ?? false
+    );
   }
 
   private ultimateMeta(t: UnitType): {
@@ -481,7 +478,9 @@ export class UnitDisplay extends LitElement implements Controller {
   // Спека: new-units/ULTIMATES.md
   private renderUltimateSlot() {
     const fixed = this.game?.myPlayer()?.ultimateChoice() ?? null;
-    const hotkey = this.keybinds["buildMIRV"]?.key ?? "";
+    // Клавиша слота — из той же разметки, что и остальные кнопки.
+    const hotkey =
+      this.keybinds[ULT_SLOT_KEYBIND]?.key ?? defaultHotkeyLabel(ULT_SLOT_DEF);
 
     // Хост мог выключить ульты в лобби: одна доступная (обычно «базовый»
     // МИРВ) → обычная кнопка без чузера; ноль — слота нет вовсе.
@@ -505,7 +504,11 @@ export class UnitDisplay extends LitElement implements Controller {
       );
     }
     if (available.length === 0) return null;
-    if (available.length === 1) {
+    // ⚠️ terron 30.09 (репорт tomsrn «где кнопка раскола?», лобби с одной МЕДИА):
+    // единственная доступная ульта рисовалась ЗДАНИЕМ всегда — и после постройки
+    // тоже, поэтому каст (Раскол) в слот не вставал никогда. Как только ядро
+    // зафиксировало выбор, идём общим путём ниже — там подмена слота на каст.
+    if (available.length === 1 && fixed === null) {
       const m = this.ultimateMeta(available[0]);
       return this.renderUnitItem(
         m.icon,
@@ -533,17 +536,10 @@ export class UnitDisplay extends LitElement implements Controller {
       // недоступен ВООБЩЕ. Теперь пара берётся из того же реестра, что и гейт
       // в ядре (CAST_UNLOCKED_BY), — новый каст-ульт больше не требует правок
       // здесь. new-units/ULTIMATES.md
-      let slotType: UnitType = current;
-      for (const [cast, unlock] of Object.entries(CAST_UNLOCKED_BY)) {
-        if (unlock?.building !== current) continue;
-        const built =
-          this.game
-            ?.myPlayer()
-            ?.units(current)
-            .some((u) => !u.isUnderConstruction()) ?? false;
-        if (built) slotType = cast as UnitType;
-        break;
-      }
+      // terron 01.09: расчёт «что в слоте» переехал в UltSlots — его же читает
+      // обработчик хоткея, иначе клавиша и кнопка расходятся (см. UltSlots).
+      const slotType: UnitType =
+        ultSlotUnitType(current, (t) => this.hqBuilt(t)) ?? current;
       const m = this.ultimateMeta(slotType);
       // ПКМ по слоту — смена выбора, пока ядро его не зафиксировало.
       return html`
@@ -641,8 +637,8 @@ export class UnitDisplay extends LitElement implements Controller {
       // всех лобби — и полный список поехал в каждый дев-матч. Признак
       // полигона — это флаг полигона, а не побочный эффект настройки замков.
       isTestGroundActive();
-    // После платного рефреша прем-слоты разблокированы на этот матч (не-прем
-    // получает полный переролл с доступом к прем-ультам).
+    // Прем-ряд (нижние три слота) — только у TERRON Prime: непрем выбирает из
+    // шести, прем из девяти, и платный рефреш этого НЕ меняет (25.08).
     const unlocked = ultPrimeUnlocked();
     // terron 24.08: замки аккаунта НЕ занимают выбираемые слоты (см.
     // buildUltimateGrid) — закрытые ульты живут только в прем-слотах непрема.
@@ -771,7 +767,8 @@ export class UnitDisplay extends LitElement implements Controller {
   }
 
   // terron: одна ячейка сетки выбора ульт. Пустая / залоченная (прем) / кликабельная.
-  // `unlocked` = прем ИЛИ куплен рефреш (тогда прем-слоты доступны на матч).
+  // `unlocked` = TERRON Prime. ⚠️ 25.08 рефреш прем-ряд больше НЕ открывает
+  // (решение владельца: «реролл у премов 9 ультов, у остальных 6»).
   private renderUltimateGridCell(
     slot: UltGridSlot,
     unlocked: boolean,
@@ -900,6 +897,13 @@ export class UnitDisplay extends LitElement implements Controller {
     if (this.game.config().isUnitDisabled(unitType)) {
       return html``;
     }
+    // ⚠️ terron 01.09 — БОЕВОЙ БАГ: в тултипе печаталось
+    // «unit_type.unit_type.city» и «build_menu.desc.unit_type.city».
+    // Этот метод клеит префиксы САМ и ждёт КОРОТКИЙ ключ, а единый
+    // `UltSlots.buttonFor` отдаёт ПОЛНЫЙ (`unit_type.<…>`) — ровно та же
+    // «две формы одного ключа», из-за которой раньше кнопка подмены печатала
+    // сырой ключ. Приводим здесь, в одном месте: метод принимает ЛЮБУЮ форму.
+    structureKey = structureKey.replace(/^unit_type\./, "");
     const selected = this.uiState.ghostStructure === unitType;
     const hovered = this._hoveredUnit === unitType;
     const displayHotkey = hotkey
@@ -1004,6 +1008,11 @@ export class UnitDisplay extends LitElement implements Controller {
             switch (unitType) {
               case UnitType.AtomBomb:
               case UnitType.HydrogenBomb:
+              // terron 25.08: терраформинг — ракеты ульты подсвечивают те же
+              // шахты и ПВО, что обычные ядерки.
+              case UnitType.WaterNuke:
+              case UnitType.LandNuke:
+              case UnitType.BlastNuke:
                 this.eventBus?.emit(
                   new ToggleStructureEvent([
                     UnitType.MissileSilo,

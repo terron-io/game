@@ -4,28 +4,16 @@ import {
 } from "../../client/render/gl/GraphicsOverrides";
 import { Cosmetics } from "../CosmeticSchemas";
 import { PlayerPattern } from "../Schemas";
+import { BUILD_KEYBIND_DEFAULTS } from "./BuildSlots";
 
 export function getDefaultKeybinds(isMac: boolean): Record<string, string> {
   return {
     toggleView: "Space",
     coordinateGrid: "KeyM",
-    // terron: авиация — порядок билд-биндов (решение владельца 05.07):
-    // город1 завод2 порт3 щит4 аэропорт5 шахта6 ПВО7 варшип8 атом9 водородка(бол.бомба)0.
-    // МИРВ без цифры (11 построек, 10 слотов). airport.md
-    buildCity: "Digit1",
-    buildFactory: "Digit2",
-    buildPort: "Digit3",
-    buildDefensePost: "Digit4",
-    buildAirport: "Digit5",
-    buildMissileSilo: "Digit6",
-    buildSamLauncher: "Digit7",
-    buildWarship: "Digit8",
-    buildAtomBomb: "Digit9",
-    buildHydrogenBomb: "Digit0",
-    buildMIRV: "Null",
-    // terron: НЕФТЯНАЯ ВЫШКА — цифр не осталось (10 слотов заняты), поэтому
-    // по умолчанию без клавиши: кнопка в баре есть, бинд назначается вручную.
-    buildOilRig: "Null",
+    // terron 01.09: клавиши стройки ВЫВОДЯТСЯ из единой разметки кнопок
+    // (`BuildSlots.ts`) — там же порядок панели, имена действий и типы юнитов.
+    // Раньше этот список вёлся руками и был четвёртой копией того же самого.
+    ...BUILD_KEYBIND_DEFAULTS,
     // terron: чузер ультимейта на клавише СЛЕВА от цифр (Backquote — это §/ё/~).
     // Раньше был «-» (Minus), но он занят зумом карты → конфликт, ушли на Backquote.
     openUltimate: "Backquote",
@@ -66,6 +54,10 @@ export const FLAG_KEY = "flag";
 export const COLOR_KEY = "settings.territoryColor";
 export const DARK_MODE_KEY = "settings.darkMode";
 export const PERFORMANCE_OVERLAY_KEY = "settings.performanceOverlay";
+// terron 05.09: ручной тумблер «Лёгкая графика» (аудит TZ-perf-queue §2). Ключ
+// читает GPURenderer.gfxLow() напрямую из localStorage — рендер живёт до
+// UserSettings и в воркере не бывает.
+export const LIGHT_GRAPHICS_KEY = "settings.lightGraphics";
 export const KEYBINDS_KEY = "settings.keybinds";
 export const GRAPHICS_KEY = "settings.graphics";
 
@@ -154,6 +146,15 @@ export class UserSettings {
 
   performanceOverlay() {
     return this.getBool(PERFORMANCE_OVERLAY_KEY, false);
+  }
+
+  /** Лёгкая графика: меньше бэкбуфер, без света/блума. Действует со следующего матча. */
+  lightGraphics() {
+    return this.getBool(LIGHT_GRAPHICS_KEY, false);
+  }
+
+  toggleLightGraphics() {
+    this.setBool(LIGHT_GRAPHICS_KEY, !this.lightGraphics());
   }
 
   alertFrame() {

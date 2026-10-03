@@ -13,15 +13,15 @@ import {
   TERRON_MEDIA_MINISTRY_RADIUS_MULT,
   TERRON_MINISTRY_RADIUS,
   TERRON_OURSKY_SAM_RADIUS_MULT,
-  TERRON_WALK_RATIO_MAX,
-  walkZoneRadius,
 } from "../../core/configuration/TerronTuning";
 import { EventBus } from "../../core/EventBus";
 import { wouldNukeBreakAlliance } from "../../core/execution/Util";
 import {
   BuildableUnit,
   PlayerBuildableUnitType,
+  SamInterceptable,
   Structures,
+  ultCasts,
   ULTIMATE_REGISTRY,
   UnitType,
 } from "../../core/game/Game";
@@ -32,8 +32,8 @@ import { castTroopsFor } from "../CastTroops";
 import { Controller } from "../Controller";
 import {
   ConfirmGhostStructureEvent,
-  MouseMoveEvent,
   MouseDownEvent,
+  MouseMoveEvent,
   MouseUpEvent,
 } from "../InputHandler";
 import { buildNukeTrajectory, GameView as WebGLGameView } from "../render/gl";
@@ -393,8 +393,9 @@ export class BuildPreviewController implements Controller {
     // объявляли, и заметить пропажу можно было только в бою. Теперь радиус —
     // обязательное поле записи, и сюда он приезжает сам. 0 = зоны нет.
     for (const ult of ULTIMATE_REGISTRY) {
-      if (ult.cast?.type === u.type && ult.cast.previewRadius > 0) {
-        rangeRadius = ult.cast.previewRadius;
+      const c = ultCasts(ult).find((c) => c.type === u.type);
+      if (c !== undefined && c.previewRadius > 0) {
+        rangeRadius = c.previewRadius;
         break;
       }
       // terron 23.08: то же и для ШТАБА ульты. Число в реестре = круг при
@@ -408,6 +409,15 @@ export class BuildPreviewController implements Controller {
     }
     // terron: для фабрики — внутренний радиус «мёртвой зоны» (ближе него станции НЕ
     // связываются). Кольцо снаружи градиентом green→yellow (дальше = путь длиннее).
+    // terron 05.09 ПРАВИЛО ВЛАДЕЛЬЦА: у атаки с радиусом гост — РАДИУС, как у
+    // ядерки, всегда. Раньше радиус получали только три ракеты, перечисленные
+    // руками (атомная, водородная, «Реки вспять»); три ракеты Терраформинга и
+    // любая следующая падали в крестик. Теперь — по ГРУППЕ: все ракеты, у которых
+    // есть воронка в конфиге (Nukes минус МИРВ и его боеголовки — у МИРВа своё
+    // превью). Новая ракета = запись в группе, а не строка здесь.
+    if (SamInterceptable.has(u.type)) {
+      rangeRadius = this.game.config().nukeMagnitudes(u.type).outer;
+    }
     let rangeMinRadius = 0;
     switch (u.type) {
       // terron 25.08: зоны у «Переноса» БОЛЬШЕ НЕТ (решение владельца «убери
@@ -429,11 +439,6 @@ export class BuildPreviewController implements Controller {
         break;
       // terron 06.08: водяная ракета «Реки вспять» — тот же круг радиуса, что у
       // обычной ядерки (радиус берётся из nukeMagnitudes по типу).
-      case UnitType.AtomBomb:
-      case UnitType.HydrogenBomb:
-      case UnitType.WaterNuke:
-        rangeRadius = this.game.config().nukeMagnitudes(u.type).outer;
-        break;
       case UnitType.Factory:
         rangeRadius = this.game.config().trainStationMaxRange();
         rangeMinRadius = this.game.config().trainStationMinRange();
@@ -611,6 +616,17 @@ export class BuildPreviewController implements Controller {
       return;
     }
     const tile = this.transformHandler.screenToWorldCoordinates(e.x, e.y);
+    // terron 04.09: КЛИК ЗА КРАЕМ КАРТЫ СО ВЗВЕДЁННЫМ ГОСТОМ. canBuild госта
+    // считается по последней ВАЛИДНОЙ позиции мыши, а тайл интента брался из
+    // сырых координат клика — у края карты ref() бросал «Invalid coordinates:
+    // 800,974 / -105,88» необработанным (js_error, ~1 сессия/день, десктоп).
+    // Строим там, где нарисован гост: это и есть ожидание игрока.
+    const canBuildTile = this.ghostUnit.buildableUnit.canBuild;
+    const clickRef: TileRef | null = this.game.isValidCoord(tile.x, tile.y)
+      ? this.game.ref(tile.x, tile.y)
+      : typeof canBuildTile === "number"
+        ? canBuildTile
+        : null;
     if (this.ghostUnit.buildableUnit.canUpgrade !== false) {
       this.eventBus.emit(
         new SendUpgradeStructureIntentEvent(
@@ -636,14 +652,18 @@ export class BuildPreviewController implements Controller {
         this.transferZone = this.ghostUnit.buildableUnit.canBuild as TileRef;
         return;
       }
+      if (clickRef === null) {
+        this.removeGhostStructure();
+        return;
+      }
       const dstTile =
         unitType === UnitType.CityTransfer && this.transferZone !== null
-          ? this.game.ref(tile.x, tile.y)
+          ? clickRef
           : undefined;
       const intentTile =
         unitType === UnitType.CityTransfer && this.transferZone !== null
           ? this.transferZone
-          : this.game.ref(tile.x, tile.y);
+          : clickRef;
       this.eventBus.emit(
         new BuildUnitIntentEvent(
           unitType,

@@ -10,7 +10,12 @@ import {
   gold,
   n,
   tradeGold,
+  trainCars,
   trainGold,
+  trainMaxStops,
+  trainStopDecayPct,
+  trainVisualCars,
+  trainIntervalSec,
   troops,
 } from "./WikiNumbers";
 
@@ -58,15 +63,16 @@ export interface Entry {
 /**
  * Иконки объектов, которых нет в `UnitCatalog` (тот реестр — про HUD-отображение
  * и трогать его ради вики нельзя). Здесь — только чтение файлов ассетов.
+ *
+ * ⚠️ terron 31.08: пять записей отсюда удалены как МЁРТВЫЕ — бункер, корабль,
+ * обе ядерки и дрон переехали в каталог, а `iconOf` спрашивает каталог ПЕРВЫМ.
+ * Висели они молча (у корабля тут вообще был другой файл, эсминец вместо
+ * линкора) и рано или поздно разъехались бы с кнопкой. Держим тут только то,
+ * чего в каталоге нет по смыслу: кнопкой такое не строят.
  */
 const WIKI_ICONS: Partial<Record<UnitType, string>> = {
-  [UnitType.DefensePost]: "ShieldIconWhite.svg",
-  [UnitType.Warship]: "DestroyerIconWhite.svg",
   [UnitType.TransportShip]: "BoatIconWhite.svg",
   [UnitType.TradeShip]: "TradingIconWhite.png",
-  [UnitType.AtomBomb]: "NukeIconWhite.svg",
-  [UnitType.HydrogenBomb]: "MushroomCloudIconWhite.svg",
-  [UnitType.SuicideDrone]: "DroneIconWhite.svg",
   [UnitType.Airplane]: "AirportIconWhite.svg",
   [UnitType.AirborneAssault]: "AirportIconWhite.svg",
   [UnitType.Train]: "FactoryIconWhite.svg",
@@ -284,18 +290,36 @@ export const ULTS: Entry[] = [
     type: UnitType.RiversBack,
     name: bi("Реки вспять", "Rivers Back"),
     kind: bi(
-      "Здание-штаб · разблокирует водяную ракету",
-      "HQ building · unlocks the water missile",
+      "Здание-штаб · ракета, топящая землю",
+      "HQ building · a land-sinking missile",
     ),
     cost: bi(
       `${gold(TUN.ultCost)} золота · постройка ${TUN.ultBuildSec} с · пуск ${gold(TUN.riversNukeCost)}`,
       `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build · ${gold(TUN.riversNukeCost)} per launch`,
     ),
     what: bi(
-      `Пока гидроузел стоит, из ракетной шахты можно пускать ВОДЯНУЮ РАКЕТУ. Там, где она рванёт, суша НАВСЕГДА становится водой: воронка радиусом ${TUN.riversNukeInner}–${TUN.riversNukeOuter} тайлов с неровной кромкой. Земля не выжигается и не зарастает — её просто больше нет. Здания на затопленных тайлах гибнут вместе с землёй, а сама вода становится проходимой для лодок: можно разрезать перешеек и завести флот туда, куда раньше пути не было. Пускается как атомная (та же шахта и её кулдаун), и ПВО сбивает её как обычную ракету.`,
-      `While the hydro complex stands, your missile silo can launch a WATER MISSILE. Wherever it hits, land becomes water FOREVER: a crater of ${TUN.riversNukeInner}–${TUN.riversNukeOuter} tiles with a ragged edge. The ground is not burned and never grows back — it is simply gone. Buildings on flooded tiles die with the ground, and the new water is navigable: you can cut an isthmus and sail a fleet where there was no route before. It launches like an atom bomb (same silo and cooldown), and SAMs shoot it down like any missile.`,
+      `Пока штаб стоит, из любой своей ракетной шахты можно пускать водяную ракету: суша в воронке ${TUN.riversNukeInner}–${TUN.riversNukeOuter} тайлов (неровная кромка) НАВСЕГДА становится водой. Режь перешейки, топи здания вместе с землёй, заводи флот туда, где пути не было. Обычные ядерки при этом остаются доступны — ульта их не отнимает. ПВО сбивает ракету как любую другую, но сбитая всё равно оставляет половинную воронку там, где её поймали. Освоил ульту (50 пусков за матч) — открывается ТЕРРАФОРМИНГ: три ракеты вместо обеих ядерок.`,
+      `While the HQ stands, any of your missile silos can launch the water missile: land inside a ${TUN.riversNukeInner}–${TUN.riversNukeOuter} tile crater (ragged edge) becomes water FOREVER. Cut isthmuses, sink buildings with the ground, sail a fleet where there was no route. Ordinary nukes stay available — this ult does not take them away. SAMs shoot the missile down like any other, but an intercepted one still leaves a half-sized crater where it was caught. Master it (50 launches in one match) and TERRAFORMING unlocks: three missiles instead of both nukes.`,
     ),
   },
+  {
+    slug: "terraforming",
+    type: UnitType.Terraforming,
+    name: bi("Терраформинг", "Terraforming"),
+    kind: bi(
+      "ЗАКРЫТАЯ ульта · три ракеты вместо обеих ядерок",
+      "LOCKED ult · three missiles replacing both nukes",
+    ),
+    cost: bi(
+      `${gold(TUN.ultCost)} золота · постройка ${TUN.ultBuildSec} с · пуск ${gold(TUN.terraNukeCost)} · открывается ачивкой «Гидростроитель» или за 500 кровавых алмазов`,
+      `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build · ${gold(TUN.terraNukeCost)} per launch · unlocked by the Hydro Engineer achievement or for 500 blood diamonds`,
+    ),
+    what: bi(
+      `Развитие «Рек вспять». Пока штаб стоит, ОБЕ обычные ядерки и МИРВ тебе НЕДОСТУПНЫ — вместо них из шахты пускаются ТРИ ракеты по ${gold(TUN.terraNukeCost)} с воронкой ${TUN.terraNukeInner}–${TUN.terraNukeOuter} тайлов: ${TUN.terraNukeOuter > TUN.riversNukeOuter ? "крупнее" : "меньше"}, чем у «Рек вспять» (${TUN.riversNukeInner}–${TUN.riversNukeOuter}), и ${TUN.terraNukeCost > TUN.riversNukeCost ? "дороже" : "дешевле"}. ЗАТОПЛЕНИЕ: суша навсегда становится водой. НАСЫПЬ: наоборот, вода становится СУШЕЙ — насыпь перешеек к острову, перекрой пролив, отрежь чужой порт от моря; новая земля НИЧЕЙНАЯ, занимает тот, кто дотянулся первым, в том числе противник. ЯДЕРНЫЙ УДАР: обычная ядерка — выжигает землю и оставляет пепел. Все три пускаются из шахты с общим кулдауном, ПВО сбивает их как обычные ракеты (сбитые Затопление и Насыпь оставляют половинную воронку в точке перехвата).`,
+      `The upgrade to Rivers Back. While the HQ stands, BOTH ordinary nukes and the MIRV are unavailable — instead your silo launches THREE missiles at ${gold(TUN.terraNukeCost)} each with a ${TUN.terraNukeInner}–${TUN.terraNukeOuter} tile crater: ${TUN.terraNukeOuter > TUN.riversNukeOuter ? "larger" : "smaller"} than Rivers Back (${TUN.riversNukeInner}–${TUN.riversNukeOuter}), and ${TUN.terraNukeCost > TUN.riversNukeCost ? "pricier" : "cheaper"}. FLOOD: land becomes water forever. LANDFILL: the reverse — water becomes LAND, so you can bridge to an island, wall off a strait or cut an enemy port off from the sea; the new ground belongs to NOBODY, whoever reaches it first takes it, your enemy included. NUCLEAR STRIKE: an ordinary nuke that burns the ground and leaves fallout. All three launch from the silo on a shared cooldown, and SAMs shoot them down like any missile (an intercepted Flood or Landfill leaves a half-sized crater at the intercept point).`,
+    ),
+  },
+
   {
     slug: "mining",
     type: UnitType.Mining,
@@ -336,28 +360,34 @@ export const ULTS: Entry[] = [
     slug: "revanchism",
     type: UnitType.Revanchism,
     name: bi("Реваншизм", "Revanchism"),
-    kind: bi("Здание-монумент · пассив", "Monument building · passive"),
+    kind: bi(
+      "Здание-монумент · пассив · до 3 уровней",
+      "Monument building · passive · up to 3 levels",
+    ),
     cost: bi(
       `${gold(TUN.ultCost)} золота · постройка ${TUN.ultBuildSec} с`,
       `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build`,
     ),
     what: bi(
-      `Теряя землю от своего исторического максимума (пика), ты получаешь бонус к защите ВСЕЙ территории. Бонус = потерянная доля × ${TUN.revanchismScale}, максимум +${TUN.revanchismMaxPct} %. Пример: потерял треть пика → примерно +66 % к защите. На пике (ничего не потерял) — ноль. Чем больше срезали от максимума, тем труднее тебя добить. Танковый завод этот бонус НЕ игнорирует — он снимает только защиту бункеров. ВТОРАЯ ПОЛОВИНА УЛЬТЫ — МЕСТЬ: все, кто напал на тебя ПЕРВЫМ, попадают в список обидчиков, и твои атаки по ним идут на +50 % эффективнее. Кого первым тронул ты — в список не попадает. Список ведётся ВСЕГДА, даже пока статуи нет: достроил её посреди чужого наступления — месть заработает сразу по всем, кто успел напасть.`,
-      `As you lose land from your historic maximum (peak), you gain a defense bonus across your ENTIRE territory. Bonus = lost fraction × ${TUN.revanchismScale}, capped at +${TUN.revanchismMaxPct}%. Example: lost a third of the peak → roughly +66% defense. At the peak (nothing lost) — zero. The more they've cut from your maximum, the harder you are to finish off. A Tank Factory does NOT ignore this bonus — it only strips bunker defense. THE OTHER HALF OF THE ULTIMATE — REVENGE: everyone who attacked you FIRST goes on a grudge list, and your attacks against them are 50% more effective. Anyone you struck first does not count. The list is kept AT ALL TIMES, even before the statue exists: finish it in the middle of an invasion and the revenge applies immediately to everyone who already attacked you.`,
+      `Пока стоит монумент, захват ТВОЕЙ земли ЗАМЕДЛЯЕТСЯ тем сильнее, чем больше срезано от твоего исторического максимума (пика): при полной потере — в ${TUN.revanchismSlowLvl1} раза на 1-м уровне монумента и до ${TUN.revanchismSlowMax} на ${TUN.revanchismMaxLevel}-м. На пике (ничего не потерял) — ноль, так что в начале вторжения ульта молчит. Затраты нападающего она НЕ повышает — только тормозит; попутно медленнее тают и твои войска (они списываются за каждый отданный тайл). С бункерами замедление ПЕРЕМНОЖАЕТСЯ. Танковый завод его НЕ игнорирует — он снимает только защиту бункеров. УРОВНИ: монумент рождается ${TUN.revanchismMaxLevel > 1 ? "прокачанным" : "первого уровня"}, если предыдущий ты уже терял, +${TUN.revanchismPerLevelPct} % за уровень. Захватили статую — следующая сразу ${1 + TUN.revanchismLvlCaptured}-го уровня, снесли — ${1 + TUN.revanchismLvlDestroyed}-го, снёс сам — нужно ${TUN.revanchismSelfToMax} раза до потолка. ⚠️ ЗАХВАЧЕННАЯ ЧУЖАЯ статуя всегда 1-го уровня: уровень лежит в монументе, а не в тебе. ВТОРАЯ ПОЛОВИНА УЛЬТЫ — МЕСТЬ: все, кто напал на тебя ПЕРВЫМ, попадают в список обидчиков, и твои атаки по ним идут на +${TUN.revanchismRevengePct} % эффективнее. Кого первым тронул ты — в список не попадает. Список ведётся ВСЕГДА, даже пока статуи нет: достроил её посреди чужого наступления — месть заработает сразу по всем, кто успел напасть.`,
+      `While the monument stands, conquering YOUR land SLOWS DOWN — the more they've cut from your historic maximum (peak), the slower: at total loss it is ${TUN.revanchismSlowLvl1}× slower at monument level 1 and up to ${TUN.revanchismSlowMax}× at level ${TUN.revanchismMaxLevel}. At the peak (nothing lost) — zero, so the ultimate stays quiet when an invasion begins. It does NOT raise the attacker's troop cost — it only slows them; as a side effect your own troops drain slower too (they are spent per tile given up). It MULTIPLIES with bunkers. A Tank Factory does NOT ignore it — that only strips bunker defense. LEVELS: a monument is born upgraded if you have already lost previous ones, +${TUN.revanchismPerLevelPct}% per level. Statue captured — the next one is level ${1 + TUN.revanchismLvlCaptured}; demolished — level ${1 + TUN.revanchismLvlDestroyed}; torn down by your own hand — ${TUN.revanchismSelfToMax} times to reach the cap. ⚠️ A CAPTURED enemy statue is always level 1: the level lives in the monument, not in you. THE OTHER HALF OF THE ULTIMATE — REVENGE: everyone who attacked you FIRST goes on a grudge list, and your attacks against them are ${TUN.revanchismRevengePct}% more effective. Anyone you struck first does not count. The list is kept AT ALL TIMES, even before the statue exists: finish it in the middle of an invasion and the revenge applies immediately to everyone who already attacked you.`,
     ),
   },
   {
     slug: "our_sky",
     type: UnitType.OurSky,
-    name: bi("Небо наше", "Our Sky"),
+    // terron 01.09 (решение владельца): имя штаба — «Мирное небо», а «Небо
+    // наше» теперь называется его КАСТ. Старая закрытая ульта с этим именем
+    // ушла в архив, см. ULTIMATE_REGISTRY.
+    name: bi("Мирное небо", "Peaceful Sky"),
     kind: bi("Антиспутниковый штаб · ПВО", "Anti-satellite HQ · SAM"),
     cost: bi(
       `${gold(TUN.ultCost)} золота · постройка ${TUN.ultBuildSec} с · ракета ${gold(TUN.satStrikeCost)}`,
       `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build · rocket ${gold(TUN.satStrikeCost)}`,
     ),
     what: bi(
-      `Постоянный штаб с тремя эффектами. Первый: штаб САМ является ПВО с радиусом перехвата ×${TUN.ourSkySamMult} от обычного — гигантский купол над страной. Второй: пока штаб стоит, ВСЕ твои ПВО перезаряжаются вдвое быстрее. Третий: штаб разблокирует ракету «Сбить спутники» (${gold(TUN.satStrikeCost)} за запуск): она ${TUN.ourSkyBuildSec} с собирается на твоей земле, и сборка с первой секунды видна ВСЕМ как тревога — носитель можно снести (в этом контрплей). Собралась → пуск → через ${TUN.ourSkyBlastSec} с волна тьмы → на ${TUN.ourSkyBlackoutSec} с у ВСЕХ, кроме тебя, включается туман войны (в командном режиме твои союзники видят). Под туманом видно только свою и союзную территорию плюс кольцо радиусом ${TUN.fogRadius} тайлов вокруг неё и вокруг своих юнитов.`,
-      `A permanent HQ with three effects. First: the HQ ITSELF is a SAM with an intercept radius ×${TUN.ourSkySamMult} of a regular one — a giant dome over your country. Second: while it stands, ALL your SAMs reload twice as fast. Third: the HQ unlocks the "Shoot Down Satellites" rocket (${gold(TUN.satStrikeCost)} per launch): it assembles on your land for ${TUN.ourSkyBuildSec}s, broadcast to EVERYONE as an alarm from the first second — the carrier can be torn down (that's the counterplay). Once assembled → launch → ${TUN.ourSkyBlastSec}s later a wave of darkness → for ${TUN.ourSkyBlackoutSec}s fog of war falls over EVERYONE but you (in team mode your allies keep their sight). Under the fog you only see your and allied territory plus a ${TUN.fogRadius}-tile ring around it and around your units.`,
+      `Постоянный штаб с тремя эффектами. Первый: штаб САМ является ПВО с радиусом перехвата ×${TUN.ourSkySamMult} от обычного — гигантский купол над страной. Второй: пока штаб стоит, ВСЕ твои ПВО перезаряжаются вдвое быстрее. Третий: штаб разблокирует ракету «Небо наше» (${gold(TUN.satStrikeCost)} за запуск): она ${TUN.ourSkyBuildSec} с собирается на твоей земле, и сборка с первой секунды видна ВСЕМ как тревога — носитель можно снести (в этом контрплей). Собралась → пуск → через ${TUN.ourSkyBlastSec} с волна тьмы → на ${TUN.ourSkyBlackoutSec} с у ВСЕХ, кроме тебя, включается туман войны (в командном режиме твои союзники видят). Под туманом видно только свою и союзную территорию плюс кольцо радиусом ${TUN.fogRadius} тайлов вокруг неё и вокруг своих юнитов.`,
+      `A permanent HQ with three effects. First: the HQ ITSELF is a SAM with an intercept radius ×${TUN.ourSkySamMult} of a regular one — a giant dome over your country. Second: while it stands, ALL your SAMs reload twice as fast. Third: the HQ unlocks the "The Sky Is Ours" rocket (${gold(TUN.satStrikeCost)} per launch): it assembles on your land for ${TUN.ourSkyBuildSec}s, broadcast to EVERYONE as an alarm from the first second — the carrier can be torn down (that's the counterplay). Once assembled → launch → ${TUN.ourSkyBlastSec}s later a wave of darkness → for ${TUN.ourSkyBlackoutSec}s fog of war falls over EVERYONE but you (in team mode your allies keep their sight). Under the fog you only see your and allied territory plus a ${TUN.fogRadius}-tile ring around it and around your units.`,
     ),
     ref: bi(
       "Идея ульты навеяна реальной историей — проектом «Вестфорд» (Project West Ford, 1961–1963): ради надёжной военной радиосвязи на орбиту вывели около 480 миллионов тонких медных игл, образовавших искусственное кольцо вокруг Земли. Часть этого материала до сих пор остаётся на орбите — пример того, как военная задача одной страны оставляет след в космосе на поколения вперёд. Буквально — небо наше.",
@@ -378,8 +408,8 @@ export const ULTS: Entry[] = [
       `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build · unlock: achievement or 500 💎`,
     ),
     what: bi(
-      `Пока штаб стоит, все остальные игроки видят вместо твоих параметров «???»: войска и золото в панели игрока и лидерборде, численность твоих атак, подпись войск под ником на карте. Территория, ник и флаг видны — страна закрытая, а не невидимая. Твоя команда (в командном режиме) видит всё. Скрытие — чисто видовое, как невидимость подлодок: симуляция честная, просто чужой интерфейс молчит. Снесли или захватили штаб — страна открывается. Это первая ЗАКРЫТАЯ ульта: в чузере она под замком, пока не открыта на аккаунте — ачивкой «Железный занавес» (победа в алмазном матче с запуском ракеты «Сбить спутники») или покупкой за 500 кровавых алмазов в досье.`,
-      `While the HQ stands, every other player sees "???" instead of your numbers: troops and gold in the player panel and leaderboard, the size of your attacks, the troop label under your name on the map. Territory, name and flag stay visible — the country is closed, not invisible. Your team (in team mode) keeps full sight. The hiding is purely visual, like submarine stealth: the simulation is honest, only the enemy's interface goes silent. Raze or capture the HQ and the country opens up. This is the first LOCKED ultimate: it sits behind a padlock in the chooser until unlocked on your account — via the "Iron curtain" achievement (win a diamond match after launching the "Shoot Down Satellites" rocket) or for 500 blood diamonds in your dossier.`,
+      `Пока штаб стоит, все остальные игроки видят вместо твоих параметров «???»: войска и золото в панели игрока и лидерборде, численность твоих атак, подпись войск под ником на карте. Территория, ник и флаг видны — страна закрытая, а не невидимая. Твоя команда (в командном режиме) видит всё. Скрытие — чисто видовое, как невидимость подлодок: симуляция честная, просто чужой интерфейс молчит. Снесли или захватили штаб — страна открывается. Это первая ЗАКРЫТАЯ ульта: в чузере она под замком, пока не открыта на аккаунте — ачивкой «Железный занавес» (победа в алмазном матче с запуском ракеты «Небо наше») или покупкой за 500 кровавых алмазов в досье.`,
+      `While the HQ stands, every other player sees "???" instead of your numbers: troops and gold in the player panel and leaderboard, the size of your attacks, the troop label under your name on the map. Territory, name and flag stay visible — the country is closed, not invisible. Your team (in team mode) keeps full sight. The hiding is purely visual, like submarine stealth: the simulation is honest, only the enemy's interface goes silent. Raze or capture the HQ and the country opens up. This is the first LOCKED ultimate: it sits behind a padlock in the chooser until unlocked on your account — via the "Iron curtain" achievement (win a diamond match after launching the "The Sky Is Ours" rocket) or for 500 blood diamonds in your dossier.`,
     ),
     ref: bi(
       "Прототип — любая «закрытая» держава XX века: официальная статистика засекречена, численность армии — государственная тайна, а миру достаётся только фасад. Противник вынужден гадать, что за ним.",
@@ -644,28 +674,8 @@ export const ULTS: Entry[] = [
     ),
   },
 
-  {
-    type: UnitType.PeacefulSky,
-    slug: "peaceful_sky",
-    name: bi("Мирное небо", "Peaceful Sky"),
-    kind: bi(
-      "Штаб · пассив · ЗАКРЫТАЯ ульта",
-      "HQ · passive · LOCKED ultimate",
-    ),
-    cost: bi(
-      `${gold(TUN.ultCost)} золота · постройка ${TUN.ultBuildSec} с · открыть: ачивка или 500 💎`,
-      `${gold(TUN.ultCost)} gold · ${TUN.ultBuildSec}s build · unlock: achievement or 500 💎`,
-    ),
-    what: bi(
-      `Твои ПВО стоят на ${TUN.skySamDiscountPct}% дешевле — можно накрыть зонтом всю страну, а не одно направление. ПЛАТА за это необычная: установки начинают сбивать ВСЁ чужое в радиусе, включая ракеты ТВОИХ СОЮЗНИКОВ. В обычной игре союзная ракета пролетает сквозь тебя свободно, здесь — нет: над тобой не летает никто, даже друзья. Значит коалиция больше не может бить «через твою территорию», и тебя перестанут звать коридором. Название буквальное. Открывается ачивкой «Зонт» (сбить ${TUN.skyKeyIntercepts} вражеских ракет за карьеру) или за 500 кровавых алмазов.`,
-      `Your SAM launchers cost ${TUN.skySamDiscountPct}% less — enough to umbrella a whole country instead of one approach. The PRICE is unusual: they start shooting down EVERYTHING hostile in range, including YOUR ALLIES' missiles. Normally an allied missile passes over you freely; here it does not. Nobody flies above you any more, not even friends — which means a coalition can no longer strike through your territory, and they will stop treating you as a corridor. The name is literal. Unlocked by the "Umbrella" achievement (intercept ${TUN.skyKeyIntercepts} enemy missiles over your career) or for 500 blood diamonds.`,
-    ),
-    ref: bi(
-      "Договор «Открытое небо» наоборот: небо мирное именно потому, что над тобой не летает вообще никто.",
-      "The Open Skies Treaty inverted: the sky is peaceful precisely because nobody at all flies over you.",
-    ),
-  },
-
+  // terron 01.09: старое «Мирное небо» в архиве (см. ULTIMATE_REGISTRY) —
+  // страницы вики у него больше нет.
 
   {
     slug: "victory_banner",
@@ -766,8 +776,8 @@ export const BUILDINGS: Entry[] = [
       `${priceLadder(UnitType.DefensePost)} gold · ${buildSec(UnitType.DefensePost)}s build`,
     ),
     what: bi(
-      `Держит круг радиусом ${CFG.defensePostRange} тайлов вокруг себя. Любая вражеская наземная атака внутри этого круга обходится нападающему в ${CFG.defensePostDefenseBonus} раз дороже по потерям войск и идёт в ${CFG.defensePostSpeedBonus} раза медленнее. Бонус НЕ складывается: несколько бункеров на одном участке не дают ×10 — достаточно, чтобы тайл попадал в радиус хотя бы одного. Ещё бункер обстреливает вражеские корабли в радиусе ${CFG.defensePostTargetRange} тайлов, перезарядка ${CFG.defensePostShellRate} с. Танковый завод у нападающего этот бонус полностью снимает. И главное отличие бункера от остальных зданий: при потере тайла он НЕ достаётся врагу, а уничтожается.`,
-      `Holds a ${CFG.defensePostRange}-tile radius around itself. Any enemy ground attack inside that circle costs the attacker ${CFG.defensePostDefenseBonus}× more troop losses and advances ${CFG.defensePostSpeedBonus}× slower. The bonus does NOT stack: several bunkers on one front don't give ×10 — it's enough for the tile to fall inside at least one radius. A bunker also shells enemy ships within ${CFG.defensePostTargetRange} tiles, reloading every ${CFG.defensePostShellRate}s. An attacker's Tank Factory strips this bonus entirely. And the key difference from every other building: when its tile is lost, a bunker is destroyed rather than captured.`,
+      `Держит круг радиусом ${CFG.defensePostRange} тайлов вокруг себя. Любая вражеская наземная атака внутри этого круга обходится нападающему в ${CFG.defensePostDefenseBonus} раз дороже по потерям войск и идёт в ${CFG.defensePostSpeedBonus} раза медленнее. Бонус НЕ складывается: несколько бункеров на одном участке не дают ×10 — достаточно, чтобы тайл попадал в радиус хотя бы одного. Танковый завод у нападающего этот бонус полностью снимает. И главное отличие бункера от остальных зданий: при потере тайла он НЕ достаётся врагу, а уничтожается.`,
+      `Holds a ${CFG.defensePostRange}-tile radius around itself. Any enemy ground attack inside that circle costs the attacker ${CFG.defensePostDefenseBonus}× more troop losses and advances ${CFG.defensePostSpeedBonus}× slower. The bonus does NOT stack: several bunkers on one front don't give ×10 — it's enough for the tile to fall inside at least one radius. An attacker's Tank Factory strips this bonus entirely. And the key difference from every other building: when its tile is lost, a bunker is destroyed rather than captured.`,
     ),
   },
   {
@@ -947,44 +957,43 @@ export const ECONOMY_BLOCKS: Block[] = [
 
   h("Поезда: торговля по земле", "Trains: land trade"),
   p(
-    `Поезда появляются сами: фабрика строит рельсы, цепляет к ним твои города, порты и аэропорты в радиусе ${CFG.railMax} тайлов и запускает составы по кластеру. Поезд платит за КАЖДУЮ остановку, а сумма зависит от того, чей это узел. Важно: на ЧУЖОЙ станции деньги получают ОБЕ стороны — и хозяин поезда, и хозяин станции, каждый полную сумму. Именно поэтому пускать чужие рельсы через себя выгодно.`,
-    `Trains appear on their own: a factory lays rails, links your cities, ports and airports within ${CFG.railMax} tiles, and runs trains through the cluster. A train pays for EVERY stop, and the amount depends on whose node it is. Important: at someone else's station BOTH sides are paid — the train's owner and the station's owner, each the full amount. That's exactly why letting foreign rails run through you is profitable.`,
+    `Поезда появляются сами: фабрика строит рельсы, цепляет к ним города, порты, аэропорты и другие фабрики в радиусе ${CFG.railMax} тайлов и раз в ${trainIntervalSec()} с выпускает состав; первый уходит сразу после постройки. Состав объезжает сеть по рельсам — заходит в каждую точку, куда может доехать, и в каждой получает деньги (одна точка платит один раз за рейс). Чем дальше от прошлой точки, тем больше выплата. На ЧУЖОЙ станции деньги получают ОБЕ стороны, как у кораблей.`,
+    `Trains appear on their own: a factory lays rails, links cities, ports, airports and other factories within ${CFG.railMax} tiles, and dispatches a train every ${trainIntervalSec()} s; the first one leaves right after it's built. The train tours the network by rail — it calls at every point it can reach and gets paid at each one (a point pays once per trip). The farther from the previous point, the bigger the payout. At someone else's station BOTH sides are paid, just like with ships.`,
   ),
   rows([
     {
-      icon: UnitType.Train,
-      k: bi("Остановка у союзника", "Stop at an ally's"),
+      icon: UnitType.Factory,
+      k: bi("Уровень фабрики", "Factory level"),
       v: bi(
-        `${trainGold("ally")} золота — самая жирная выплата в игре за остановку. Союз выгоден не только военно.`,
-        `${trainGold("ally")} gold — the fattest per-stop payout in the game. An alliance pays off beyond the military side.`,
+        `Уровень удлиняет поезд: вагонов у фабрики 3-го уровня — ${trainCars(3)}, у 10-го — ${trainCars(10)}. Платит каждый вагон, поэтому фабрика 3-го уровня зарабатывает столько же, сколько три фабрики 1-го. На карте видно до ${trainVisualCars()} вагонов, остальные тоже платят.`,
+        `Levels lengthen the train: a level-3 factory has ${trainCars(3)} cars, a level-10 one has ${trainCars(10)}. Every car pays, so a level-3 factory earns as much as three level-1 factories. Up to ${trainVisualCars()} cars are shown on the map; the rest still pay.`,
       ),
     },
     {
       icon: UnitType.Train,
-      k: bi("Чужой или командный узел", "Foreign or team node"),
-      v: bi(`${trainGold("other")} золота.`, `${trainGold("other")} gold.`),
-    },
-    {
-      icon: UnitType.Train,
-      k: bi("Свой узел", "Your own node"),
+      k: bi("Своя точка", "Your own point"),
       v: bi(
-        `${trainGold("self")} золота — вчетверо меньше союзной. Возить самому себе можно, но это пол дохода, а не экономика.`,
-        `${trainGold("self")} gold — a quarter of the ally rate. Shipping to yourself works, but it's a floor, not an economy.`,
+        `${trainGold("self")} золота поезду 1-го уровня, если точка рядом, и до ${trainGold("self", 1, 120)} за дальний перегон.`,
+        `${trainGold("self")} gold for a level-1 train when the point is close, up to ${trainGold("self", 1, 120)} for a long haul.`,
       ),
     },
     {
-      icon: CONCEPT_ICONS.land,
-      k: bi("Штраф за длину маршрута", "Long-route penalty"),
+      icon: UnitType.Train,
+      k: bi("Чужая или союзная точка", "Foreign or allied point"),
       v: bi(
-        `Первые десять остановок у городов и портов — без штрафа. Дальше каждая следующая срезает 5k с выплаты, но не ниже ${trainGold("ally", 40)}. Бесконечно наращивать одну гигантскую сеть смысла нет.`,
-        `The first ten stops at cities and ports are penalty-free. After that each further stop cuts 5k off the payout, never below ${trainGold("ally", 40)}. Growing one giant network forever is pointless.`,
+        `Столько же, сколько своя, и такую же сумму получает хозяин станции.`,
+        `The same as your own, and the station's owner gets the same.`,
+      ),
+    },
+    {
+      icon: UnitType.Train,
+      k: bi("Большая сеть", "A big network"),
+      v: bi(
+        `Каждая следующая точка рейса платит на ${trainStopDecayPct()}% меньше предыдущей. За рейс оплачивается не больше ${trainMaxStops()} точек.`,
+        `Each next point on a trip pays ${trainStopDecayPct()}% less than the one before. At most ${trainMaxStops()} points are paid per trip.`,
       ),
     },
   ]),
-  p(
-    "Темп поездов зависит от суммарного уровня фабрик, но с затуханием: чем больше у тебя фабрик, тем реже каждая из них выпускает состав. Это и есть встроенный тормоз против «залил карту фабриками».",
-    "Train tempo depends on total factory levels, but with decay: the more factories you own, the rarer each one dispatches. That's the built-in brake against carpeting the map with factories.",
-  ),
 
   h(
     "Корабли и самолёты: дистанция и есть деньги",
@@ -1165,8 +1174,8 @@ export const COMBAT_BLOCKS: Block[] = [
       `A traitor who broke an alliance defends half as well for ${CFG.traitorSec}s: attacking them costs the attacker half the troops. Small consolation — their land is taken 20% slower, so there's time to fight back. The Media ultimate removes the traitor mark entirely.`,
     ),
     bi(
-      `Реваншизм даёт до +${TUN.revanchismMaxPct} % защиты по всей территории — тем больше, чем сильнее тебя срезали от исторического максимума.`,
-      `Revanchism grants up to +${TUN.revanchismMaxPct}% defense across your whole territory — the more you've been cut back from your historic peak, the more you get.`,
+      `Реваншизм замедляет захват твоей земли по всей территории — до ${TUN.revanchismSlowMax} раз, тем сильнее, чем больше срезали от исторического максимума. Затраты нападающего он не повышает.`,
+      `Revanchism slows conquest of your land across your whole territory — up to ${TUN.revanchismSlowMax}× slower, the more you've been cut back from your historic peak. It does not raise the attacker's troop cost.`,
     ),
   ]),
 
@@ -1250,14 +1259,6 @@ export const COMBAT_BLOCKS: Block[] = [
       v: bi(
         `${priceLadder(UnitType.Warship)} золота. Прочность ${n(CFG.warshipHealth)}, снаряд бьёт на ${n(CFG.shellDamage)} — то есть четыре попадания топят корабль. Стреляет раз в ${CFG.warshipShellRate} с, патрулирует ${CFG.warshipPatrolRange} тайлов, при прочности ниже ${n(CFG.warshipRetreatHp)} уходит чиниться в порт.`,
         `${priceLadder(UnitType.Warship)} gold. ${n(CFG.warshipHealth)} health, a shell hits for ${n(CFG.shellDamage)} — four hits sink a ship. Fires every ${CFG.warshipShellRate}s, patrols ${CFG.warshipPatrolRange} tiles, and retreats to a port for repairs below ${n(CFG.warshipRetreatHp)} health.`,
-      ),
-    },
-    {
-      icon: UnitType.DefensePost,
-      k: bi("Береговая оборона", "Coastal defense"),
-      v: bi(
-        `Бункер обстреливает вражеские корабли в радиусе ${CFG.defensePostTargetRange} тайлов раз в ${CFG.defensePostShellRate} с — берег, утыканный бункерами, топит десант ещё на подходе.`,
-        `A bunker shells enemy ships within ${CFG.defensePostTargetRange} tiles every ${CFG.defensePostShellRate}s — a shore studded with bunkers sinks landings on approach.`,
       ),
     },
   ]),
@@ -1345,8 +1346,8 @@ export const WORLD_BLOCKS: Block[] = [
 
   h("Конец матча", "Match end"),
   p(
-    `Победа — ${CFG.winPercentFfa} % тайлов карты в режиме «каждый против каждого» и ${CFG.winPercentTeam} % в командном (там считается доля всей команды). Отдельно существует ЗОЛОТОЙ МАТЧ — публичное лобби по расписанию, раз в ${TUN.goldenPeriodMin} минут; его победитель получает ${TUN.goldenRewardPts} кровавых алмазов и ачивку. Зайти в золотое лобби и позвать друзей можно в любой момент по ссылке /gold, оно живёт постоянно. Раз в сутки, вечером по Москве, проходит АЛМАЗНЫЙ МАТЧ — то же самое, но награда победителю ${TUN.diamondRewardPts} кровавых алмазов; его лобби висит весь день по ссылке /diamond, так что подойти и позвать своих можно заранее.`,
-    `Victory is ${CFG.winPercentFfa}% of the map's tiles in free-for-all and ${CFG.winPercentTeam}% in team mode (where the whole team's share counts). Separately there's the GOLDEN MATCH — a scheduled public lobby every ${TUN.goldenPeriodMin} minutes; its winner gets ${TUN.goldenRewardPts} blood diamonds and an achievement. You can enter the golden lobby and invite friends at any time via the /gold link — it lives permanently. Once a day, in the Moscow evening, there is a DIAMOND MATCH — the same thing, but the winner gets ${TUN.diamondRewardPts} blood diamonds; its lobby stays up all day at the /diamond link, so you can join and rally your friends well in advance.`,
+    `Победа — ${CFG.winPercentFfa} % тайлов карты в режиме «каждый против каждого» и ${CFG.winPercentTeam} % в командном (там считается доля всей команды). Отдельно существует ЗОЛОТОЙ МАТЧ — публичное лобби по расписанию, раз в ${TUN.goldenPeriodMin} минут; его победитель получает ${TUN.goldenBasePts} кровавых алмазов плюс по одному за каждого соперника-человека (всего не больше ${TUN.goldenMaxPts}) и ачивку. Зайти в золотое лобби и позвать друзей можно в любой момент по ссылке /gold, оно живёт постоянно. Раз в сутки, вечером по Москве, проходит АЛМАЗНЫЙ МАТЧ — то же самое, но награда победителю ${TUN.diamondRewardPts} кровавых алмазов; его лобби висит весь день по ссылке /diamond, так что подойти и позвать своих можно заранее.`,
+    `Victory is ${CFG.winPercentFfa}% of the map's tiles in free-for-all and ${CFG.winPercentTeam}% in team mode (where the whole team's share counts). Separately there's the GOLDEN MATCH — a scheduled public lobby every ${TUN.goldenPeriodMin} minutes; its winner gets ${TUN.goldenBasePts} blood diamonds plus one for every human rival (${TUN.goldenMaxPts} at most) and an achievement. You can enter the golden lobby and invite friends at any time via the /gold link — it lives permanently. Once a day, in the Moscow evening, there is a DIAMOND MATCH — the same thing, but the winner gets ${TUN.diamondRewardPts} blood diamonds; its lobby stays up all day at the /diamond link, so you can join and rally your friends well in advance.`,
   ),
 
   h("Туман войны", "Fog of war"),
@@ -1439,8 +1440,8 @@ export const DIPLOMACY_BLOCKS: Block[] = [
       icon: CONCEPT_ICONS.alliance,
       k: bi("Союз", "Alliance"),
       v: bi(
-        `Длится ${CFG.allianceMin} минут, потом истекает сам; продлить предлагают заранее. Союзники не режут друг другу территорию и, что важнее, ПЛАТЯТ ДРУГ ДРУГУ БОЛЬШЕ ВСЕХ за остановки поездов — ${trainGold("ally")} против ${trainGold("self")} за свой узел.`,
-        `Lasts ${CFG.allianceMin} minutes, then expires on its own; you're offered an extension in advance. Allies don't carve up each other's land and, more importantly, PAY EACH OTHER THE MOST for train stops — ${trainGold("ally")} versus ${trainGold("self")} for your own node.`,
+        `Длится ${CFG.allianceMin} минут, потом истекает сам; продлить предлагают заранее. Союзники не режут друг другу территорию, а их поезда платят обоим, заезжая на станции друг друга.`,
+        `Lasts ${CFG.allianceMin} minutes, then expires on its own; you're offered an extension in advance. Allies don't carve up each other's land, and their trains pay both sides when calling at each other's stations.`,
       ),
     },
     {
@@ -1509,8 +1510,8 @@ export const ULT_RULES_BLOCKS: Block[] = [
       icon: CONCEPT_ICONS.ultimate,
       k: bi("Цена и постройка", "Price and build time"),
       v: bi(
-        `Стандартный ульт-штаб — ${gold(TUN.ultCost)} золота и ${TUN.ultBuildSec} с постройки. Исключения: второе Министерство правды стоит вдвое, Укрепления берут ${gold(TUN.ultCost)} за каждый из трёх уровней, а ракета «Сбить спутники» (каст Неба нашего) стоит ${gold(TUN.satStrikeCost)} и собирается ${TUN.ourSkyBuildSec} с.`,
-        `A standard ultimate HQ is ${gold(TUN.ultCost)} gold and ${TUN.ultBuildSec}s to build. Exceptions: a second Ministry of Truth costs double, Fortifications charge ${gold(TUN.ultCost)} for each of three levels, and the "Shoot Down Satellites" rocket (Our Sky's cast) costs ${gold(TUN.satStrikeCost)} and assembles for ${TUN.ourSkyBuildSec}s.`,
+        `Стандартный ульт-штаб — ${gold(TUN.ultCost)} золота и ${TUN.ultBuildSec} с постройки. Исключения: второе Министерство правды стоит вдвое, Укрепления берут ${gold(TUN.ultCost)} за каждый из трёх уровней, а ракета «Небо наше» (каст Неба нашего) стоит ${gold(TUN.satStrikeCost)} и собирается ${TUN.ourSkyBuildSec} с.`,
+        `A standard ultimate HQ is ${gold(TUN.ultCost)} gold and ${TUN.ultBuildSec}s to build. Exceptions: a second Ministry of Truth costs double, Fortifications charge ${gold(TUN.ultCost)} for each of three levels, and the "The Sky Is Ours" rocket (Our Sky's cast) costs ${gold(TUN.satStrikeCost)} and assembles for ${TUN.ourSkyBuildSec}s.`,
       ),
     },
     {

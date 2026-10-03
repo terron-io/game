@@ -13,6 +13,27 @@ import {
 
 export const MAX_CONCURRENT_SOUNDS = 8;
 
+// terron 11.09: ПОТОЛОК ОЧЕРЕДИ HOWLER. Пока звук не скачан/не декодирован или
+// AudioContext спит (нет жеста, фон, реклама площадки), Howler НЕ играет, а
+// кладёт КАЖДЫЙ play()/stop()/volume() в свою `_queue` и возвращает id как ни в
+// чём не бывало. Мы честно копили activeSounds до 8 и дальше на каждый эффект
+// звали ещё и stop(oldest) — всё в ту же очередь: лента событий + клики
+// радиала за пару минут дают тысячи задач. На resume/load Howler раскручивает
+// очередь ОДНОЙ синхронной рекурсией (`_loadQueue → stop → _emit → _loadQueue
+// → …`) → «Maximum call stack size exceeded» в vendor-чанке (15 сессий/нед;
+// верхние кадры `_clearTimer ← stop` и `_emit ← _ended` — две точки одной и
+// той же раскрутки). Эффект — вещь сиюминутная: клик, прозвучавший через две
+// минуты, хуже пропущенного, поэтому при заполненной очереди не играем вовсе.
+// Первые задачи пускаем — именно play() будит контекст (Howler._autoResume).
+export const MAX_HOWL_QUEUE = 16;
+
+/** Сколько задач Howler уже держит в очереди у этого Howl (приватное поле
+ *  howler 2.2 — читаем осторожно, нет поля = очереди нет). */
+export function howlQueueLength(howl: unknown): number {
+  const q = (howl as { _queue?: unknown })?._queue;
+  return Array.isArray(q) ? q.length : 0;
+}
+
 // terron: тёплый прогрев ДЕФОЛТНОГО (самого маленького) трека в HTTP-кэш браузера.
 // Зовётся из лобби ПОСЛЕ префетча карты и ТОЛЬКО при включённой музыке — карта
 // всегда приоритетнее музыки. Повторные вызовы — no-op.
@@ -231,9 +252,25 @@ export class SoundManager {
     }
   }
 
+  // terron 04.09: Howler зовёт onend СИНХРОННО из своего _ended → _emit. Если
+  // следующий трек «кончается» мгновенно (html5-дорожка с нулевой длиной:
+  // оборванная догрузка, битый ответ), play() → _ended → onend → playNext →
+  // play() → … без единого выхода из стека → «Maximum call stack size
+  // exceeded» в vendor-чанке (5 сессий за 3 дня, всегда r._emit ← r._ended).
+  // Переключаемся в СЛЕДУЮЩЕМ макротаске, а два конца подряд быстрее секунды
+  // считаем битой дорожкой и выжидаем 5 с — плеер не крутится вхолостую.
+  private lastPlayNextAt = 0;
   private playNext(): void {
+    const now = Date.now();
+    const tooFast = now - this.lastPlayNextAt < 1000;
+    this.lastPlayNextAt = now;
     this.currentTrack = (this.currentTrack + 1) % this.backgroundMusic.length;
-    this.playBackgroundMusic();
+    window.setTimeout(
+      () => {
+        if (this.musicRequested) this.playBackgroundMusic();
+      },
+      tooFast ? 5000 : 0,
+    );
   }
 
   private getOrLoadSoundEffect(name: SoundEffect): Howl | null {
@@ -262,6 +299,9 @@ export class SoundManager {
     this.safely(`play sound ${name}`, () => {
       const howl = this.getOrLoadSoundEffect(name);
       if (!howl) return;
+      // Очередь Howler переполнена (звук не готов / контекст спит) — эффект
+      // пропускаем, иначе кормим рекурсию на resume. См. MAX_HOWL_QUEUE.
+      if (howlQueueLength(howl) >= MAX_HOWL_QUEUE) return;
 
       if (this.activeSounds.length >= MAX_CONCURRENT_SOUNDS) {
         const oldest = this.activeSounds[0];

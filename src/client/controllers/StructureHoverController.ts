@@ -1,14 +1,17 @@
 /**
  * terron: StructureHoverController — ховер структур на карте (десктоп-мышь).
  *
- * При наведении курсора на структуру:
- *  - Мин правды → DOM-тултип «украдено войск: N» (счётчик едет с юнитом,
- *    UnitUpdate.stolenTroops) + круг радиуса ауры;
- *  - Щит (Defense Post) / ПВО → круг радиуса действия (SamRadiusPass,
- *    setStructureHoverCircle) + тултип с именем и уровнем.
+ * Наводишь на постройку → DOM-тултип «название [уровень]» + счётчики ульты
+ * (`statLines` каталога) + круг радиуса действия (`hoverRadiusTiles`; у ПВО,
+ * бункера и штаба Неба радиус свой — зависит от уровня и множителей).
+ *
+ * ⚠️ ЧТО ПОКАЗЫВАТЬ И КАК ПОДПИСАТЬ — РЕШАЕТ РЕЕСТР, не этот файл. Ховер
+ * получает КАЖДЫЙ ульт-штаб (`ULTIMATE_REGISTRY`), имя берётся из каталога
+ * (`unitNameI18nKey`), счётчики и круг — из записи ульты. Новая ульта
+ * подхватывается сама; дописывать сюда ничего не нужно и НЕЛЬЗЯ.
  *
  * Тултип клэмпится в экран (уводится влево, если справа некуда, и наоборот).
- * Спека: new-units/ULTIMATES.md
+ * Спека: new-units/ULTIMATES.md, fable/input-surfaces-contract.md
  */
 
 import {
@@ -16,24 +19,33 @@ import {
   TERRON_OURSKY_SAM_RADIUS_MULT,
 } from "../../core/configuration/TerronTuning";
 import { EventBus } from "../../core/EventBus";
-import { UnitType } from "../../core/game/Game";
+import { ULTIMATE_REGISTRY, UnitType } from "../../core/game/Game";
 import { GameView, PlayerView, UnitView } from "../../core/game/GameView";
 import { Controller } from "../Controller";
 import { MouseMoveEvent } from "../InputHandler";
 import { GameView as WebGLGameView } from "../render/gl";
 import { TransformHandler } from "../TransformHandler";
-import { ultHoverRadiusTiles, ultStatLines } from "../UnitCatalog";
+import {
+  ultHoverRadiusTiles,
+  ultStatLines,
+  unitNameI18nKey,
+} from "../UnitCatalog";
 import { renderNumber, translateText } from "../Utils";
 
-// Типы, на которые реагируем, и радиус попадания курсора (в тайлах).
-const HOVER_TYPES = [
-  UnitType.Media, // terron: ультимейты — штаб МЕДИА (аура влитой Мин правды)
+/**
+ * Типы, на которые реагируем.
+ *
+ * ⚠️ terron 31.08 — ВЫВОДИТСЯ ИЗ РЕЕСТРА, а не перечисляется. Список вёлся
+ * руками и разошёлся с игрой: в нём было семь типов из двадцати восьми, то
+ * есть у большинства ульт-штабов ховера не было вовсе. Хуже того, имя в
+ * тултипе выбиралось цепочкой `?:` с ФОЛБЭКОМ НА «медиа» — и «Небо наше»,
+ * которое в списке было, подписывалось на карте как МЕДИА (репорт boom871,
+ * 31.08). Теперь ховер получает КАЖДЫЙ ульт-штаб, а имя приходит из каталога.
+ */
+export const HOVER_TYPES: UnitType[] = [
   UnitType.DefensePost,
   UnitType.SAMLauncher,
-  UnitType.Religion, // terron: ультимейты — храм (обращено земель + десятина)
-  UnitType.Fortifications, // terron: ультимейты — штаб (круг эффективного радиуса)
-  UnitType.Revanchism, // terron: ультимейты — статуя (список обидчиков)
-  UnitType.OurSky, // terron: Небо наше (реворк 21.08) — штаб-ПВО, круг ×5 радиуса
+  ...ULTIMATE_REGISTRY.map((u) => u.type),
 ];
 const PICK_DIST2 = 6 * 6;
 const THROTTLE_MS = 80;
@@ -113,6 +125,10 @@ export class StructureHoverController implements Controller {
     let bestD2 = PICK_DIST2 + 1;
     for (const u of this.game.units(...HOVER_TYPES)) {
       if (!u.isActive()) continue;
+      // terron 31.08: Закрытая страна прячет постройки НА РЕНДЕРЕ, а ховер
+      // читает игру напрямую — без этой проверки тултип всплывал бы над
+      // пустым местом и выдавал скрытое здание вместе с его счётчиками.
+      if (this.game.statsHiddenFor(u.owner())) continue;
       const t = u.tile();
       const dx = this.game.x(t) - cell.x;
       const dy = this.game.y(t) - cell.y;
@@ -160,21 +176,12 @@ export class StructureHoverController implements Controller {
       });
     }
 
-    // Тултип.
-    const key =
-      type === UnitType.SAMLauncher
-        ? "sam_launcher"
-        : type === UnitType.DefensePost
-          ? "defense_post"
-          : type === UnitType.Religion
-            ? "religion"
-            : type === UnitType.Fortifications
-              ? "fortifications"
-              : type === UnitType.Revanchism
-                ? "revanchism"
-                : "media";
+    // Тултип. Имя — из каталога (единый источник, тот же, что у кнопок панели
+    // и радиала). Ручной цепочки `?:` тут больше нет: её фолбэк подписывал
+    // МЕДИОЙ всё, что забыли в неё вписать.
+    const nameKey = unitNameI18nKey(type);
     const lvl = best.level() > 1 ? ` [${best.level()}]` : "";
-    let html = `<b>${translateText("unit_type." + key)}${lvl}</b>`;
+    let html = `<b>${nameKey === undefined ? type : translateText(nameKey)}${lvl}</b>`;
     // Счётчики — из реестра UnitCatalog (единый источник, паритет с баром/радиалом).
     // Ауру (МЕДИА) показываем PER-UNIT (счётчик едет с юнитом) — подменяем поля снимка.
     let snap = best.owner().ultStats();

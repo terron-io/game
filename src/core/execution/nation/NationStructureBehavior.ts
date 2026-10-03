@@ -16,7 +16,7 @@ import { PseudoRandom } from "../../PseudoRandom";
 import { assertNever } from "../../Util";
 import { ConstructionExecution } from "../ConstructionExecution";
 import { UpgradeStructureExecution } from "../UpgradeStructureExecution";
-import { closestTile, closestTwoTiles } from "../Util";
+import { closestTile, closestTwoTiles, TileDistanceIndex } from "../Util";
 import { randTerritoryTileArray } from "./NationUtils";
 
 /**
@@ -321,7 +321,8 @@ export class NationStructureBehavior {
     const searchRadius = Math.ceil(borderSpacing * 1.5);
     const minBorderDist = Math.ceil(borderSpacing * 0.75);
     const maxBorderDist = Math.ceil(borderSpacing * 1.5);
-    const borderTiles = player.borderTiles();
+    // terron 04.09 ПЕРФ: граница в типизированных координатах один раз на вызов.
+    const border = new TileDistanceIndex(game, player.borderTiles());
 
     // Spread: prefer front tiles far from existing defense posts so successive
     // posts don't cluster at the same spot along the attack line.
@@ -357,7 +358,7 @@ export class NationStructureBehavior {
       if (!game.isValidCoord(x, y)) continue;
       const t = game.ref(x, y);
       if (game.owner(t) !== player) continue;
-      const [, borderDist] = closestTile(game, borderTiles, t);
+      const borderDist = border.minDist(game, t, minBorderDist);
       if (borderDist < minBorderDist || borderDist > maxBorderDist) continue;
       if (!player.canBuild(unitType, t)) continue;
       result.push(t);
@@ -901,6 +902,7 @@ export class NationStructureBehavior {
   private missileSiloValue(): (tile: TileRef) => number {
     const game = this.game;
     const borderTiles = this.player.borderTiles();
+    const border = new TileDistanceIndex(game, borderTiles);
     const otherUnits = this.player.units(UnitType.MissileSilo);
     const { borderSpacing, structureSpacing } = this.spacingConstants();
 
@@ -911,8 +913,7 @@ export class NationStructureBehavior {
       w += game.magnitude(tile);
 
       // Prefer to be away from the border
-      const [, closestBorderDist] = closestTile(game, borderTiles, tile);
-      w += Math.min(closestBorderDist, borderSpacing);
+      w += Math.min(border.minDist(game, tile), borderSpacing);
 
       // Prefer to be away from other structures of the same type
       const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
@@ -999,6 +1000,7 @@ export class NationStructureBehavior {
     const game = this.game;
     const player = this.player;
     const borderTiles = this.player.borderTiles();
+    const border = new TileDistanceIndex(game, borderTiles);
     const otherUnits = player.units(UnitType.Factory);
     const { borderSpacing, structureSpacing } = this.spacingConstants();
     const stationRange = game.config().trainStationMaxRange();
@@ -1023,8 +1025,7 @@ export class NationStructureBehavior {
       w += game.magnitude(tile);
 
       // Prefer to be away from the border
-      const [, closestBorderDist] = closestTile(game, borderTiles, tile);
-      w += Math.min(closestBorderDist, borderSpacing);
+      w += Math.min(border.minDist(game, tile), borderSpacing);
 
       // Prefer to be away from other factories
       const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
@@ -1115,7 +1116,7 @@ export class NationStructureBehavior {
     }
 
     const maxTradeGold = Math.max(
-      Number(game.config().trainGold("ally", 0, player)),
+      Number(game.config().trainGold("ally", 1, 0, player)),
       1,
     );
     const result: Array<{
@@ -1126,7 +1127,7 @@ export class NationStructureBehavior {
 
     // Own structures — weighted by "self" trade gold.
     const selfWeight =
-      Number(game.config().trainGold("self", 0, player)) / maxTradeGold;
+      Number(game.config().trainGold("self", 1, 0, player)) / maxTradeGold;
     for (const unit of player.units(
       UnitType.City,
       UnitType.Port,
@@ -1152,7 +1153,7 @@ export class NationStructureBehavior {
           ? "ally"
           : "other";
       const weight =
-        Number(game.config().trainGold(relType, 0, player)) / maxTradeGold;
+        Number(game.config().trainGold(relType, 1, 0, player)) / maxTradeGold;
       for (const unit of neighbor.units(
         UnitType.City,
         UnitType.Port,
@@ -1216,6 +1217,7 @@ export class NationStructureBehavior {
     const game = this.game;
     const player = this.player;
     const borderTiles = player.borderTiles();
+    const border = new TileDistanceIndex(game, borderTiles);
     const otherUnits = player.units(UnitType.City);
     const { borderSpacing, structureSpacing } = this.spacingConstants();
     const stationRange = game.config().trainStationMaxRange();
@@ -1238,8 +1240,7 @@ export class NationStructureBehavior {
 
       w += game.magnitude(tile);
 
-      const [, closestBorderDist] = closestTile(game, borderTiles, tile);
-      w += Math.min(closestBorderDist, borderSpacing);
+      w += Math.min(border.minDist(game, tile), borderSpacing);
 
       const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
       otherTiles.delete(tile);

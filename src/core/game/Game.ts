@@ -1,8 +1,9 @@
+import { Config } from "../configuration/Config";
 import {
+  RevanchismLossCause,
   TERRON_RAILGUN_RANGE,
   TERRON_TRAINS_BLAST_MULT,
 } from "../configuration/TerronTuning";
-import { Config } from "../configuration/Config";
 import { AbstractGraph } from "../pathfinding/algorithms/AbstractGraph";
 import { PathFinder } from "../pathfinding/types";
 import { AllPlayersStats, ClientID } from "../Schemas";
@@ -99,8 +100,44 @@ export const ColoredTeams: Record<string, Team> = {
 
 export enum GameMapType {
   World = "World",
+  EqualEarth = "Equal Earth",
+  // terron 26.09: РАВНОВЕЛИКИЕ ВЕРСИИ карт («Честные размеры», scripts/reproject-maps.py).
+  WorldEa = "World EA",
+  NewWorldEa = "New World EA",
+  EuropeEa = "Europe EA",
+  EuropeClassicEa = "Europe Classic EA",
+  AsiaEa = "Asia EA",
+  AfricaEa = "Africa EA",
+  NorthAmericaEa = "North America EA",
+  SouthAmericaEa = "South America EA",
+  OceaniaEa = "Oceania EA",
+  MenaEa = "Mena EA",
+  BetweenTwoSeasEa = "Between Two Seas EA",
+  BalkansEa = "Balkans EA",
+  IndianSubcontinentEa = "Indian Subcontinent EA",
+  SoutheastAsiaEa = "SoutheastAsia EA",
+  EastAsiaEa = "East Asia EA",
+  AustraliaEa = "Australia EA",
+  BeringSeaEa = "Bering Sea EA",
+  MareNostrumEa = "Mare Nostrum EA",
+  BritanniaClassicEa = "Britannia Classic EA",
+  BritanniaEa = "Britannia EA",
+  BlackSeaEa = "Black Sea EA",
+  GatewayToTheAtlanticEa = "Gateway to the Atlantic EA",
+  IcelandEa = "Iceland EA",
+  ItaliaEa = "Italia EA",
+  GulfOfStLawrenceEa = "Gulf of St. Lawrence EA",
+  AegeanEa = "Aegean EA",
+  GreatLakesEa = "Great Lakes EA",
+  CaucasusEa = "Caucasus EA",
+  BajaCaliforniaEa = "Baja California EA",
+  KoreaEa = "Korea EA",
+  MiddleEastEa = "Middle East EA",
+  DanishStraitsEa = "Danish Straits EA",
+  YellowSeaEa = "Yellow Sea EA",
   WorldInverted = "World Inverted",
   GiantWorldMap = "Giant World Map",
+  NewWorld = "New World",
   Europe = "Europe",
   EuropeClassic = "Europe Classic",
   Mena = "Mena",
@@ -195,6 +232,62 @@ export enum GameMapType {
   TerronTutor2 = "TerronTutor2",
 }
 
+/**
+ * terron 26.09: «ЧЕСТНЫЕ РАЗМЕРЫ» — у карты есть равновеликая версия (Equal Earth /
+ * Ламберт, scripts/reproject-maps.py, резолюция ООН «Correct the Map»). Переключатель
+ * в пикере карт подменяет карточку парой; старые реплеи целы — у версий разные ключи.
+ */
+export const EQUAL_AREA_OF: Partial<Record<GameMapType, GameMapType>> = {
+  [GameMapType.GiantWorldMap]: GameMapType.EqualEarth,
+  [GameMapType.World]: GameMapType.WorldEa,
+  [GameMapType.NewWorld]: GameMapType.NewWorldEa,
+  [GameMapType.Europe]: GameMapType.EuropeEa,
+  [GameMapType.EuropeClassic]: GameMapType.EuropeClassicEa,
+  [GameMapType.Asia]: GameMapType.AsiaEa,
+  [GameMapType.Africa]: GameMapType.AfricaEa,
+  [GameMapType.NorthAmerica]: GameMapType.NorthAmericaEa,
+  [GameMapType.SouthAmerica]: GameMapType.SouthAmericaEa,
+  [GameMapType.Oceania]: GameMapType.OceaniaEa,
+  [GameMapType.Mena]: GameMapType.MenaEa,
+  [GameMapType.BetweenTwoSeas]: GameMapType.BetweenTwoSeasEa,
+  [GameMapType.Balkans]: GameMapType.BalkansEa,
+  [GameMapType.IndianSubcontinent]: GameMapType.IndianSubcontinentEa,
+  [GameMapType.SoutheastAsia]: GameMapType.SoutheastAsiaEa,
+  [GameMapType.EastAsia]: GameMapType.EastAsiaEa,
+  [GameMapType.Australia]: GameMapType.AustraliaEa,
+  [GameMapType.BeringSea]: GameMapType.BeringSeaEa,
+  [GameMapType.MareNostrum]: GameMapType.MareNostrumEa,
+  [GameMapType.BritanniaClassic]: GameMapType.BritanniaClassicEa,
+  [GameMapType.Britannia]: GameMapType.BritanniaEa,
+  [GameMapType.BlackSea]: GameMapType.BlackSeaEa,
+  [GameMapType.GatewayToTheAtlantic]: GameMapType.GatewayToTheAtlanticEa,
+  [GameMapType.Iceland]: GameMapType.IcelandEa,
+  [GameMapType.Italia]: GameMapType.ItaliaEa,
+  [GameMapType.GulfOfStLawrence]: GameMapType.GulfOfStLawrenceEa,
+  [GameMapType.Aegean]: GameMapType.AegeanEa,
+  [GameMapType.GreatLakes]: GameMapType.GreatLakesEa,
+  [GameMapType.Caucasus]: GameMapType.CaucasusEa,
+  [GameMapType.BajaCalifornia]: GameMapType.BajaCaliforniaEa,
+  [GameMapType.Korea]: GameMapType.KoreaEa,
+  [GameMapType.MiddleEast]: GameMapType.MiddleEastEa,
+  [GameMapType.DanishStraits]: GameMapType.DanishStraitsEa,
+  [GameMapType.YellowSea]: GameMapType.YellowSeaEa,
+};
+
+const CLASSIC_OF: Partial<Record<GameMapType, GameMapType>> = Object.fromEntries(
+  Object.entries(EQUAL_AREA_OF).map(([c, e]) => [e, c]),
+);
+
+/** Равновеликая пара карты (или null, если её нет). */
+export function equalAreaOf(map: GameMapType): GameMapType | null {
+  return EQUAL_AREA_OF[map] ?? null;
+}
+
+/** Исходная карта для равновеликой версии (или null — это не версия). */
+export function classicOf(map: GameMapType): GameMapType | null {
+  return CLASSIC_OF[map] ?? null;
+}
+
 export type GameMapName = keyof typeof GameMapType;
 
 export const mapCategories: Record<string, GameMapType[]> = {
@@ -202,6 +295,7 @@ export const mapCategories: Record<string, GameMapType[]> = {
   continental: [
     GameMapType.World,
     GameMapType.GiantWorldMap,
+    GameMapType.NewWorld,
     GameMapType.NorthAmerica,
     GameMapType.SouthAmerica,
     GameMapType.Europe,
@@ -267,6 +361,44 @@ export const mapCategories: Record<string, GameMapType[]> = {
     GameMapType.Caribbean,
     GameMapType.SoutheastAsia,
     GameMapType.MississippiRiver,
+  ],
+  // terron 26.09: равновеликие версии. В пикере отдельной группой НЕ показываются —
+  // их подставляет переключатель «Честные размеры» (EQUAL_AREA_OF ниже).
+  equalArea: [
+    GameMapType.EqualEarth,
+    GameMapType.WorldEa,
+    GameMapType.NewWorldEa,
+    GameMapType.EuropeEa,
+    GameMapType.EuropeClassicEa,
+    GameMapType.AsiaEa,
+    GameMapType.AfricaEa,
+    GameMapType.NorthAmericaEa,
+    GameMapType.SouthAmericaEa,
+    GameMapType.OceaniaEa,
+    GameMapType.MenaEa,
+    GameMapType.BetweenTwoSeasEa,
+    GameMapType.BalkansEa,
+    GameMapType.IndianSubcontinentEa,
+    GameMapType.SoutheastAsiaEa,
+    GameMapType.EastAsiaEa,
+    GameMapType.AustraliaEa,
+    GameMapType.BeringSeaEa,
+    GameMapType.MareNostrumEa,
+    GameMapType.BritanniaClassicEa,
+    GameMapType.BritanniaEa,
+    GameMapType.BlackSeaEa,
+    GameMapType.GatewayToTheAtlanticEa,
+    GameMapType.IcelandEa,
+    GameMapType.ItaliaEa,
+    GameMapType.GulfOfStLawrenceEa,
+    GameMapType.AegeanEa,
+    GameMapType.GreatLakesEa,
+    GameMapType.CaucasusEa,
+    GameMapType.BajaCaliforniaEa,
+    GameMapType.KoreaEa,
+    GameMapType.MiddleEastEa,
+    GameMapType.DanishStraitsEa,
+    GameMapType.YellowSeaEa,
   ],
   fantasy: [
     GameMapType.Pangaea,
@@ -423,7 +555,7 @@ export enum UnitType {
   // от базового) + пассив: все ПВО владельца перезаряжаются ×2 быстрее. Штаб
   // РАЗБЛОКИРУЕТ каст SatelliteStrike (ракета-ослепление). Спека: new-units/NEBO.md
   OurSky = "Our Sky",
-  // terron: ультимейты — «Сбить спутники»: ракета-каст от штаба «Небо наше»
+  // terron: ультимейты — «Небо наше» (бывш. «Сбить спутники»): ракета-каст от штаба «Небо наше»
   // (реворк 21.08). Ставится на своей земле, 60с сборки = телеграф (URGENT всем,
   // сносибельна = контрплей), затем запуск: +10с волна тьмы → 60с туман войны у
   // всех, кроме владельца (team-команда щадится). Спека: new-units/NEBO.md
@@ -444,6 +576,33 @@ export enum UnitType {
   // terron: ультимейты — ракета «Реки вспять»: пуск из шахты, как атомная, но
   // земля в радиусе не выжигается, а ЗАТАПЛИВАЕТСЯ навсегда (суша → вода).
   WaterNuke = "Water Nuke",
+  // terron 25.08: ТЕРРАФОРМИНГ (решение владельца) — «Реки вспять» стали
+  // ТРЕМЯ ракетами одной цены и одного радиуса, а обе обычные ядерки у
+  // владельца ульты отключаются. Вторая ракета — «НАСЫПЬ»: вода в радиусе
+  // становится СУШЕЙ (ничейной). Спека: new-units/TERRA.md.
+  LandNuke = "Land Nuke",
+  // terron 25.08: ТЕРРАФОРМИНГ — третья ракета, «ЯДЕРНЫЙ УДАР»: обычная
+  // ядерка (выжигает, оставляет пепел), но с ценой и воронкой терраформинга.
+  // Своим типом, а не переоценкой атомной: цена и радиус у нас живут в
+  // Config ПО ТИПУ, а не по игроку — переоценивать атомную значило бы
+  // менять её и в захваченных шахтах, и у наций. new-units/TERRA.md
+  BlastNuke = "Blast Nuke",
+  /**
+   * terron 01.09 — ТЕРРАФОРМИНГ: ОТДЕЛЬНАЯ ЗАКРЫТАЯ ульта поверх «Рек вспять»
+   * (решение владельца), а НЕ переименование. «Реки вспять» остаются базовыми
+   * с одной ракетой и обычные ядерки НЕ запрещают; Терраформинг заменяет обе
+   * ядерки и МИРВ тремя ракетами: затопить / насыпать / ударить.
+   */
+  Terraforming = "Terraforming",
+  /**
+   * terron 01.09: «затопление» Терраформинга — СВОЙ тип, а не переиспользование
+   * `WaterNuke`.
+   *
+   * ⚠️ Иначе никак: `CAST_UNLOCKED_BY` отображает каст → здание СТРОГО один к
+   * одному, и одна ракета не может принадлежать двум ультам сразу. Эффект тот
+   * же (суша → вода), отличаются цена и воронка.
+   */
+  TerraFlood = "Terra Flood",
   // terron: НЕФТЯНАЯ ВЫШКА — обычное здание (не ульта), строится на ОКЕАНЕ и
   // работает как порт, но платит ×TERRON_OILRIG_TRADE_MULT. TerronTuning §ВЫШКА.
   OilRig = "Oil Rig",
@@ -570,6 +729,71 @@ export const Nukes = unitTypeGroup([
   UnitType.MIRVWarhead,
   UnitType.MIRV,
   UnitType.WaterNuke, // terron: ультимейты — «Реки вспять» (топит землю)
+  UnitType.TerraFlood, // terron: терраформинг — «Затопление» (топит землю)
+  UnitType.LandNuke, // terron: терраформинг — «Насыпь» (поднимает сушу)
+  UnitType.BlastNuke, // terron: терраформинг — «Ядерный удар» (обычная воронка)
+] as const);
+
+/**
+ * terron 25.08: ТЕРРАФОРМИНГ — три ракеты ульты «Реки вспять». Одна цена, один
+ * радиус, разный эффект: затопить / насыпать / выжечь. Группа нужна затем,
+ * чтобы «одинаковость» была ОБЪЯВЛЕНА в одном месте: цена и воронка в Config,
+ * гейт «обычные ядерки выключены» в PlayerImpl и списки ПВО читают её, а не
+ * перечисляют три типа руками (ровно так «Реки вспять» когда-то не попали в
+ * список групп и взорвали сами себя). new-units/TERRA.md
+ */
+export const TerraNukes = unitTypeGroup([
+  UnitType.TerraFlood,
+  UnitType.LandNuke,
+  UnitType.BlastNuke,
+] as const);
+
+/**
+ * terron 01.09 — ЧТО ПВО СБИВАЕТ НАПРЯМУЮ: всё ядерное, кроме МИРВ.
+ *
+ * МИРВ и его боеголовки исключены НАМЕРЕННО: МИРВ разделяется в полёте, и
+ * защита от него живёт своей механикой (`MIRVExecution.prepareSamShield`).
+ *
+ * ⚠️ ВЫВОДИТСЯ из группы `Nukes`, а не перечисляется. Ровно на перечислении я
+ * и обжёгся 01.09: у ПВО стоял список `[Atom, Hydrogen, ...TerraNukes]`, а
+ * когда ракета «Рек вспять» вышла из `TerraNukes` (появился Терраформинг со
+ * своим затоплением), ПВО МОЛЧА перестало её сбивать. Поймал тест.
+ */
+export const SamInterceptable = unitTypeGroup(
+  Nukes.types.filter(
+    (t) => t !== UnitType.MIRV && t !== UnitType.MIRVWarhead,
+  ) as unknown as readonly UnitType[],
+);
+
+/**
+ * terron 01.09 — РАКЕТЫ, КОТОРЫХ НЕТ В СХЕМЕ БОМБ (`bombUnits`).
+ *
+ * ⚠️ Группа отдельная от `TerraNukes` НАМЕРЕННО. `TerraNukes` отвечает на
+ * вопрос «чья это ракета» (Терраформинга), а эта — на вопрос «можно ли писать
+ * её в архив как бомбу». Ответ «нельзя» шире: сюда входит и ракета «Рек
+ * вспять». Слить их в одну — значит однажды вызвать `bombLaunch` с
+ * незнакомым кодом бомбы, а это ВЫКИДЫВАЕТ ИГРОКА ИЗ МАТЧА
+ * (память stats-clientid-and-bomb-codes).
+ */
+export const NonBombNukes = unitTypeGroup([
+  UnitType.WaterNuke,
+  UnitType.TerraFlood,
+  UnitType.LandNuke,
+  UnitType.BlastNuke,
+] as const);
+
+/**
+ * terron 25.08: ТЕРРАФОРМИНГ — юниты, которым НУЖНА вода под килем. Если
+ * «Насыпь» подняла землю под таким юнитом, он гибнет: висящая на суше лодка —
+ * это и застрявший пафайндер, и «корабль посреди степи» на экране.
+ *
+ * Космодром сюда НЕ входит намеренно: он строится и на воде, и на суше.
+ */
+export const NeedsWaterUnder = unitTypeGroup([
+  UnitType.TransportShip,
+  UnitType.Warship,
+  UnitType.TradeShip,
+  UnitType.OilRig,
 ] as const);
 
 // terron: НЕФТЯНАЯ ВЫШКА — «торговые узлы»: к ним ходят торговые лодки. Порт и
@@ -604,7 +828,10 @@ export const BuildableAttacks = unitTypeGroup([
   UnitType.SuicideDrone, // terron: авиация — дрон-камикадзе (мини-ядерка с аэропорта)
   UnitType.Split, // terron: ультимейты — таргетная атака-раскол (не строит юнит)
   UnitType.WaterNuke, // terron: ультимейты — «Реки вспять» (каст из шахты)
-  // terron: «Сбить спутники» — каст Неба нашего: ставит ракету-носитель на своей
+  UnitType.TerraFlood, // terron: терраформинг — «Затопление» (каст из шахты)
+  UnitType.LandNuke, // terron: терраформинг — «Насыпь» (каст из шахты)
+  UnitType.BlastNuke, // terron: терраформинг — «Ядерный удар» (каст из шахты)
+  // terron: «Небо наше» (бывш. «Сбить спутники») — каст Неба нашего: ставит ракету-носитель на своей
   // земле (60с телеграф, сносибельна), НЕ структура (канон кастов). NEBO.md
   UnitType.SatelliteStrike,
   // terron: «Блокада» — каст Пиратства (зона паники торговли, юнит не строится)
@@ -620,7 +847,6 @@ export const BuildableAttacks = unitTypeGroup([
   UnitType.DoomTrain, // terron: каст Взрывных поездов (тикающий состав)
   UnitType.CityTransfer, // terron: каст Шагающего города (перенос зданий)
 ] as const);
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // terron 23.08: ЕДИНЫЙ РЕЕСТР УЛЬТ — ОДНА ЗАПИСЬ НА УЛЬТУ.
@@ -677,6 +903,26 @@ export interface LockedUltimateDef {
    * и покупкой тоже. Гейт живёт в API (buy/grant), клиент только показывает.
    */
   parent: UnitType | null;
+}
+
+/** Каст ульты — активка, разблокированная её штабом. */
+export interface UltCastDef {
+  type: UnitType;
+  key: string;
+  icon: string;
+  /** Колонка атласа каста (у кастов почти всегда алиас). */
+  atlas: UltAtlas;
+  /**
+   * terron 23.08: ГОСТ ЗОНЫ ДЕЙСТВИЯ при наведении — радиус в тайлах.
+   * 0 = у каста нет области (точечный эффект по стране), круг не нужен.
+   *
+   * ⚠️ ПОЛЕ ОБЯЗАТЕЛЬНОЕ, и это осознанно. Раньше гост атакующих кастов
+   * нигде не объявлялся: у ядерок он был, у новых кастов его просто забыли —
+   * не «решили, что не нужен», а ПРОСТО НЕ НАПИСАЛИ, и заметить это можно
+   * было только в бою. Теперь при добавлении ульты компилятор заставляет
+   * ответить на вопрос «какая у каста зона» явно: число или честный ноль.
+   */
+  previewRadius: number;
 }
 
 export interface UltimateDef {
@@ -740,24 +986,21 @@ export interface UltimateDef {
    */
   hqPreviewRadius: number | "dynamic";
   /** Каст, который разблокирует штаб. Нет = ульта чисто пассивная. */
-  cast?: {
-    type: UnitType;
-    key: string;
-    icon: string;
-    /** Колонка атласа каста (у кастов почти всегда алиас). */
-    atlas: UltAtlas;
-    /**
-     * terron 23.08: ГОСТ ЗОНЫ ДЕЙСТВИЯ при наведении — радиус в тайлах.
-     * 0 = у каста нет области (точечный эффект по стране), круг не нужен.
-     *
-     * ⚠️ ПОЛЕ ОБЯЗАТЕЛЬНОЕ, и это осознанно. Раньше гост атакующих кастов
-     * нигде не объявлялся: у ядерок он был, у новых кастов его просто забыли —
-     * не «решили, что не нужен», а ПРОСТО НЕ НАПИСАЛИ, и заметить это можно
-     * было только в бою. Теперь при добавлении ульты компилятор заставляет
-     * ответить на вопрос «какая у каста зона» явно: число или честный ноль.
-     */
-    previewRadius: number;
-  };
+  cast?: UltCastDef;
+  /**
+   * terron 25.08: ДОПОЛНИТЕЛЬНЫЕ КАСТЫ, встающие на ЧУЖИЕ кнопки панели.
+   *
+   * `cast` — каст СЛОТА УЛЬТЫ (звезда превращается в него). Этих слотов
+   * ровно один, а Терраформингу нужно ТРИ ракеты сразу. Поэтому каст умеет
+   * заявить, КАКУЮ кнопку он подменяет (`slot`): у Терраформинга «Насыпь»
+   * встаёт на место атомной, «Ядерный удар» — на место водородной, а сами
+   * ядерки у владельца ульты отключены гейтом в PlayerImpl.
+   *
+   * ⚠️ Подмена ЧИСТО ИНТЕРФЕЙСНАЯ и работает во всех трёх поверхностях ввода
+   * (панель, радиал, прицельное управление) через `client/UltSlots.ts`.
+   * Гейт «а можно ли вообще» живёт в ядре и от неё не зависит.
+   */
+  extraCasts?: readonly (UltCastDef & { slot: UnitType })[];
   /** Сколько копий здания можно построить. По умолчанию 1. */
   maxCount?: number;
   /**
@@ -902,6 +1145,12 @@ export const ULTIMATE_REGISTRY: readonly UltimateDef[] = [
     },
   },
   {
+    // terron: «РЕКИ ВСПЯТЬ» — БАЗОВАЯ ульта, одна ракета: суша в воронке
+    // навсегда становится водой.
+    //
+    // ⚠️ terron 01.09 (решение владельца): обычные ядерки она НЕ ЗАПРЕЩАЕТ.
+    // С 25.08 по 01.09 на ДЕВЕ она была переименована в Терраформинг и запрет
+    // висел на ней — это откачено, Терраформинг стал отдельной ультой ниже.
     type: UnitType.RiversBack,
     key: "rivers_back",
     icon: "RiversBackIconWhite.svg",
@@ -918,6 +1167,59 @@ export const ULTIMATE_REGISTRY: readonly UltimateDef[] = [
       // радиус берётся из nukeMagnitudes, как у обычных ядерок
       previewRadius: 0,
     },
+  },
+  {
+    /**
+     * terron 01.09 — ТЕРРАФОРМИНГ (решение владельца): ЗАКРЫТАЯ ульта поверх
+     * «Рек вспять». Три ракеты вместо ОБЕИХ обычных ядерок и МИРВ:
+     * затопить / насыпать / ударить.
+     *
+     * Ключ — «Гидростроитель»: 50 пусков «Рек вспять» ЗА ОДИН МАТЧ. То есть
+     * сперва играешь базовой ультой, и только освоив её — получаешь развитие.
+     *
+     * ⚠️ Размен с «Реками вспять» объявлен в TerronTuning: у них ОДНА большая
+     * воронка (12/21) за 500k, здесь ТРИ поменьше (7.2/12.6) по 1M.
+     */
+    type: UnitType.Terraforming,
+    key: "terraforming",
+    icon: "LandNukeIconWhite.svg",
+    // ⚠️ Своей колонки атласа у штаба нет — рисуется колонкой «Рек вспять».
+    // Новая колонка = правка PNG и сдвиг всех последующих (память
+    // atlas-columns-vs-order); заводить её ради косметики сейчас незачем.
+    atlas: { alias: UnitType.RiversBack },
+    hqPreviewRadius: 0,
+    actsAs: null,
+    replaces: null,
+    locked: {
+      pricePts: 500,
+      achievement: "terraforming_key",
+      parent: UnitType.RiversBack,
+    },
+    cast: {
+      type: UnitType.TerraFlood,
+      key: "terra_flood",
+      icon: "RiversBackIconWhite.svg",
+      atlas: { alias: UnitType.AtomBomb },
+      previewRadius: 0,
+    },
+    extraCasts: [
+      {
+        type: UnitType.LandNuke,
+        key: "land_nuke",
+        icon: "LandNukeIconWhite.svg",
+        atlas: { alias: UnitType.AtomBomb },
+        previewRadius: 0,
+        slot: UnitType.AtomBomb,
+      },
+      {
+        type: UnitType.BlastNuke,
+        key: "blast_nuke",
+        icon: "NukeIconWhite.svg",
+        atlas: { alias: UnitType.AtomBomb },
+        previewRadius: 0,
+        slot: UnitType.HydrogenBomb,
+      },
+    ],
   },
   {
     type: UnitType.SubmarineBase,
@@ -1208,20 +1510,26 @@ export const ULTIMATE_REGISTRY: readonly UltimateDef[] = [
       parent: UnitType.OilRig,
     },
   },
-  {
-    type: UnitType.PeacefulSky,
-    key: "peaceful_sky",
-    icon: "PeacefulSkyIconWhite.svg",
-    atlas: { own: true },
-    hqPreviewRadius: 0,
-    actsAs: null,
-    replaces: null,
-    locked: {
-      pricePts: 500,
-      achievement: "sky_key",
-      parent: UnitType.OurSky,
-    },
-  },
+  // terron 01.09 — СТАРОЕ «МИРНОЕ НЕБО» В АРХИВЕ (решение владельца: «архивни
+  // старую, некогда с ней ковыряться, мирное будет и тем и тем»). Она делала
+  // ПВО вдвое дешевле, но сбивала ВСЁ чужое, включая ракеты союзников; на
+  // проде была выключена рубильником и не обкатывалась. Имя «Мирное небо»
+  // отдано штабу «Неба нашего» — там оно описывает механику точнее.
+  //
+  // ⚠️ Тип и его ветки в Config/SAMLauncherExecution ЖИВЫ: enum валидирует
+  // реле интентов, а удаление = рестарт игрового сервера и битые реплеи (тот
+  // же приём, что у Мин правды). Вернуть = раскомментировать здесь и в группе
+  // Ultimates ниже.
+  // {
+  //   type: UnitType.PeacefulSky,
+  //   key: "peaceful_sky",
+  //   icon: "PeacefulSkyIconWhite.svg",
+  //   atlas: { own: true },
+  //   hqPreviewRadius: 0,
+  //   actsAs: null,
+  //   replaces: null,
+  //   locked: { pricePts: 500, achievement: "sky_key", parent: UnitType.OurSky },
+  // },
   // terron 23.08 — ВЗРЫВНЫЕ ПОЕЗДА (идея владельца: «поезд, который тикает»).
   // Спека new-units/TRAINS.md. 24.08 — ЗАКРЫТА как вершина топливной цепочки:
   // ключ = 50 ульт-зданий (чужих И своих), снесённых выстрелами Доры.
@@ -1331,6 +1639,7 @@ export const Structures = unitTypeGroup([
   UnitType.Media, // terron: ультимейты — МЕДИА (штаб: игнор предательства + каст Раскола)
   UnitType.NuclearFactory, // terron: ультимейты — Ядерный завод (штаб → разблок МИРВ)
   UnitType.RiversBack, // terron: ультимейты — «Реки вспять» (штаб → разблок водяной ракеты)
+  UnitType.Terraforming, // terron 01.09: терраформинг (штаб → три ракеты)
   UnitType.OilRig, // terron: нефтяная вышка (обычное здание, строится на океане)
   UnitType.SubmarineBase, // terron: ультимейты — подлодки (штаб)
   UnitType.ClosedCountry, // terron: ультимейты — закрытая страна (штаб, пассив; ЗАКРЫТАЯ ульта)
@@ -1345,7 +1654,7 @@ export const Structures = unitTypeGroup([
   UnitType.Fuel, // terron: ультимейты — топливо (штаб; ЗАКРЫТАЯ ульта)
   UnitType.RailGun, // terron: ультимейты — Дора (едущее здание; ЗАКРЫТАЯ ульта)
   UnitType.Spaceport, // terron: ультимейты — космодром (ЗАКРЫТАЯ ульта)
-  UnitType.PeacefulSky, // terron: ультимейты — мирное небо (ЗАКРЫТАЯ ульта)
+  // UnitType.PeacefulSky, // terron 01.09: В АРХИВЕ, см. реестр выше
   UnitType.TrainDepot, // terron: ультимейты — взрывные поезда (депо)
   UnitType.WalkingCity, // terron: ультимейты — шагающий город (перенос зданий)
   UnitType.SecretTreasure, // terron: СЕКРЕТНЫЙ круг «клад» (код 1337)
@@ -1408,14 +1717,35 @@ export interface Blockade {
  * родство (`actsAs`) и вес (`actsAsCount`). Пользоваться ВЕЗДЕ, где решает
  * ЧИСЛО зданий, а не факт их наличия.
  */
+// terron 04.09 ПЕРФ: список «кто считается за kind» — мемо по kind. Раньше
+// каждый вызов пробегал весь реестр ульт (30 записей); actingAsCount зовётся из
+// shouldSpawnTrain КАЖДОЙ станцией КАЖДЫЙ тик — 3.9 % времени симуляции на
+// боевом реплее (профиль 04.09). Реестр константен, мемо законен.
+const ACTING_AS_MEMO = new Map<
+  UnitType,
+  { type: UnitType; weight: number }[]
+>();
+function actingAsEntries(kind: UnitType): { type: UnitType; weight: number }[] {
+  let list = ACTING_AS_MEMO.get(kind);
+  if (list === undefined) {
+    list = ULTIMATE_REGISTRY.filter((u) => u.actsAs === kind).map((u) => ({
+      type: u.type,
+      weight: u.actsAsCount ?? 1,
+    }));
+    ACTING_AS_MEMO.set(kind, list);
+  }
+  return list;
+}
+
 export function actingAsCount(
   kind: UnitType,
   count: (t: UnitType) => number,
 ): number {
   let total = count(kind);
-  for (const u of ULTIMATE_REGISTRY) {
-    if (u.actsAs !== kind) continue;
-    total += count(u.type) * (u.actsAsCount ?? 1);
+  const entries = actingAsEntries(kind);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    total += count(e.type) * e.weight;
   }
   return total;
 }
@@ -1438,6 +1768,40 @@ export function isLockedUltimate(t: UnitType): boolean {
   return LOCKED_ULTIMATES[t] !== undefined;
 }
 
+/**
+ * terron 25.08: ВСЕ касты ульты — слотовый (`cast`) плюс подменяющие чужие
+ * кнопки (`extraCasts`). Единственный правильный способ перечислить касты:
+ * прямое чтение `u.cast` пропускает дополнительные и молча ломает всё, что
+ * от них зависит (гейт, атлас, каталог, вики).
+ */
+export function ultCasts(u: UltimateDef): readonly UltCastDef[] {
+  const extra = u.extraCasts ?? [];
+  return u.cast === undefined ? extra : [u.cast, ...extra];
+}
+
+/** Плоский список всех кастов всех ульт с указанием здания-разблокировки. */
+export const ALL_ULT_CASTS: readonly (UltCastDef & { building: UnitType })[] =
+  ULTIMATE_REGISTRY.flatMap((u) =>
+    ultCasts(u).map((c) => ({ ...c, building: u.type })),
+  );
+
+/**
+ * terron 25.08: подмены кнопок панели — «слот такого-то юнита у владельца
+ * такой-то ульты показывает вот этот каст». Выводится из реестра, руками не
+ * пишется. Читают три поверхности ввода через `client/UltSlots.ts`.
+ */
+export const CAST_SLOT_REPLACEMENTS: readonly {
+  slot: UnitType;
+  building: UnitType;
+  cast: UltCastDef;
+}[] = ULTIMATE_REGISTRY.flatMap((u) =>
+  (u.extraCasts ?? []).map((c) => ({
+    slot: c.slot,
+    building: u.type,
+    cast: c as UltCastDef,
+  })),
+);
+
 // terron: РЕЕСТР особых свойств ультов (18.07) — вместо копипаст-if-ов в
 // PlayerImpl. Новая пара «здание → активка» или лимит копий = одна строка тут.
 //
@@ -1448,13 +1812,16 @@ export function isLockedUltimate(t: UnitType): boolean {
 export const CAST_UNLOCKED_BY: Partial<
   Record<UnitType, { building: UnitType; skipGateWhenBuildingDisabled?: true }>
 > = Object.fromEntries(
-  ULTIMATE_REGISTRY.filter((u) => u.cast !== undefined).map((u) => [
-    u.cast!.type,
+  // terron 25.08: считаем по ВСЕМ кастам ульты (cast + extraCasts) — иначе
+  // дополнительные касты Терраформинга остались бы без гейта, то есть
+  // доступными всем и всегда.
+  ALL_ULT_CASTS.map((c) => [
+    c.type,
     {
-      building: u.type,
+      building: c.building,
       // МИРВ — единственное исключение: если Ядерный завод выключен в лобби,
       // гейт снимается и МИРВ работает как в оригинале (только из шахты).
-      ...(u.cast!.type === UnitType.MIRV
+      ...(c.type === UnitType.MIRV
         ? { skipGateWhenBuildingDisabled: true as const }
         : {}),
     },
@@ -1501,12 +1868,35 @@ export type UltStats = {
   religionTiles: number; // территорий обращено ростом храма (Религия)
   religionTithe: number; // золота уплачено «десятиной» на храм (Религия)
   waterTiles: number; // земель затоплено ракетами «Реки вспять»
+  landTiles: number; // terron 25.08: воды поднято «Насыпью» (терраформинг)
 };
 
 export const BuildMenus = unitTypeGroup([
   ...Structures.types,
   ...BuildableAttacks.types,
 ] as const);
+
+/**
+ * Можно ли ЭТОТ тип построить в принципе.
+ *
+ * ⚠️ terron 01.09: у АРХИВНЫХ типов (ульта убрана из реестра, enum жив ради
+ * валидации интентов и старых реплеев) цены не существует, и `unitInfo` на них
+ * БРОСАЕТ — то есть устаревший или подсунутый интент ронял симуляцию у всех
+ * участников матча. Проверяем принадлежность реестру ДО обращения к цене.
+ * ⚠️ Список АРХИВНЫХ, а не белый список «разрешённых»: через canBuild идут и
+ * служебные спавны симуляции (боеголовки МИРВа), которых нет ни в одном меню, —
+ * белый список молча выключил бы МИРВ целиком. Поймано тестами.
+ */
+export const ARCHIVED_UNITS: ReadonlySet<UnitType> = new Set([
+  // Влита в МЕДИА 06.08 — здание больше не строится.
+  UnitType.MinistryOfTruth,
+  // Старое «Мирное небо» — 01.09, имя отдано штабу «Неба нашего».
+  UnitType.PeacefulSky,
+]);
+
+export function isBuildableType(t: UnitType): boolean {
+  return !ARCHIVED_UNITS.has(t);
+}
 
 /**
  * terron 23.08: что показываем в ПАНЕЛИ/МЕНЮ СТРОИТЕЛЬСТВА.
@@ -1596,7 +1986,7 @@ export interface UnitParamsMap {
   [UnitType.Mining]: Record<string, never>; // terron: ультимейты
   [UnitType.Revanchism]: Record<string, never>; // terron: ультимейты — пассив
   [UnitType.OurSky]: Record<string, never>; // terron: ультимейты — антиспутник
-  // terron: «Сбить спутники» — ракета-каст Неба (носитель без параметров)
+  // terron: «Небо наше» (бывш. «Сбить спутники») — ракета-каст Неба (носитель без параметров)
   [UnitType.SatelliteStrike]: Record<string, never>;
 
   // terron: авиация — самолёт-транзит между аэропортами
@@ -1630,6 +2020,7 @@ export interface UnitParamsMap {
   [UnitType.NuclearFactory]: Record<string, never>; // terron: ультимейты — разблок МИРВ
   // terron: ультимейты — «Реки вспять»: штаб без параметров + ракета с целью.
   [UnitType.RiversBack]: Record<string, never>;
+  [UnitType.Terraforming]: Record<string, never>; // terron 01.09: штаб терраформинга
   [UnitType.OilRig]: Record<string, never>; // terron: нефтяная вышка
   [UnitType.SubmarineBase]: Record<string, never>; // terron: ультимейты — подлодки
   [UnitType.ClosedCountry]: Record<string, never>; // terron: ультимейты — закрытая страна
@@ -1668,6 +2059,17 @@ export interface UnitParamsMap {
     steps?: number;
   };
   [UnitType.WaterNuke]: {
+    targetTile?: number;
+  };
+  [UnitType.TerraFlood]: {
+    targetTile?: number;
+  };
+  // terron 25.08: терраформинг — «Насыпь» и «Ядерный удар» (те же параметры,
+  // что у любой ракеты: только цель).
+  [UnitType.LandNuke]: {
+    targetTile?: number;
+  };
+  [UnitType.BlastNuke]: {
     targetTile?: number;
   };
 
@@ -1895,7 +2297,11 @@ export interface Unit {
   maxHealth(): number | undefined;
   // terron: ПИРАТСТВО — миссия «Блокада»: лодка плывёт к точке (anchored=false)
   // или стоит на якоре в зоне (anchored=true). null = обычная служба.
-  blockadeMission(): { target: TileRef; anchored: boolean; drawn: boolean } | null;
+  blockadeMission(): {
+    target: TileRef;
+    anchored: boolean;
+    drawn: boolean;
+  } | null;
   setBlockadeMission(
     m: { target: TileRef; anchored: boolean; drawn: boolean } | null,
   ): void;
@@ -1956,6 +2362,17 @@ export interface Unit {
   level(): number;
   increaseLevel(): void;
   decreaseLevel(destroyer?: Player): void;
+  /**
+   * terron: РЕВАНШИЗМ — выставить уровень напрямую (постройка из очков игрока).
+   * Не increaseLevel: у того побочные эффекты (очередь таймеров шахт/ПВО).
+   */
+  setLevel(level: number): void;
+  /**
+   * terron: РЕВАНШИЗМ — пометить снос как СДЕЛАННЫЙ РУКАМИ ВЛАДЕЛЬЦА. По
+   * аргументу `destroyer` это не отличить: когда под зданием забирают землю,
+   * PlayerExecution зовёт голый `delete()`. Ставит только DeleteUnitExecution.
+   */
+  markSelfDemolished(): void;
 }
 
 export interface TerraNullius {
@@ -2029,10 +2446,24 @@ export interface Player {
   tiles(): ReadonlySet<TileRef>;
   borderTiles(): ReadonlySet<TileRef>;
   numTilesOwned(): number;
-  // terron: РЕВАНШИЗМ — исторический пик тайлов + баф защиты по потере земель.
+  // terron: РЕВАНШИЗМ — исторический пик тайлов + замедление захвата по потере
+  // земель от пика (TerronTuning §РЕВАНШИЗМ).
   maxTilesOwned(): number;
   updateMaxTiles(): void;
+  /** Во сколько раз замедляется захват МОЕЙ земли (0 = ульты нет / я на пике). */
   revanchismBuff(): number;
+  /** Уровень СТОЯЩЕГО монумента (1..3); 0 — монумента нет. Ховер/тултип. */
+  revanchismLevel(): number;
+  /**
+   * Уровень, который получит СЛЕДУЮЩАЯ построенная мной статуя: 1 + накопленные
+   * очки. Зовёт `ConstructionExecution`, когда стройка завершена.
+   */
+  nextRevanchismLevel(): number;
+  /**
+   * Мой монумент перестал быть моим — начислить очки уровня по причине.
+   * ⚠️ Зовётся ТОЛЬКО для статуи, которую игрок построил сам (не захваченной).
+   */
+  registerRevanchismLoss(cause: RevanchismLossCause): void;
   conquer(tile: TileRef): void;
   relinquish(tile: TileRef): void;
 
@@ -2040,6 +2471,9 @@ export interface Player {
   // авто-схлопывания окружением, пока метка не истекла И тайл ещё принадлежит игроку.
   addAirborneBeachhead(tile: TileRef, expiryTick: number): void;
   activeAirborneBeachheads(currentTick: number): ReadonlySet<TileRef>;
+  // Только десантные плацдармы (без «тихих» иммунитетов Раскола) — набор, с
+  // которого метку реально можно снять. См. PlayerImpl.activeAirborneMarkers.
+  activeAirborneMarkers(currentTick: number): ReadonlySet<TileRef>;
   clearAirborneBeachhead(tile: TileRef): void;
 
   // terron: ультимейты — Раскол. «Тихий» иммунитет тайла от авто-схлопывания
@@ -2145,6 +2579,12 @@ export interface Player {
 
   // Relations & Diplomacy
   nearby(): (Player | TerraNullius)[];
+  /** terron 04.09 ПЕРФ: «морская» половина nearby() — соседи через узкую воду
+   *  (см. PlayerImpl.shoreReachableNeighbors). Наружу — чтобы бот, уже обошедший
+   *  границу сам, не звал nearby() и не обходил её второй раз. */
+  shoreReachableNeighbors(): Set<Player | TerraNullius>;
+  /** terron 04.09 ПЕРФ: есть ли у игрока ульт-здания (см. PlayerImpl). */
+  hasUltBuildings(): boolean;
   sharesBorderWith(other: Player | TerraNullius): boolean;
   relation(other: Player): Relation;
   allRelationsSorted(): { player: Player; relation: Relation }[];
@@ -2330,6 +2770,8 @@ export interface Game extends GameMap {
   unit(id: number): Unit | undefined;
   units(...types: UnitType[]): Unit[];
   unitCount(type: UnitType): number;
+  /** terron 04.09 ПЕРФ: сбросить кэш глобальных счётчиков юнитов (см. GameImpl). */
+  invalidateUnitCounts(): void;
   unitInfo(type: UnitType): UnitInfo;
   hasUnitNearby(
     tile: TileRef,
@@ -2401,6 +2843,9 @@ export interface Game extends GameMap {
   sharedWaterComponents(player: Player): Set<number> | null;
   /** Incremented each time the water navigation graph is rebuilt (e.g. after nuke terrain change). */
   waterGraphVersion(): number;
+  // Растёт, когда суша стала водой или наоборот (в отличие от
+  // waterGraphVersion, который бампается при пересборке графа путей).
+  terrainVersion(): number;
 
   /** Queue a land tile for conversion to water (batched every few ticks). Tile must be unowned. */
   // terron: force=true — ракета «Реки вспять»: топим независимо от флага лобби.
@@ -2413,6 +2858,13 @@ export interface Game extends GameMap {
     // и АЭС (кому выставлять счёт за уборку). GREEN.md
     prevOwner?: number,
   ): void;
+
+  /**
+   * terron 25.08: ТЕРРАФОРМИНГ — обратная конверсия «вода → суша» (каст
+   * «Насыпь»). Тайл обязан быть ВОДОЙ; поднятая земля НИЧЕЙНАЯ — её занимает
+   * тот, кто дотянется, ровно как ничейную сушу карты. new-units/TERRA.md
+   */
+  queueLandConversion(tile: TileRef): void;
 
   /**
    * terron: чья земля была под этим тайлом пепла (0 — ничья/неизвестно).
@@ -2545,6 +2997,8 @@ export enum MessageType {
   GOLDEN_MATCH,
   // terron: ШАГАЮЩИЙ ГОРОД — перенос зданий (старт/прибытие/застряло). WALKING.md
   WALKING,
+  // terron 01.09: ПОБЕДА С УДЕРЖАНИЕМ — «X победит через N с» и «отбили».
+  VICTORY_COUNTDOWN,
 }
 
 // Message categories used for filtering events in the EventsDisplay
@@ -2601,6 +3055,8 @@ export const MESSAGE_TYPE_CATEGORIES: Record<MessageType, MessageCategory> = {
   [MessageType.GOLDEN_MATCH]: MessageCategory.CHAT,
   // terron: шагающий город — переносы зданий видит их владелец (личные строки).
   [MessageType.WALKING]: MessageCategory.ATTACK,
+  // terron: отсчёт до победы — новость для ВСЕХ, идёт общим потоком (чат).
+  [MessageType.VICTORY_COUNTDOWN]: MessageCategory.CHAT,
 } as const;
 
 /**

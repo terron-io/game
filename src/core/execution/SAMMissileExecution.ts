@@ -15,7 +15,7 @@ import { TileRef } from "../game/GameMap";
 import { PathFinding } from "../pathfinding/PathFinder";
 import { PathStatus, SteppingPathFinder } from "../pathfinding/types";
 import { NukeType } from "../StatsSchemas";
-import { floodWaterCrater } from "./NukeExecution";
+import { floodWaterCrater, raiseLandCrater } from "./NukeExecution";
 import { detonateDroneBlast } from "./SuicideDroneExecution";
 
 export class SAMMissileExecution implements Execution {
@@ -144,8 +144,26 @@ export class SAMMissileExecution implements Execution {
     // terron 07.08 (ПРОБА по решению владельца, флаг в TerronTuning): сбитая
     // водяная ракета всё равно топит землю — В ТОЧКЕ ПЕРЕХВАТА и вдвое меньшей
     // воронкой. Остальные ракеты перехват отменяет полностью, как и раньше.
-    if (type === UnitType.WaterNuke && TERRON_RIVERS_CRATER_ON_INTERCEPT) {
+    // ⚠️ terron 01.09: затоплений теперь ДВА типа — у «Рек вспять» и у
+    // Терраформинга. Проверять по одному значило бы, что перехват ракеты
+    // Терраформинга отменяет удар полностью, а «Рек вспять» — нет.
+    if (
+      (type === UnitType.WaterNuke || type === UnitType.TerraFlood) &&
+      TERRON_RIVERS_CRATER_ON_INTERCEPT
+    ) {
       floodWaterCrater(
+        this.mg,
+        interceptTile,
+        targetOwner,
+        TERRON_RIVERS_INTERCEPT_CRATER_FRAC,
+      );
+    }
+    // terron 25.08: ТЕРРАФОРМИНГ — то же правило для «Насыпи»: сбили над
+    // проливом — островок всё равно вырос, вдвое меньше задуманного.
+    // «Ядерный удар» под правило НЕ попадает: он обычная ядерка, у неё
+    // перехват отменяет удар целиком.
+    if (type === UnitType.LandNuke && TERRON_RIVERS_CRATER_ON_INTERCEPT) {
+      raiseLandCrater(
         this.mg,
         interceptTile,
         targetOwner,

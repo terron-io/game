@@ -8,7 +8,7 @@
 // Источник (from/utm/...) сворачиваем в ОДИН токен (юзеру «похер что from что utm»):
 // utm_source || from || src || utm_medium || referrer-host || "direct". First-touch.
 import { getApiBase } from "./Api";
-import { getPersistentID } from "./Auth";
+import { getDeviceID } from "./Auth";
 
 const YM_ID = 109773286; // = index.html
 const SRC_KEY = "terron_src"; // first-touch источник трафика (localStorage)
@@ -32,7 +32,10 @@ export function track(goal: string, params?: Record<string, unknown>): void {
 }
 
 function clean(s: string): string {
-  const v = s.toLowerCase().replace(/[^a-z0-9_.\-]/g, "").slice(0, 40);
+  const v = s
+    .toLowerCase()
+    .replace(/[^a-z0-9_.\-]/g, "")
+    .slice(0, 40);
   return v || "direct";
 }
 
@@ -110,6 +113,18 @@ const UNRESOLVED_SOURCES = new Set([
   "s3.gamepush.com",
   "gamepush.com",
   "gamepush.ru",
+  // terron 03.09: хостинг GamePush для дистрибуции живёт на eponesh.com
+  // (факт с кабинета: черновик — `s3.eponesh.com/games/draft/…`).
+  "s3.eponesh.com",
+  "gs.eponesh.com",
+  "eponesh.com",
+  // terron 09.09: `id.vk.ru` — страница входа VK ID, а НЕ канал привлечения.
+  // Внутри ОК и ВК игрок логинится через неё, и реферер внутреннего кадра
+  // становится `id.vk.ru`: весь ДЕСКТОПНЫЙ трафик Одноклассников лежал под
+  // этим хостом (55 аккаунтов площадки OK за один день 09.09), а мобильный —
+  // под `gp_ok`, то есть один канал был разорван надвое. Со страницы
+  // авторизации в игру не приходят — перезаписать её площадкой безопасно.
+  "id.vk.ru",
   "direct",
 ]);
 
@@ -128,6 +143,9 @@ export function refineSourceFromPlatform(type: unknown): void {
   } catch {
     /* ignore */
   }
+  // Визит мог уже уехать с нерешённым токеном (мы его больше не задерживаем).
+  // Досылаем — сервер перепишет источник, пока он остаётся нерешённым.
+  resendVisitWithSource();
 }
 
 let platformSourcePromise: Promise<void> | null = null;
@@ -208,7 +226,9 @@ function deviceClass(): "mobile" | "tablet" | "desktop" {
   const ua = (navigator.userAgent || "").toLowerCase();
   if (/ipad|tablet|playbook|silk|kindle/.test(ua)) return "tablet";
   if (/android/.test(ua) && !/mobile/.test(ua)) return "tablet";
-  if (/iphone|ipod|android|windows phone|iemobile|blackberry|opera mini/.test(ua)) {
+  if (
+    /iphone|ipod|android|windows phone|iemobile|blackberry|opera mini/.test(ua)
+  ) {
     return "mobile";
   }
   return "desktop";
@@ -231,10 +251,29 @@ function webviewShape(): string | null {
  * UA: ссылку `?from=android_app` можно переслать и открыть на десктопе, и тогда
  * она означала бы «пришёл по ссылке из апки», а не «сидит в апке».
  */
+// terron 30.08: ДЕСКТОПНАЯ ОБОЛОЧКА (Steam / скачанная с сайта). Опознаём её
+// МОСТОМ, а не маркером в адресе: мост ставит preload оболочки, переслать его
+// ссылкой невозможно — ровно та причина, по которой маркер апки ниже режется на
+// десктопном классе устройств. Канал сообщает сама оболочка: у сборки для Steam
+// это `steam`, у сборки с нашего сайта — `desktop`; путать их нельзя, от этого
+// зависит в том числе, разрешена ли наша платёжка.
+function desktopShellPlatform(): string | null {
+  try {
+    const host = (window as unknown as { terronDesktop?: { host?: string } })
+      .terronDesktop?.host;
+    if (host === "steam") return "steam-app";
+    if (host === "desktop") return "desktop-app";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function markerPlatform(): string | null {
   try {
-    const raw = (new URL(window.location.href).searchParams.get("from") || "")
-      .toLowerCase();
+    const raw = (
+      new URL(window.location.href).searchParams.get("from") || ""
+    ).toLowerCase();
     if (raw !== "android_app" && raw !== "ios_app") return null;
     if (deviceClass() === "desktop") return null;
     return raw === "ios_app" ? "native-ios" : "native-android";
@@ -258,7 +297,8 @@ export function clientPlatform(): string {
   } catch {
     /* приватный режим — обойдёмся без липкости */
   }
-  const live = capacitorPlatform() ?? markerPlatform();
+  const live =
+    desktopShellPlatform() ?? capacitorPlatform() ?? markerPlatform();
   if (live) {
     if (sticky !== live) {
       try {
@@ -300,12 +340,16 @@ async function trafficEvent(
       body: JSON.stringify({
         source: getTrafficSource(),
         ref: getTrafficReferrer(), // сервер запишет только на first-touch (insert)
-        vid: getPersistentID(),
+        vid: getDeviceID(),
         // Портрет аудитории (сервер пишет only-once, как и источник): язык
         // браузера и устройство. Страну считает сам сервер по IP — клиенту её
         // доверять нельзя, да и незачем.
         lang: browserLang(),
         platform: clientPlatform(),
+        // 19.09: пояс устройства — вторая оценка страны, VPN её не меняет;
+        // язык интерфейса — на чём человек играет у нас сейчас.
+        tz: deviceTimeZone(),
+        uiLang: interfaceLang(),
         type,
         ...extra,
       }),
@@ -315,7 +359,6 @@ async function trafficEvent(
     /* ignore — аналитика не критична */
   }
 }
-
 
 /**
  * Язык браузера — то, на чём человек РЕАЛЬНО читает, а не то, что он выбрал у
@@ -333,6 +376,39 @@ function browserLang(): string {
   }
 }
 
+/** IANA-пояс устройства (Europe/Moscow). VPN меняет IP, но не часы. */
+function deviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Язык, на котором реально нарисован наш интерфейс. ⚠️ Не getCurrentLang():
+ * тот при непоявившемся селекторе отдаёт фолбэк "en" и записал бы англичанином
+ * того, кому интерфейс ещё грузится по-русски. Нет ответа — не шлём ничего.
+ */
+function interfaceLang(): string {
+  try {
+    // translations появляются, когда доехал словарь языка игрока; до этого
+    // currentLang — стартовая заглушка "en".
+    const sel = document.querySelector("lang-selector") as {
+      currentLang?: string;
+      translations?: unknown;
+    } | null;
+    if (sel?.translations && sel.currentLang) return sel.currentLang;
+  } catch {
+    /* ignore */
+  }
+  try {
+    return localStorage.getItem("lang") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** Визит (раз за сессию вкладки). Metrica-цель + серверная запись. */
 export function fireVisit(): void {
   try {
@@ -341,11 +417,32 @@ export function fireVisit(): void {
   } catch {
     /* ignore */
   }
-  // Ждём имя площадки: источник визита пишется первым и уже не переписывается.
-  void awaitPlatformSource().then(() => {
-    track("site_visit", { source: getTrafficSource() });
-    void trafficEvent("visit");
-  });
+  // terron 09.09: ВИЗИТ УХОДИТ СРАЗУ, а не после ожидания площадки.
+  //
+  // Раньше здесь стоял `awaitPlatformSource().then(...)` — то есть до 2.5с
+  // ожидания SDK ПЕРЕД первой записью. В WebView мобильного приложения площадки
+  // сеть первых секунд мертва, SDK поднимается медленно, а человек из каталога
+  // уходит быстро: заход, который не дожил до конца ожидания, не попадал в
+  // воронку ВООБЩЕ. Факт 09.09 (открытие в каталоге ОК): 289 зашедших по
+  // счётчику площадки против 84 строк воронки — знаменатель терялся втрое, и
+  // канал нельзя было оценить.
+  //
+  // Источник это не портит: уточнение площадки прилетит следующим событием
+  // (сервер перезапишет ТОЛЬКО нерешённый токен, см. recordTrafficEvent), а
+  // если игрок больше ничего не сделает — повторный визит пошлёт
+  // refineSourceFromPlatform.
+  track("site_visit", { source: getTrafficSource() });
+  void trafficEvent("visit");
+}
+
+/** Переслать визит, когда площадка стала известна позже первой отправки. */
+function resendVisitWithSource(): void {
+  try {
+    if (!sessionStorage.getItem(VISIT_KEY)) return; // визита ещё не было
+  } catch {
+    /* хранилище запрещено — шлём, дубль строки не создаст */
+  }
+  void trafficEvent("visit");
 }
 
 // Вехи между «в лобби» и «загрузился» + вовлечение после загрузки — single-fire
@@ -420,9 +517,7 @@ export function trackMatchOutcome(outcome: MatchOutcome): void {
   // terron: зеркалим прогресс в игрока площадки (чек-лист модерации GamePush —
   // «прогресс сохраняется»). Вне площадки — no-op. Импорт ленивый: Analytics
   // грузится очень рано, тянуть за собой SDK-модуль незачем.
-  void import("./GamePushSDK").then(({ GamePushSDK }) =>
-    GamePushSDK.recordMatch(outcome === "won"),
-  );
+  void import("./PlatformHost").then(({ Host }) => Host.recordMatch(outcome));
 }
 
 /**
@@ -444,7 +539,7 @@ export function startOnlineHeartbeat(): void {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        vid: getPersistentID(),
+        vid: getDeviceID(),
         source: getTrafficSource(),
         platform: clientPlatform(),
       }),

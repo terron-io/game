@@ -1,0 +1,110 @@
+{
+  "name": "Italia (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        921,
+        1106
+      ],
+      "name": "Kingdom of the Two Sicilies"
+    },
+    {
+      "coordinates": [
+        336,
+        1266
+      ],
+      "name": "Beylik of Tunis",
+      "flag": "tn"
+    },
+    {
+      "coordinates": [
+        696,
+        655
+      ],
+      "name": "Papal States",
+      "flag": "va"
+    },
+    {
+      "coordinates": [
+        565,
+        606
+      ],
+      "name": "Tuscany"
+    },
+    {
+      "coordinates": [
+        544,
+        228
+      ],
+      "name": "Venice",
+      "flag": "venice"
+    },
+    {
+      "coordinates": [
+        442,
+        442
+      ],
+      "name": "Modena"
+    },
+    {
+      "coordinates": [
+        384,
+        295
+      ],
+      "name": "Parma"
+    },
+    {
+      "coordinates": [
+        368,
+        89
+      ],
+      "name": "Switzerland",
+      "flag": "ch"
+    },
+    {
+      "coordinates": [
+        271,
+        864
+      ],
+      "name": "Kingdom of Sardinia"
+    },
+    {
+      "coordinates": [
+        100,
+        294
+      ],
+      "name": "France",
+      "flag": "fr"
+    },
+    {
+      "coordinates": [
+        661,
+        62
+      ],
+      "name": "Austrian Empire",
+      "flag": "Habsburg Austria"
+    },
+    {
+      "coordinates": [
+        1053,
+        390
+      ],
+      "name": "Ottoman Empire"
+    }
+  ],
+  "map": {
+    "width": 1220,
+    "height": 1420,
+    "num_land_tiles": 787793
+  },
+  "map4x": {
+    "width": 610,
+    "height": 710,
+    "num_land_tiles": 194498
+  },
+  "map16x": {
+    "width": 305,
+    "height": 355,
+    "num_land_tiles": 47619
+  }
+}

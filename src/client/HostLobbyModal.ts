@@ -36,6 +36,7 @@ import "./components/ToggleInputCard";
 import { modalHeader } from "./components/ui/ModalHeader";
 import { getLocalStartCosmetics } from "./Cosmetics";
 import { crazyGamesSDK } from "./CrazyGamesSDK";
+import { gameOrigin } from "./GameHost";
 import { reportHealth } from "./Health";
 import type { LobbyChatPanel } from "./LobbyChatPanel";
 import {
@@ -158,6 +159,11 @@ export class HostLobbyModal extends BaseModal {
     }
     if (!this.sentInitialConfig) {
       this.sentInitialConfig = true;
+      // terron 01.10 (Smart: «выбрал невозможную — сервер получил лёгкую»):
+      // отпечаток дедупа сбрасываем. Пуш ДО входа в лобби (пресет спидрана, id
+      // лобби уже есть, сокета ещё нет) уходит в никуда, но запоминается — и
+      // первый настоящий пуш отсекался как «тот же конфиг подряд».
+      this.lastPutConfigJson = "";
       void this.putGameConfig();
     }
     this.lobbyCreatorClientID = lobby.lobbyCreatorClientID ?? "";
@@ -1163,7 +1169,9 @@ export class HostLobbyModal extends BaseModal {
     // lobby_info — если лобби уже создано, оно могло получить старые значения.
     // Дописываем конфиг ПОСЛЕ того, как нации стали верными (последняя запись
     // побеждает). Если лобби ещё нет — его создадут позже и запушат уже это.
-    if (this.lobbyId) void this.putGameConfig();
+    // Только в лобби, куда уже вошли: до первого lobby_info пуш уходит в
+    // никуда, а конфиг и так уедет первым пушем (handleLobbyInfo).
+    if (this.lobbyId && this.sentInitialConfig) void this.putGameConfig();
     // Метку в адрес ставим ЗДЕСЬ, а не в onOpen: BaseModal.open() уже после
     // onOpen зовёт modalRouter.syncOpened → pushPath(pathFor(...)), а тот
     // собирает путь без query и стёр бы метку. Мы за await'ом — значит после
@@ -1225,6 +1233,21 @@ export class HostLobbyModal extends BaseModal {
   // «Старт» в никуда — lobbyId был пуст).
   private initOnlineLobby(args?: Record<string, unknown>): void {
     this.startLobbyUpdates();
+    // terron 26.09: возврат хоста в СВОЁ лобби после F5 (JoinLobbyModal
+    // .maybeHandOffToHost). Лобби уже есть и соединение уже открыто окном входа:
+    // не создаём новое и не шлём join-lobby. Конфиг хоста уедет на первом
+    // lobby_info, как при создании (sentInitialConfig).
+    if (typeof args?.resumeLobbyId === "string" && args.resumeLobbyId) {
+      this.lobbyId = args.resumeLobbyId;
+      this.sentInitialConfig = false;
+      if (this.modalEl) {
+        this.modalEl.onClose = () => {
+          this.close();
+        };
+      }
+      this.loadNationCount();
+      return;
+    }
     this.lobbyId = generateID();
     this.sentInitialConfig = false; // новое лобби → снова пушим конфиг на первом lobby_info
     // Note: clientID will be assigned by server when we join the lobby
@@ -1307,8 +1330,10 @@ export class HostLobbyModal extends BaseModal {
             );
           }
         });
-        // Clear clipboard so the host doesn't accidentally share a dead link
-        void navigator.clipboard.writeText("").catch(() => {});
+        // ⚠️ Раньше тут стояло `clipboard.writeText("")` («чтобы хост не
+        // поделился мёртвой ссылкой»). Это СТИРАЛО игроку буфер обмена, а на
+        // Android ещё и показывало системный тост про доступ к буферу — репорт
+        // 06.09 «нахрена игра лезет в буфер телефона». Чужой буфер не наш.
       });
     if (this.modalEl) {
       this.modalEl.onClose = () => {
@@ -1900,72 +1925,123 @@ export class HostLobbyModal extends BaseModal {
     this.putGameConfig();
   }
 
-  private async putGameConfig() {
+  /** terron 04.09: КОАЛЕСЦЕР КОНФИГА.
+   *
+   *  Лог прода за сутки: «Lobby creator updated game config» по 20+ раз в
+   *  секунду с одного хоста, минутами; сервер отбрасывал 4243 интента у 77
+   *  хостов по лимиту 10/с — и вместе с ними, скорее всего, их же
+   *  `start_game`/`kick` («жму старт — ничего»). Источник цикла по коду не
+   *  найден (двадцать вызовов putGameConfig из обработчиков + первый
+   *  lobby_info), поэтому лечим класс: все вызовы за 120 мс сливаются в один,
+   *  одинаковый конфиг подряд не шлётся, а шторм (>20 вызовов за секунду)
+   *  уезжает датчиком со СТЕКОМ первого вызова — по нему найдём виновника.
+   *  Старт лобби делает flushGameConfig() — на сервер уедет ровно то, что
+   *  хост видит на экране. */
+  private configFlushTimer: number | null = null;
+  private configWindowStart = 0;
+  private configCallsInWindow = 0;
+  private configStormReported = false;
+  private lastPutConfigJson = "";
+  private putGameConfig(): void {
+    const now = Date.now();
+    if (now - this.configWindowStart > 1000) {
+      this.configWindowStart = now;
+      this.configCallsInWindow = 0;
+    }
+    this.configCallsInWindow++;
+    if (this.configCallsInWindow > 20 && !this.configStormReported) {
+      this.configStormReported = true;
+      const stack = (new Error().stack ?? "")
+        .split("\n")
+        .slice(2, 7)
+        .map((l) => l.trim())
+        .join(" | ")
+        .slice(0, 400);
+      reportHealth("config_update_storm", `${this.configCallsInWindow}/s`, {
+        lobbyId: this.lobbyId || "",
+        mode: this.lobbyMode,
+        stack,
+      });
+    }
+    if (this.configFlushTimer !== null) return;
+    this.configFlushTimer = window.setTimeout(() => {
+      this.configFlushTimer = null;
+      void this.sendGameConfigNow();
+    }, 120);
+  }
+  /** Отправить накопленный конфиг сейчас (перед стартом лобби). */
+  private async flushGameConfig(): Promise<void> {
+    if (this.configFlushTimer !== null) {
+      window.clearTimeout(this.configFlushTimer);
+      this.configFlushTimer = null;
+    }
+    await this.sendGameConfigNow();
+  }
+
+  private async sendGameConfigNow() {
     this.saveLobbySettings(); // настройки тянутся в следующее создание лобби
     const spawnImmunityTicks = this.spawnImmunityDurationMinutes
       ? this.spawnImmunityDurationMinutes * 60 * 10
       : 0;
     const url = await this.constructUrl();
     this.updateLobbyHistory(url);
+    const config = {
+      gameMap: this.selectedMap,
+      gameMapSize: this.compactMap ? GameMapSize.Compact : GameMapSize.Normal,
+      difficulty: this.selectedDifficulty,
+      bots: this.bots,
+      infiniteGold: this.infiniteGold,
+      donateGold: this.donateGold,
+      infiniteTroops: this.infiniteTroops,
+      donateTroops: this.donateTroops,
+      instantBuild: this.instantBuild,
+      randomSpawn: this.randomSpawn,
+      gameMode: this.gameMode,
+      disabledUnits: this.disabledUnits,
+      spawnImmunityDuration: this.spawnImmunity ? spawnImmunityTicks : null,
+      playerTeams: this.teamCount,
+      nations: sliderToNationsConfig(this.nations, this.defaultNationCount),
+      maxTimerValue: this.maxTimer === true ? this.maxTimerValue : null,
+      goldMultiplier:
+        this.goldMultiplier === true ? this.goldMultiplierValue : null,
+      startingGold:
+        this.startingGold === true && this.startingGoldValue !== undefined
+          ? Math.round(this.startingGoldValue * 1_000_000)
+          : null,
+      disableAlliances: this.disableAlliances || null,
+      waterNukes: this.waterNukes ? true : null,
+      // fogOfWar в схеме .optional() (не nullable) — null не слать;
+      // false шлём ЯВНО, иначе выключение тогла не доедет до сервера
+      // (updateGameConfig копирует только !== undefined).
+      fogOfWar: this.fogOfWar,
+      // terron: ДЕВ-ПЕСОЧНИЦА ЗАМКОВ — по той же причине шлём ЯВНО
+      // (false тоже), иначе снятая галочка не доедет. TZ-ult-unlocks.md
+      devUnlockUlts: this.devUnlockUlts,
+      hostCheats: this.hostCheatsEnabled
+        ? {
+            infiniteGold: this.hostCheatInfiniteGold || undefined,
+            infiniteTroops: this.hostCheatInfiniteTroops || undefined,
+            goldMultiplier:
+              this.hostCheatGoldMultiplier === true
+                ? this.hostCheatGoldMultiplierValue
+                : null,
+            startingGold:
+              this.hostCheatStartingGold === true &&
+              this.hostCheatStartingGoldValue !== undefined
+                ? Math.round(this.hostCheatStartingGoldValue * 1_000_000)
+                : null,
+          }
+        : undefined,
+    } satisfies Partial<GameConfig>;
+    // Одинаковый конфиг подряд — не шлём (см. комментарий у putGameConfig).
+    // Ключ дедупа включает id лобби: новое лобби на сервере рождается с
+    // дефолтами, и тот же конфиг ему ОБЯЗАН уехать заново.
+    const json = JSON.stringify([this.lobbyId, config]);
+    if (json === this.lastPutConfigJson) return;
+    this.lastPutConfigJson = json;
     this.dispatchEvent(
       new CustomEvent("update-game-config", {
-        detail: {
-          config: {
-            gameMap: this.selectedMap,
-            gameMapSize: this.compactMap
-              ? GameMapSize.Compact
-              : GameMapSize.Normal,
-            difficulty: this.selectedDifficulty,
-            bots: this.bots,
-            infiniteGold: this.infiniteGold,
-            donateGold: this.donateGold,
-            infiniteTroops: this.infiniteTroops,
-            donateTroops: this.donateTroops,
-            instantBuild: this.instantBuild,
-            randomSpawn: this.randomSpawn,
-            gameMode: this.gameMode,
-            disabledUnits: this.disabledUnits,
-            spawnImmunityDuration: this.spawnImmunity
-              ? spawnImmunityTicks
-              : null,
-            playerTeams: this.teamCount,
-            nations: sliderToNationsConfig(
-              this.nations,
-              this.defaultNationCount,
-            ),
-            maxTimerValue: this.maxTimer === true ? this.maxTimerValue : null,
-            goldMultiplier:
-              this.goldMultiplier === true ? this.goldMultiplierValue : null,
-            startingGold:
-              this.startingGold === true && this.startingGoldValue !== undefined
-                ? Math.round(this.startingGoldValue * 1_000_000)
-                : null,
-            disableAlliances: this.disableAlliances || null,
-            waterNukes: this.waterNukes ? true : null,
-            // fogOfWar в схеме .optional() (не nullable) — null не слать;
-            // false шлём ЯВНО, иначе выключение тогла не доедет до сервера
-            // (updateGameConfig копирует только !== undefined).
-            fogOfWar: this.fogOfWar,
-            // terron: ДЕВ-ПЕСОЧНИЦА ЗАМКОВ — по той же причине шлём ЯВНО
-            // (false тоже), иначе снятая галочка не доедет. TZ-ult-unlocks.md
-            devUnlockUlts: this.devUnlockUlts,
-            hostCheats: this.hostCheatsEnabled
-              ? {
-                  infiniteGold: this.hostCheatInfiniteGold || undefined,
-                  infiniteTroops: this.hostCheatInfiniteTroops || undefined,
-                  goldMultiplier:
-                    this.hostCheatGoldMultiplier === true
-                      ? this.hostCheatGoldMultiplierValue
-                      : null,
-                  startingGold:
-                    this.hostCheatStartingGold === true &&
-                    this.hostCheatStartingGoldValue !== undefined
-                      ? Math.round(this.hostCheatStartingGoldValue * 1_000_000)
-                      : null,
-                }
-              : undefined,
-          } satisfies Partial<GameConfig>,
-        },
+        detail: { config },
         bubbles: true,
         composed: true,
       }),
@@ -2122,6 +2198,9 @@ export class HostLobbyModal extends BaseModal {
   // стартует матч; кнопка на время отсчёта превращается в «Отмена» (см.
   // updateStartBar). Отмену/дожатие обрабатывает сервер — здесь только интент.
   private async requestStart() {
+    // terron 04.09: конфиг копится коалесцером — перед стартом доставляем его
+    // сразу, чтобы матч поднялся ровно с теми настройками, что на экране.
+    await this.flushGameConfig();
     // Телеметрия «старт в никуда»: если через 20с после нажатия мы ВСЁ ЕЩЁ
     // сидим в видимом лобби и не в матче — старт молча провалился (пустой
     // lobbyId, краш конфига, оборванный сокет…). Игрок такое не репортит —
@@ -2134,7 +2213,29 @@ export class HostLobbyModal extends BaseModal {
         !document.body.classList.contains("in-game") &&
         (mode === "offline" || this.startCountdownEndsAt !== null);
       if (stuckInLobby) {
-        reportHealth("start_no_game", mode, { lobbyId: this.lobbyId || "" });
+        // ⚠️ terron 01.09 (запрос владельца: «говорят, некоторые настройки не
+        // позволяют начать старт»): раньше сюда ехали только режим и id лобби,
+        // и по такому событию нельзя было сказать РОВНО НИЧЕГО о причине.
+        // Теперь кладём НАСТРОЙКИ ЛОББИ — если старт валит какая-то из них,
+        // это станет видно сравнением удачных и неудачных попыток.
+        reportHealth("start_no_game", mode, {
+          lobbyId: this.lobbyId || "",
+          map: String(this.selectedMap),
+          gameMode: String(this.gameMode),
+          teams: this.teamCount,
+          bots: this.bots,
+          diff: String(this.selectedDifficulty),
+          randomMap: this.useRandomMap,
+          fog: this.fogOfWar,
+          water: this.waterNukes,
+          noAlliances: this.disableAlliances,
+          infGold: this.infiniteGold,
+          infTroops: this.infiniteTroops,
+          instant: this.instantBuild,
+          randomSpawn: this.randomSpawn,
+          // Отсчёт шёл, но матч не поднялся, — или кнопка вообще не сработала.
+          countdownRan: this.startCountdownEndsAt !== null,
+        });
       }
     }, 20_000);
     if (this.lobbyMode === "offline") {
@@ -2273,8 +2374,11 @@ async function createLobby(gameID: string): Promise<GameInfo> {
   // persistentID should never be exposed to other clients
   const token = await getPlayToken();
   try {
+    // ⚠️ Абсолютный хост обязателен: на чужом хостинге (Playgama) относительный
+    // POST уходил в их CDN и получал «405 Method Not Allowed» от S3 — приватное
+    // лобби не создавалось вовсе (репорт владельца 31.08, «лобби не стартует»).
     const response = await fetch(
-      `/${ClientEnv.workerPath(gameID)}/api/create_game/${gameID}`,
+      `${gameOrigin()}/${ClientEnv.workerPath(gameID)}/api/create_game/${gameID}`,
       {
         method: "POST",
         headers: {

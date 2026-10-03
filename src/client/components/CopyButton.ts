@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { UserSettings } from "../../core/game/UserSettings";
 import { crazyGamesSDK } from "../CrazyGamesSDK";
+import { publicSiteOrigin } from "../GameHost";
 import { toast } from "../Toast";
 import { copyToClipboard, translateText } from "../Utils";
 
@@ -68,7 +69,7 @@ export class CopyButton extends LitElement {
   private async buildCopyUrl(): Promise<string> {
     // terron: чистый шарящийся URL /game/ID. Воркер резолвится по lobbyId, а
     // декоративный ?lobby&s=<random> нигде не читается (раньше пугал «s=p2k9z»).
-    return `${window.location.origin}/game/${this.lobbyId}`;
+    return `${publicSiteOrigin()}/game/${this.lobbyId}`;
   }
 
   private async resolveCopyText(): Promise<string | null> {

@@ -62,6 +62,9 @@ export interface FrameData {
   readonly falloutOwnerState: Uint16Array | null;
   readonly falloutOwnerDirtyRowMin: number;
   readonly falloutOwnerDirtyRowMax: number;
+  // terron 27.08: какие ИМЕННО строки грязные (1 = грязная). Диапазон выше
+  // остался как быстрое окно сканирования; заливаются только помеченные.
+  readonly falloutOwnerDirtyRows: Uint8Array | null;
 
   // ── Derived (computed once by producer) ────────────────────────────────
 
@@ -79,6 +82,8 @@ export interface FrameData {
   readonly attackRings: AttackRingInput[];
   /** True when structures changed this tick (added/removed/level change). */
   readonly structuresDirty: boolean;
+  // terron 27.08: какие юниты изменились за тик (null = «не знаю, пересобери всё»).
+  readonly changedUnitIds: readonly number[] | null;
 
   // ── Upload semantics ──────────────────────────────────────────────────
 

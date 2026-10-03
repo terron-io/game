@@ -78,12 +78,20 @@ export async function fetchFriendRequests(): Promise<FriendRequests | null> {
   }
 }
 
+// terron 22.09: список друзей поменялся (приняли заявку / удалили) — панель
+// чатов перечитывает свой список по этому событию, иначе новый друг в ней не
+// появляется до перезагрузки (репорт владельца).
+function friendsChanged(): void {
+  window.dispatchEvent(new CustomEvent("terron-friends-changed"));
+}
+
 export async function acceptFriendRequest(id: string): Promise<boolean> {
   try {
     const res = await friendFetch(
       `/me/friends/requests/${encodeURIComponent(id)}/accept`,
       { method: "POST" },
     );
+    if (res.ok) friendsChanged();
     return res.ok;
   } catch {
     return false;
@@ -120,6 +128,7 @@ export async function removeFriend(id: string): Promise<boolean> {
     const res = await friendFetch(`/me/friends/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
+    if (res.ok) friendsChanged();
     return res.ok;
   } catch {
     return false;

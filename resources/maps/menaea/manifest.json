@@ -1,0 +1,300 @@
+{
+  "name": "MENA (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        310,
+        84
+      ],
+      "name": "Spain",
+      "flag": "es"
+    },
+    {
+      "coordinates": [
+        211,
+        139
+      ],
+      "name": "Portugal",
+      "flag": "pt"
+    },
+    {
+      "coordinates": [
+        180,
+        370
+      ],
+      "name": "Morocco",
+      "flag": "ma"
+    },
+    {
+      "coordinates": [
+        474,
+        313
+      ],
+      "name": "Algeria",
+      "flag": "dz"
+    },
+    {
+      "coordinates": [
+        631,
+        236
+      ],
+      "name": "Tunisia",
+      "flag": "tn"
+    },
+    {
+      "coordinates": [
+        748,
+        375
+      ],
+      "name": "Libyan Arab Jamahiriya",
+      "flag": "ly"
+    },
+    {
+      "coordinates": [
+        1128,
+        416
+      ],
+      "name": "Egypt",
+      "flag": "eg"
+    },
+    {
+      "coordinates": [
+        1263,
+        363
+      ],
+      "name": "Israel",
+      "flag": "il"
+    },
+    {
+      "coordinates": [
+        1236,
+        397
+      ],
+      "name": "Palestine",
+      "flag": "ps"
+    },
+    {
+      "coordinates": [
+        1274,
+        311
+      ],
+      "name": "Lebanon",
+      "flag": "lb"
+    },
+    {
+      "coordinates": [
+        1117,
+        844
+      ],
+      "name": "Sudan",
+      "flag": "sd"
+    },
+    {
+      "coordinates": [
+        1303,
+        232
+      ],
+      "name": "Syrian Arab Republic",
+      "flag": "sy"
+    },
+    {
+      "coordinates": [
+        1509,
+        321
+      ],
+      "name": "Iraq",
+      "flag": "iq"
+    },
+    {
+      "coordinates": [
+        1515,
+        580
+      ],
+      "name": "Saudi Arabia",
+      "flag": "sa"
+    },
+    {
+      "coordinates": [
+        1531,
+        990
+      ],
+      "name": "Yemen",
+      "flag": "ye"
+    },
+    {
+      "coordinates": [
+        1874,
+        719
+      ],
+      "name": "Oman",
+      "flag": "om"
+    },
+    {
+      "coordinates": [
+        1772,
+        628
+      ],
+      "name": "United Arab Emirates",
+      "flag": "ae"
+    },
+    {
+      "coordinates": [
+        1682,
+        585
+      ],
+      "name": "Qatar",
+      "flag": "qa"
+    },
+    {
+      "coordinates": [
+        1681,
+        354
+      ],
+      "name": "Islamic Republic of Iran",
+      "flag": "ir"
+    },
+    {
+      "coordinates": [
+        1148,
+        131
+      ],
+      "name": "Turkiye",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        723,
+        40
+      ],
+      "name": "Italy",
+      "flag": "it"
+    },
+    {
+      "coordinates": [
+        967,
+        150
+      ],
+      "name": "Greece",
+      "flag": "gr"
+    },
+    {
+      "coordinates": [
+        1041,
+        20
+      ],
+      "name": "Bulgaria",
+      "flag": "bg"
+    },
+    {
+      "coordinates": [
+        1802,
+        18
+      ],
+      "name": "Uzbekistan",
+      "flag": "uz"
+    },
+    {
+      "coordinates": [
+        1293,
+        364
+      ],
+      "name": "Jordan",
+      "flag": "jo"
+    },
+    {
+      "coordinates": [
+        934,
+        802
+      ],
+      "name": "Chad",
+      "flag": "td"
+    },
+    {
+      "coordinates": [
+        686,
+        812
+      ],
+      "name": "Niger",
+      "flag": "ne"
+    },
+    {
+      "coordinates": [
+        385,
+        602
+      ],
+      "name": "Mali",
+      "flag": "ml"
+    },
+    {
+      "coordinates": [
+        210,
+        78
+      ],
+      "name": "Mauritania",
+      "flag": "mr"
+    },
+    {
+      "coordinates": [
+        1384,
+        923
+      ],
+      "name": "Eritrea",
+      "flag": "er"
+    },
+    {
+      "coordinates": [
+        1575,
+        444
+      ],
+      "name": "Kuwait",
+      "flag": "kw"
+    },
+    {
+      "coordinates": [
+        1421,
+        31
+      ],
+      "name": "Georgia",
+      "flag": "ge"
+    },
+    {
+      "coordinates": [
+        1574,
+        120
+      ],
+      "name": "Azerbaijan",
+      "flag": "az"
+    },
+    {
+      "coordinates": [
+        1211,
+        261
+      ],
+      "name": "Cyprus",
+      "flag": "cy"
+    },
+    {
+      "coordinates": [
+        1676,
+        19
+      ],
+      "name": "Kazakhstan",
+      "flag": "kz"
+    }
+  ],
+  "map": {
+    "width": 1952,
+    "height": 1084,
+    "num_land_tiles": 1619099
+  },
+  "map4x": {
+    "width": 976,
+    "height": 542,
+    "num_land_tiles": 401846
+  },
+  "map16x": {
+    "width": 488,
+    "height": 271,
+    "num_land_tiles": 99305
+  }
+}

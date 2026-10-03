@@ -13,7 +13,7 @@ import { noteGlContextLost, releaseGlContext } from "./GlContext";
 import { clearShaderCache } from "./utils/GlUtils";
 // terron: телеметрия/этика потери GL-контекста (белый экран на телефонах)
 import { reportIos } from "../../IosReport";
-import { confirmDialog, toast } from "../../Toast";
+import { toast } from "../../Toast";
 import { L } from "../../Utils";
 import type {
   AttackRingInput,
@@ -31,15 +31,127 @@ import type {
   TilePair,
   UnitState,
 } from "../types";
+import { contextLossDecision } from "./ContextLossPolicy";
 import type {
   GameViewEventMap,
   GameViewEventType,
   RadialMenuItem,
 } from "./Events";
+import { FRESH_CANVAS_AFTER_MS, swapInFreshCanvas } from "./FreshCanvas";
 import type { SpawnCenter } from "./passes/SpawnOverlayPass";
+import type { RendererIntegritySnapshot } from "./passes/TerritoryPass";
 import type { AttackTroopLabel } from "./passes/WorldTextPass";
 import { GPURenderer } from "./Renderer";
 import type { RenderSettings } from "./RenderSettings";
+import type { VisualStyle } from "./VisualStyles";
+
+// terron 05.09: счётчики потерь контекста за ЖИЗНЬ СТРАНИЦЫ (не за матч) —
+// решение «пересобирать или сдаться» принимает ContextLossPolicy.
+let contextLossNo = 0;
+let lastContextLossAt = 0;
+const CONTEXT_LOSS_SERIES_MS = 10 * 60_000;
+
+// terron 25.09: телеметрия восстановления. Неделя до правки: у 200 из 378
+// первых потерь вторая пришла меньше чем через 10 с — пересборка шла через
+// 2.5 с, пока видеокарта ещё не оправилась. Чтобы решить, сколько ждать, нужно
+// знать, КАК и ЗА СКОЛЬКО графика возвращается: сама (restored), на новом
+// холсте (fresh) или никак. `gl_restore` несёт путь и миллисекунды от потери.
+let lastLossPerfMs = 0;
+
+/** Потерь графики на ЭТОМ устройстве за всё время (переживает перезагрузки). */
+const DEVICE_LOSSES_KEY = "terron_gl_losses";
+function bumpDeviceLosses(): number {
+  try {
+    const n = (Number(localStorage.getItem(DEVICE_LOSSES_KEY)) || 0) + 1;
+    localStorage.setItem(DEVICE_LOSSES_KEY, String(n));
+    return n;
+  } catch {
+    return -1;
+  }
+}
+function deviceLosses(): number {
+  try {
+    return Number(localStorage.getItem(DEVICE_LOSSES_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Браузер и мажорная версия: старый драйвер и конкретная версия Chrome — разные классы. */
+export function browserTag(ua: string): string {
+  const m =
+    /YaBrowser\/(\d+)/.exec(ua) ??
+    /Edg\/(\d+)/.exec(ua) ??
+    /OPR\/(\d+)/.exec(ua) ??
+    /Firefox\/(\d+)/.exec(ua) ??
+    /Chrome\/(\d+)/.exec(ua) ??
+    /Version\/(\d+).*Safari/.exec(ua);
+  if (!m) return "other";
+  const name = /YaBrowser/.test(m[0])
+    ? "yandex"
+    : /Edg/.test(m[0])
+      ? "edge"
+      : /OPR/.test(m[0])
+        ? "opera"
+        : /Firefox/.test(m[0])
+          ? "firefox"
+          : /Chrome/.test(m[0])
+            ? "chrome"
+            : "safari";
+  return `${name}${m[1]}`;
+}
+
+function reportRestore(via: "restored" | "fresh" | "failed" | "giveup"): void {
+  const ms = lastLossPerfMs
+    ? Math.round(performance.now() - lastLossPerfMs)
+    : null;
+  void import("../../Health").then(({ reportHealth }) =>
+    reportHealth("gl_restore", `${via} ${ms ?? "?"}мс`, {
+      via,
+      ms,
+      lossNo: contextLossNo,
+    }),
+  );
+}
+
+/**
+ * terron 25.09: окно сбоя с шагами решения (GraphicsHelpDialog) вместо голого
+ * «Перезагрузить?». Выбор игрока — в телеметрию; «лёгкая графика» включает ту
+ * же настройку, что в шестерёнке, до перезагрузки.
+ */
+function offerGraphicsHelp(
+  reason: "giveup" | "stuck" | "restore_failed",
+): void {
+  void (async () => {
+    const [{ showGraphicsHelp }, health, { UserSettings }] = await Promise.all([
+      import("../../GraphicsHelpDialog"),
+      import("../../Health"),
+      import("../../../core/game/UserSettings"),
+    ]);
+    const settings = new UserSettings();
+    const info = {
+      gpu: health.currentGpuName(),
+      losses: Math.max(contextLossNo, 1),
+      lightOn: settings.lightGraphics(),
+    };
+    const choice = await showGraphicsHelp(reason, info, (c) =>
+      health.reportHealth("gl_help_choice", `${reason} ${c}`, {
+        reason,
+        choice: c,
+        lightOn: info.lightOn,
+        devLosses: deviceLosses(),
+      }),
+    );
+    if (choice === "later") return;
+    if (choice === "light" && !settings.lightGraphics()) {
+      settings.toggleLightGraphics();
+    }
+    // Внутри площадки перезагружать нельзя (переинициализирует SDK):
+    // уходим в меню — новый матч создаст новый GL-контекст.
+    const { softHome } = await import("../../SoftNavigate");
+    if (!softHome("/")) window.location.reload();
+  })();
+}
 
 export class GameView {
   private renderer: GPURenderer | null = null;
@@ -49,6 +161,10 @@ export class GameView {
   private cachedIcons: { key: string; img: CanvasImageSource }[] = [];
 
   // Stored for context recreation
+  // terron (визуальные стили): стиль переживает пересборку рендера — после
+  // потери GL-контекста карта обязана вернуться в ТОМ ЖЕ стиле, а не скакнуть
+  // в классику посреди матча.
+  private cachedVisualStyle: VisualStyle | null = null;
   private cachedOnFrame: ((ms: number) => void) | null = null;
   private cachedAfterRender: ((canvas: HTMLCanvasElement) => void) | null =
     null;
@@ -62,6 +178,7 @@ export class GameView {
     private raf?: typeof requestAnimationFrame,
     private caf?: typeof cancelAnimationFrame,
   ) {
+    this.originalCanvas = canvas;
     this.initRenderer();
 
     this.resizeObs = new ResizeObserver((entries) => {
@@ -70,14 +187,24 @@ export class GameView {
         if (width > 0 && height > 0) this.renderer?.resize(width, height);
       }
     });
-    this.resizeObs.observe(canvas);
+    this.attachCanvas(canvas);
+  }
 
-    canvas.addEventListener("webglcontextlost", this.onContextLost, false);
-    canvas.addEventListener(
-      "webglcontextrestored",
-      this.onContextRestored,
-      false,
-    );
+  /** Холст, на котором рисует рендер сейчас (после FreshCanvas — новый). */
+  get canvasElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
+  private attachCanvas(c: HTMLCanvasElement): void {
+    this.resizeObs?.observe(c);
+    c.addEventListener("webglcontextlost", this.onContextLost, false);
+    c.addEventListener("webglcontextrestored", this.onContextRestored, false);
+  }
+
+  private detachCanvas(c: HTMLCanvasElement): void {
+    this.resizeObs?.unobserve(c);
+    c.removeEventListener("webglcontextlost", this.onContextLost);
+    c.removeEventListener("webglcontextrestored", this.onContextRestored);
   }
 
   private initRenderer = () => {
@@ -109,6 +236,9 @@ export class GameView {
     }
 
     // Restore cached state
+    if (this.cachedVisualStyle !== null) {
+      this.renderer.setVisualStyle(this.cachedVisualStyle);
+    }
     if (this.cachedIcons.length > 0) {
       this.renderer.registerRadialMenuIcons(this.cachedIcons);
     }
@@ -125,6 +255,12 @@ export class GameView {
   // broken» 12.07). Теперь: телеметрия в /admin/ios + тост + если restore не
   // пришёл за 10с — предлагаем перезагрузку (реджойн в матч работает).
   private ctxRestoreTimer: number | null = null;
+  // terron 13.09: браузер не вернул графику за FRESH_CANVAS_AFTER_MS — строим
+  // рендер на новом холсте (FreshCanvas). Исходный холст удаляет раннер, свой
+  // новый — мы в dispose().
+  private freshTimer: number | null = null;
+  private readonly originalCanvas: HTMLCanvasElement;
+  private disposed = false;
 
   private onContextLost = (e: Event) => {
     e.preventDefault();
@@ -132,6 +268,35 @@ export class GameView {
     // отказом «WebGL2 not supported» = у браузера умер GPU-процесс, а не у нас
     // кончились контексты (10.08).
     noteGlContextLost();
+    // terron 05.09: ПОЛИТИКА ПОТЕРЬ (ContextLossPolicy). Первая потеря —
+    // восстанавливаемся в щадящем режиме; вторая — GL больше не трогаем и
+    // сразу предлагаем перезагрузку: третий «виновный» сброс = Chrome
+    // блокирует WebGL сайту до перезапуска браузера (223 сессии/нед).
+    // Потери старше 10 минут не считаем серией: блок Chrome — про сбросы
+    // подряд, а на площадках страница живёт без перезагрузки часами.
+    if (
+      lastContextLossAt !== 0 &&
+      performance.now() - lastContextLossAt > CONTEXT_LOSS_SERIES_MS
+    ) {
+      contextLossNo = 0;
+    }
+    contextLossNo++;
+    const sinceLastLossS =
+      lastContextLossAt === 0
+        ? null
+        : Math.round((performance.now() - lastContextLossAt) / 1000);
+    lastContextLossAt = performance.now();
+    lastLossPerfMs = lastContextLossAt;
+    const devLosses = bumpDeviceLosses();
+    const decision = contextLossDecision(contextLossNo);
+    GPURenderer.safeMode = true;
+    // Снимок состояния рендера — ДО dispose, иначе снимать не с чего.
+    let lossSnap: Record<string, unknown> = {};
+    try {
+      lossSnap = this.renderer?.lossSnapshot() ?? {};
+    } catch {
+      /* контекст уже мёртв — снимок не обязателен */
+    }
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer = null;
@@ -148,7 +313,17 @@ export class GameView {
     void import("../../Health").then(({ reportHealth, matchContext }) =>
       reportHealth("webgl_context_lost", "", {
         ...matchContext(),
+        ...lossSnap,
         sinceLoadS: Math.round(performance.now() / 1000),
+        lossNo: contextLossNo,
+        sinceLastLossS,
+        decision,
+        // terron 25.09: хронический ли это компьютер, помогла ли лёгкая
+        // графика, была ли вкладка скрыта и какой браузер (GraphicsHelpDialog).
+        devLosses,
+        lightOn: GPURenderer.lightGraphicsChosen(),
+        hidden: document.hidden,
+        br: browserTag(navigator.userAgent),
       }),
     );
     // terron ПЕРФ: устройство под давлением памяти → на следующей инициализации
@@ -168,28 +343,19 @@ export class GameView {
       ),
       "error",
     );
+    // terron 13.09: первая потеря — ждём браузер недолго, дальше новый холст.
+    if (this.freshTimer !== null) clearTimeout(this.freshTimer);
+    this.freshTimer =
+      decision === "rebuild-safe"
+        ? window.setTimeout(this.recoverOnFreshCanvas, FRESH_CANVAS_AFTER_MS)
+        : null;
     if (this.ctxRestoreTimer !== null) clearTimeout(this.ctxRestoreTimer);
     this.ctxRestoreTimer = window.setTimeout(() => {
       this.ctxRestoreTimer = null;
       if (this.renderer !== null) return; // восстановились сами
       reportIos("webgl_context_stuck", {});
-      void (async () => {
-        const ok = await confirmDialog(
-          L(
-            "Графика не восстановилась. Перезагрузить страницу? (Матч продолжится — реконнект вернёт вас в игру.)",
-            "Graphics did not recover. Reload the page? (The match continues — reconnect will bring you back.)",
-          ),
-          L("Перезагрузить", "Reload"),
-          L("Позже", "Later"),
-        );
-        // Внутри площадки перезагружать нельзя (переинициализирует SDK):
-        // уходим в меню — новый матч создаст новый GL-контекст.
-        if (ok) {
-          void import("../../SoftNavigate").then(({ softHome }) => {
-            if (!softHome("/")) window.location.reload();
-          });
-        }
-      })();
+      reportRestore("failed");
+      offerGraphicsHelp("stuck");
     }, 10_000);
   };
 
@@ -206,39 +372,73 @@ export class GameView {
       clearTimeout(this.ctxRestoreTimer);
       this.ctxRestoreTimer = null;
     }
+    if (this.freshTimer !== null) {
+      clearTimeout(this.freshTimer);
+      this.freshTimer = null;
+    }
     // terron 21.07: событие «restored» пришло, но на слабом Intel после сброса
     // D3D-устройства getContext всё равно может вернуть null → initRenderer
     // бросит «WebGL2 not supported». РАНЬШЕ это летело фаталом в модалку ошибки
     // (тупик). Теперь ловим и ведём в тот же мягкий путь, что и при
     // не-пришедшем restore: предложить перезагрузку (матч жив, реконнект вернёт;
     // на перезагрузке флаг terron_gfx_low уже поднят → DPR ×0.5, см. Renderer).
+    if (contextLossDecision(contextLossNo) === "give-up") {
+      // Вторая потеря за страницу: пересборка = почти наверняка третий сброс и
+      // блок WebGL на весь сеанс браузера. Не трогаем GL, зовём перезагрузку.
+      reportIos("webgl_context_giveup", {});
+      void import("../../Health").then(({ reportHealth }) =>
+        reportHealth("webgl_context_giveup", `потерь: ${contextLossNo}`),
+      );
+      reportRestore("giveup");
+      offerGraphicsHelp("giveup");
+      return;
+    }
     try {
       this.initRenderer();
     } catch (e) {
       reportIos("webgl_context_restore_failed", {
         errMsg: String((e as Error)?.message ?? e),
       });
-      void (async () => {
-        const ok = await confirmDialog(
-          L(
-            "Графика не восстановилась. Перезагрузить страницу? (Матч продолжится — реконнект вернёт вас в игру.)",
-            "Graphics did not recover. Reload the page? (The match continues — reconnect will bring you back.)",
-          ),
-          L("Перезагрузить", "Reload"),
-          L("Позже", "Later"),
-        );
-        // Внутри площадки перезагружать нельзя (переинициализирует SDK):
-        // уходим в меню — новый матч создаст новый GL-контекст.
-        if (ok) {
-          void import("../../SoftNavigate").then(({ softHome }) => {
-            if (!softHome("/")) window.location.reload();
-          });
-        }
-      })();
+      reportRestore("failed");
+      offerGraphicsHelp("restore_failed");
       return;
     }
     this.emit("contextrestored", { type: "restored" });
     reportIos("webgl_context_restored", {});
+    reportRestore("restored");
+    toast(L("Графика восстановлена", "Graphics recovered"), "success");
+  };
+
+  /**
+   * terron 13.09: браузер не вернул контекст — пересобираем рендер на НОВОМ
+   * холсте (FreshCanvas). Только после ПЕРВОЙ потери: вторая = GL не трогаем
+   * (ContextLossPolicy), иначе Chrome заблокирует WebGL сайту. Не вышло —
+   * остаётся таймер «графика не восстановилась» с предложением перезагрузки.
+   */
+  private recoverOnFreshCanvas = (): void => {
+    this.freshTimer = null;
+    if (this.disposed || this.renderer !== null) return;
+    if (contextLossDecision(contextLossNo) === "give-up") return;
+    const old = this.canvas;
+    this.detachCanvas(old);
+    const fresh = swapInFreshCanvas(old);
+    this.canvas = fresh;
+    this.attachCanvas(fresh);
+    try {
+      this.initRenderer();
+    } catch (e) {
+      reportIos("webgl_context_fresh_failed", {
+        errMsg: String((e as Error)?.message ?? e),
+      });
+      return;
+    }
+    if (this.ctxRestoreTimer !== null) {
+      clearTimeout(this.ctxRestoreTimer);
+      this.ctxRestoreTimer = null;
+    }
+    this.emit("contextrestored", { type: "restored" });
+    reportIos("webgl_context_fresh", {});
+    reportRestore("fresh");
     toast(L("Графика восстановлена", "Graphics recovered"), "success");
   };
 
@@ -304,6 +504,15 @@ export class GameView {
    */
   getBuildPhases(): Readonly<Record<string, number>> {
     return this.renderer?.getBuildPhases() ?? {};
+  }
+  /** terron 05.09: все лапы сборки пассов (мс) — для замера в браузере. */
+  getBuildLaps(): Readonly<Record<string, number>> {
+    return this.renderer?.buildLaps ?? {};
+  }
+  /** Ограничения щадящего режима/«Лёгкой графики» поверх пересчитанных настроек. */
+  applyGraphicsCaps(): void {
+    if (this.renderer)
+      GPURenderer.applyGraphicsCaps(this.renderer.getSettings());
   }
 
   registerRadialMenuIcons(
@@ -395,11 +604,13 @@ export class GameView {
     falloutOwnerState: Uint16Array,
     dirtyRowMin: number,
     dirtyRowMax: number,
+    dirtyRows: Uint8Array | null,
   ): void {
     this.renderer?.uploadFalloutOwners(
       falloutOwnerState,
       dirtyRowMin,
       dirtyRowMax,
+      dirtyRows,
     );
   }
   /** Upload full tile + trail state without resetting bloom (for live play). */
@@ -467,8 +678,15 @@ export class GameView {
   uploadRailroadState(data: Uint8Array): void {
     this.renderer?.uploadRailroadState(data);
   }
-  updateUnits(units: Map<number, UnitState>, gameTick: number): void {
-    this.renderer?.updateUnits(units, gameTick);
+  markUnitsDirty(): void {
+    this.renderer?.markUnitsDirty();
+  }
+  updateUnits(
+    units: Map<number, UnitState>,
+    gameTick: number,
+    changedIds: readonly number[] | null = null,
+  ): void {
+    this.renderer?.updateUnits(units, gameTick, changedIds);
   }
   updateNames(
     names: Map<string, NameEntry>,
@@ -505,6 +723,10 @@ export class GameView {
   /** Refresh terrain texels whose underlying terrain byte changed (water nukes). */
   applyTerrainDelta(refs: readonly number[], terrainBytes: Uint8Array): void {
     this.renderer?.applyTerrainDelta(refs, terrainBytes);
+  }
+  /** Вся карта рельефа одним вызовом — только для перезаливки после потери контекста. */
+  uploadFullTerrain(terrainBytes: Uint8Array): void {
+    this.renderer?.uploadFullTerrain(terrainBytes);
   }
   updateAttackRings(rings: AttackRingInput[]): void {
     this.renderer?.updateAttackRings(rings);
@@ -609,6 +831,20 @@ export class GameView {
     this.renderer?.setHighlightOwner(ownerID);
   }
 
+  /** terron 12.09: датчик целостности карты — см. client/TerritoryIntegrity.ts. */
+  territoryIntegrity(): RendererIntegritySnapshot | null {
+    return this.renderer?.territoryIntegrity() ?? null;
+  }
+
+  territoryReadback(
+    x0: number,
+    y0: number,
+    w: number,
+    h: number,
+  ): Uint16Array | null {
+    return this.renderer?.territoryReadback(x0, y0, w, h) ?? null;
+  }
+
   // terron: свой игрок — его ник не отсекается по зуму.
   setMyOwner(ownerID: number): void {
     this.renderer?.setMyOwner(ownerID);
@@ -630,8 +866,18 @@ export class GameView {
   ): void {
     this.renderer?.setStructureHoverCircle(c);
   }
+  // terron: визуальный стиль карты (палитра рельефа + пост-обработка земли).
+  setVisualStyle(style: VisualStyle): void {
+    this.cachedVisualStyle = style;
+    this.renderer?.setVisualStyle(style);
+  }
   getSettings(): RenderSettings {
     return this.renderer?.getSettings() ?? ({} as RenderSettings);
+  }
+  /** terron 14.09: рендер жив. Между потерей контекста и пересборкой его нет,
+   *  а getSettings() отдаёт пустой объект — писать в него настройки нельзя. */
+  get rendererReady(): boolean {
+    return this.renderer !== null;
   }
   get fps(): number {
     return this.renderer?.fps ?? 0;
@@ -648,6 +894,17 @@ export class GameView {
   // ---- Lifecycle ----
 
   dispose(): void {
+    // terron 05.09 (ревью): таймер «графика не восстановилась» не должен
+    // пережить матч — иначе диалог перезагрузки всплывал уже в меню.
+    if (this.ctxRestoreTimer !== null) {
+      clearTimeout(this.ctxRestoreTimer);
+      this.ctxRestoreTimer = null;
+    }
+    if (this.freshTimer !== null) {
+      clearTimeout(this.freshTimer);
+      this.freshTimer = null;
+    }
+    this.disposed = true;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     this.listeners.clear();
@@ -667,5 +924,8 @@ export class GameView {
     releaseGlContext(
       this.canvas.getContext("webgl2") as WebGL2RenderingContext | null,
     );
+    // Свой свежий холст (FreshCanvas) убираем сами: раннер знает только
+    // исходный и удалит его, как раньше.
+    if (this.canvas !== this.originalCanvas) this.canvas.remove();
   }
 }

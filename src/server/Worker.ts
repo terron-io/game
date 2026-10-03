@@ -326,7 +326,9 @@ export async function startWorker() {
       if (!authHeader?.startsWith("Bearer ")) {
         return res.status(401).json({ error: "Authorization required" });
       }
-      const auth = await verifyClientToken(authHeader.substring("Bearer ".length));
+      const auth = await verifyClientToken(
+        authHeader.substring("Bearer ".length),
+      );
       if (auth.type !== "success") {
         return res.status(401).json({ error: "Invalid token" });
       }
@@ -583,6 +585,9 @@ export async function startWorker() {
           // terron: устройство берём из UA апгрейда, а не из join-сообщения.
           deviceFromUserAgent(req.headers["user-agent"]),
         );
+
+        const ua = req.headers["user-agent"];
+        if (typeof ua === "string") client.userAgent = ua.slice(0, 300);
 
         const joinResult = gm.joinClient(client, clientMsg.gameID);
 

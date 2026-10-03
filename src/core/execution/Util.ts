@@ -172,6 +172,52 @@ export function getSpawnTiles(
   return spawnTiles;
 }
 
+/**
+ * terron 04.09 ПЕРФ: минимальная манхэттен-дистанция от тайла до НАБОРА тайлов,
+ * координаты набора посчитаны ОДИН раз в типизированные массивы. Раньше ИИ
+ * наций звал closestTile(borderTiles, кандидат) на каждый из десятков
+ * кандидатов места постройки — и каждый раз шёл по всей границе (тысячи тайлов)
+ * через gm.manhattanDist → gm.x/gm.y. Результат тот же (те же целые), порядок
+ * набора роли не играет — наружу идёт только число.
+ * `stopBelow`: если нужна лишь проверка «минимум < порога», обход прерывается на
+ * первом расстоянии ниже порога (возвращается оно — оно тоже < порога), а если
+ * такого нет, возвращается точный минимум.
+ */
+export class TileDistanceIndex {
+  private readonly xs: Int32Array;
+  private readonly ys: Int32Array;
+  readonly size: number;
+
+  constructor(gm: GameMap, refs: Iterable<TileRef>) {
+    const arr = Array.isArray(refs) ? refs : Array.from(refs);
+    this.size = arr.length;
+    this.xs = new Int32Array(arr.length);
+    this.ys = new Int32Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      this.xs[i] = gm.x(arr[i]);
+      this.ys[i] = gm.y(arr[i]);
+    }
+  }
+
+  minDist(gm: GameMap, tile: TileRef, stopBelow = -1): number {
+    const tx = gm.x(tile);
+    const ty = gm.y(tile);
+    const xs = this.xs;
+    const ys = this.ys;
+    let min = Infinity;
+    for (let i = 0; i < xs.length; i++) {
+      const dx = xs[i] - tx;
+      const dy = ys[i] - ty;
+      const d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+      if (d < min) {
+        min = d;
+        if (min < stopBelow) return min;
+      }
+    }
+    return min;
+  }
+}
+
 export function closestTile(
   gm: GameMap,
   refs: Iterable<TileRef>,
@@ -194,41 +240,43 @@ export function closestTwoTiles(
   x: Iterable<TileRef>,
   y: Iterable<TileRef>,
 ): { x: TileRef; y: TileRef } | null {
-  const xSorted = Array.from(x).sort((a, b) => gm.x(a) - gm.x(b));
-  const ySorted = Array.from(y).sort((a, b) => gm.x(a) - gm.x(b));
+  // terron 04.09 ПЕРФ: координаты считаем ОДИН раз на тайл (раньше gm.x/gm.y
+  // звались в компараторе сортировки и в каждой итерации — это заметная часть
+  // 10 % тика, уходивших в GameMap.x). Порядок сортировки и результат
+  // байт-в-байт прежние: компаратор сравнивает те же значения x, sort стабилен.
+  const w = gm.width();
+  const xs: { ref: TileRef; x: number; y: number }[] = [];
+  for (const ref of x) xs.push({ ref, x: ref % w, y: (ref / w) | 0 });
+  const ys: { ref: TileRef; x: number; y: number }[] = [];
+  for (const ref of y) ys.push({ ref, x: ref % w, y: (ref / w) | 0 });
+  xs.sort((a, b) => a.x - b.x);
+  ys.sort((a, b) => a.x - b.x);
 
-  if (xSorted.length === 0 || ySorted.length === 0) {
+  if (xs.length === 0 || ys.length === 0) {
     return null;
   }
 
   let i = 0;
   let j = 0;
   let minDistance = Infinity;
-  let result = { x: xSorted[0], y: ySorted[0] };
+  let result = { x: xs[0].ref, y: ys[0].ref };
 
-  while (i < xSorted.length && j < ySorted.length) {
-    const currentX = xSorted[i];
-    const currentY = ySorted[j];
+  while (i < xs.length && j < ys.length) {
+    const cx = xs[i];
+    const cy = ys[j];
 
-    const distance =
-      Math.abs(gm.x(currentX) - gm.x(currentY)) +
-      Math.abs(gm.y(currentX) - gm.y(currentY));
+    const distance = Math.abs(cx.x - cy.x) + Math.abs(cx.y - cy.y);
 
     if (distance < minDistance) {
       minDistance = distance;
-      result = { x: currentX, y: currentY };
+      result = { x: cx.ref, y: cy.ref };
     }
 
-    // If we're at the end of X, must move Y forward
-    if (i === xSorted.length - 1) {
+    if (i === xs.length - 1) {
       j++;
-    }
-    // If we're at the end of Y, must move X forward
-    else if (j === ySorted.length - 1) {
+    } else if (j === ys.length - 1) {
       i++;
-    }
-    // Otherwise, move whichever pointer has smaller x value
-    else if (gm.x(currentX) < gm.x(currentY)) {
+    } else if (cx.x < cy.x) {
       i++;
     } else {
       j++;

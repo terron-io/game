@@ -13,26 +13,24 @@ import { L } from "./Utils";
  * исков: лицензия отдаёт код, но НЕ имя и не логотип, и на этом ловят даже тех,
  * кто по коду чист.
  *
- * ТРИ ВАРИАНТА — памятка зависит от того, ЧЕЙ репозиторий открывают
- * (см. ForkVariant ниже): наш / апстрима / MIT-коммиты. Галочки и выдержка
- * по времени — только у AGPL-вариантов: MIT почти ничего не требует.
+ * ДВА ВАРИАНТА:
+ *  • "agpl" — наш репозиторий и апстрим. Обязательства копилефта; галочки и
+ *    выдержка по времени, чтобы человек прочитал, а не проскочил.
+ *  • "mit" — MIT-точки входа апстрима (до 05.09.2025, когда он сменил лицензию
+ *    на AGPL). Там условий почти нет, и честнее сразу сказать: делаешь свою
+ *    игру — начинай оттуда. Нам это тоже выгодно: меньше форков нашего
+ *    AGPL-кода, за которыми пришлось бы следить.
  */
 
 /** Дата смены лицензии апстрима MIT → AGPL (коммит «Update license: AGPL & CC SA»). */
 const MIT_CUTOFF = "05.09.2025";
 
-// "ours"     — наш репозиторий: в списке обязанностей есть НАШ копирайт
-//              (© TERRON.io, NOTICE.md) и НЕТ пункта про MIT — у TERRON
-//              MIT-входа не существует, он форкнут уже из AGPL-эпохи.
-// "upstream" — репозиторий апстрима: их нотисы БЕЗ нашего (наш вклад в их
-//              коде не лежит), и MIT-подсказка ЕСТЬ — она про ИХ историю.
-// "mit"      — ссылки на MIT-коммиты: отдельный текст без галочек.
-export type ForkVariant = "ours" | "upstream" | "mit";
+export type ForkVariant = "agpl" | "mit";
 
 /** Держим кнопку заблокированной, пока текст не успели прочитать. */
 const READ_SECONDS = 10;
 
-const OUR_REPO = "https://github.com/terron-io/game";
+const OUR_REPO = "https://github.com/terron-io/terron";
 
 interface Rule {
   n: string;
@@ -40,9 +38,8 @@ interface Rule {
   warn?: boolean;
 }
 
-function agplRules(variant: "ours" | "upstream"): Rule[] {
-  const ours = variant === "ours";
-  const rules: Rule[] = [
+function agplRules(): Rule[] {
+  return [
     {
       n: "1",
       text: L(
@@ -52,24 +49,16 @@ function agplRules(variant: "ours" | "upstream"): Rule[] {
     },
     {
       n: "2",
-      // ⚠️ Список нотисов зависит от того, ЧТО форкают: в нашем коде обязателен
-      // и © TERRON.io (условия §7(b) — NOTICE.md рядом с кодом); в коде апстрима
-      // нашего вклада нет, навязывать наш нотис их форкам было бы неправдой.
-      text: ours
-        ? L(
-            "Сохрани копирайты: © OpenFront LLC and contributors, © 2024 WarFront.io Team и © TERRON.io (наши условия §7 — в NOTICE.md рядом с кодом). Снял атрибуцию — лицензия прекращается сама (§8), и ты уже нарушитель.",
-            "Keep the copyright notices: © OpenFront LLC and contributors, © 2024 WarFront.io Team, and © TERRON.io (our Section 7 terms live in NOTICE.md next to the code). Strip attribution and your license terminates automatically (§8) — you become an infringer.",
-          )
-        : L(
-            "Сохрани копирайты: © OpenFront and Contributors, © 2024 WarFront.io Team. Снял атрибуцию — лицензия прекращается сама (§8), и ты уже нарушитель.",
-            "Keep the copyright notices: © OpenFront and Contributors, © 2024 WarFront.io Team. Strip attribution and your license terminates automatically (§8) — you become an infringer.",
-          ),
+      text: L(
+        "Сохрани копирайты: © OpenFront LLC and contributors, WarFront.io Team. Снял атрибуцию — лицензия прекращается сама (§8), и ты уже нарушитель.",
+        "Keep the copyright notices: © OpenFront LLC and contributors, WarFront.io Team. Strip attribution and your license terminates automatically (§8) — you become an infringer.",
+      ),
     },
     {
       n: "3",
       text: L(
-        "Держишь игру онлайн — обязан предложить исходник своим игрокам (§13).",
-        "If you run it as a network service, you must offer the source to your players (§13).",
+        "Держишь игру онлайн — обязан предложить исходник своим игрокам (§13). Не «выложить на GitHub», а именно дать доступ тем, кто играет.",
+        "If you run it as a network service, you must offer the source to your players (§13). Not «publish on GitHub» specifically — give access to those who play.",
       ),
     },
     {
@@ -86,36 +75,22 @@ function agplRules(variant: "ours" | "upstream"): Rule[] {
         "Do not misrepresent your fork as the original (§7c). Use your own name and branding.",
       ),
     },
-  ];
-  if (!ours) {
-    // MIT-подсказка ТОЛЬКО у апстрима: это ИХ история была MIT до отсечки.
-    // У TERRON MIT-входа нет — форк сделан уже из AGPL-эпохи, и обещать тут
-    // «путь проще» значило бы врать.
-    rules.push({
+    {
       n: "6",
       text: L(
-        `Есть путь проще: до ${MIT_CUTOFF} этот апстрим был под MIT — там почти нет условий. Делаешь свою игру — бери ту версию, ссылки на MIT-коммиты есть на этой же странице.`,
-        `There is an easier path: before ${MIT_CUTOFF} this upstream was MIT-licensed, with almost no conditions. Starting your own game — take that version; the MIT-era commit links are on this page.`,
+        `Есть путь проще: до ${MIT_CUTOFF} апстрим был под MIT — там почти нет условий. Делаешь свою игру — бери ту версию, ссылки на неё есть на этой же странице.`,
+        `There is an easier path: before ${MIT_CUTOFF} upstream was MIT-licensed, with almost no conditions. Starting your own game — take that version; the links are on this page.`,
       ),
-    });
-  }
-  rules.push({
-    n: "!",
-    warn: true,
-    text: ours
-      ? // ⚠️ БЕЗ судебной риторики (репорт владельца 29.08 «какие-то иски») —
-        // в НАШЕМ попапе она читалась как угроза от нас самих. Суть та же:
-        // имя не входит в лицензию, форку — своё.
-        L(
-          "Имя и логотип лицензия НЕ даёт: «TERRON» — товарный знак. Форку — своё имя и свой стиль.",
-          "The license does NOT grant the name or logo: “TERRON” is a trademark. Give your fork its own name and look.",
-        )
-      : L(
-          "Имя и логотип лицензия НЕ даёт: «OpenFront» — их товарный знак. Форку — своё имя и свой стиль.",
-          "The license does NOT grant the name or logo: “OpenFront” is their trademark. Give your fork its own name and look.",
-        ),
-  });
-  return rules;
+    },
+    {
+      n: "!",
+      warn: true,
+      text: L(
+        "Имя и логотип лицензия НЕ даёт. AGPL отдаёт код — товарный знак к ней не относится. Именно на этом чаще всего и подают в суд, даже когда с кодом всё чисто.",
+        "The license does NOT grant the name or logo. AGPL covers code; trademarks are separate. This is the most common basis for lawsuits — even against forks that are clean on the code.",
+      ),
+    },
+  ];
 }
 
 let stylesReady = false;
@@ -141,7 +116,7 @@ function ensureStyles(): void {
  */
 export function showForkRules(
   targetUrl: string,
-  variant: ForkVariant = "ours",
+  variant: ForkVariant = "agpl",
 ): Promise<boolean> {
   ensureStyles();
   const isMit = variant === "mit";
@@ -217,7 +192,7 @@ export function showForkRules(
         body.appendChild(row);
       }
     } else {
-      for (const r of agplRules(variant)) {
+      for (const r of agplRules()) {
         const label = document.createElement("label");
         label.style.cssText =
           "display:flex;gap:10px;margin-bottom:12px;align-items:flex-start;cursor:pointer";

@@ -1,0 +1,316 @@
+{
+  "name": "Europe (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        330,
+        134
+      ],
+      "name": "Iceland",
+      "flag": "is"
+    },
+    {
+      "coordinates": [
+        506,
+        432
+      ],
+      "name": "Ireland",
+      "flag": "ie"
+    },
+    {
+      "coordinates": [
+        646,
+        436
+      ],
+      "name": "United Kingdom",
+      "flag": "gb"
+    },
+    {
+      "coordinates": [
+        584,
+        828
+      ],
+      "name": "Spain",
+      "flag": "es"
+    },
+    {
+      "coordinates": [
+        698,
+        631
+      ],
+      "name": "France",
+      "flag": "fr"
+    },
+    {
+      "coordinates": [
+        974,
+        748
+      ],
+      "name": "Italy",
+      "flag": "it"
+    },
+    {
+      "coordinates": [
+        840,
+        623
+      ],
+      "name": "Switzerland",
+      "flag": "ch"
+    },
+    {
+      "coordinates": [
+        881,
+        214
+      ],
+      "name": "Norway",
+      "flag": "no"
+    },
+    {
+      "coordinates": [
+        1009,
+        240
+      ],
+      "name": "Sweden",
+      "flag": "se"
+    },
+    {
+      "coordinates": [
+        1252,
+        168
+      ],
+      "name": "Finland",
+      "flag": "fi"
+    },
+    {
+      "coordinates": [
+        780,
+        499
+      ],
+      "name": "Belgium",
+      "flag": "be"
+    },
+    {
+      "coordinates": [
+        823,
+        445
+      ],
+      "name": "Netherlands",
+      "flag": "nl"
+    },
+    {
+      "coordinates": [
+        930,
+        439
+      ],
+      "name": "Germany",
+      "flag": "de"
+    },
+    {
+      "coordinates": [
+        944,
+        608
+      ],
+      "name": "Austria",
+      "flag": "at"
+    },
+    {
+      "coordinates": [
+        1109,
+        452
+      ],
+      "name": "Poland",
+      "flag": "pl"
+    },
+    {
+      "coordinates": [
+        995,
+        533
+      ],
+      "name": "Czechia",
+      "flag": "cz"
+    },
+    {
+      "coordinates": [
+        1386,
+        577
+      ],
+      "name": "Ukraine",
+      "flag": "ua"
+    },
+    {
+      "coordinates": [
+        1342,
+        379
+      ],
+      "name": "Belarus",
+      "flag": "by"
+    },
+    {
+      "coordinates": [
+        1286,
+        654
+      ],
+      "name": "Romania",
+      "flag": "ro"
+    },
+    {
+      "coordinates": [
+        1481,
+        860
+      ],
+      "name": "Türkiye",
+      "flag": "tr"
+    },
+    {
+      "coordinates": [
+        492,
+        1016
+      ],
+      "name": "Morocco",
+      "flag": "ma"
+    },
+    {
+      "coordinates": [
+        1542,
+        368
+      ],
+      "name": "Russia",
+      "flag": "ru"
+    },
+    {
+      "coordinates": [
+        1621,
+        1009
+      ],
+      "name": "Syria",
+      "flag": "sy"
+    },
+    {
+      "coordinates": [
+        1786,
+        1009
+      ],
+      "name": "Iraq",
+      "flag": "iq"
+    },
+    {
+      "coordinates": [
+        1715,
+        718
+      ],
+      "name": "Georgia",
+      "flag": "ge"
+    },
+    {
+      "coordinates": [
+        884,
+        983
+      ],
+      "name": "Tunisia",
+      "flag": "tn"
+    },
+    {
+      "coordinates": [
+        691,
+        996
+      ],
+      "name": "Algeria",
+      "flag": "dz"
+    },
+    {
+      "coordinates": [
+        446,
+        855
+      ],
+      "name": "Portugal",
+      "flag": "pt"
+    },
+    {
+      "coordinates": [
+        1199,
+        855
+      ],
+      "name": "Greece",
+      "flag": "gr"
+    },
+    {
+      "coordinates": [
+        1164,
+        693
+      ],
+      "name": "Serbia",
+      "flag": "rs"
+    },
+    {
+      "coordinates": [
+        1114,
+        577
+      ],
+      "name": "Hungary",
+      "flag": "hu"
+    },
+    {
+      "coordinates": [
+        1124,
+        67
+      ],
+      "name": "Sápmi",
+      "flag": "Sami flag"
+    },
+    {
+      "coordinates": [
+        1242,
+        277
+      ],
+      "name": "Estonia",
+      "flag": "ee"
+    },
+    {
+      "coordinates": [
+        1228,
+        337
+      ],
+      "name": "Latvia",
+      "flag": "lv"
+    },
+    {
+      "coordinates": [
+        1215,
+        401
+      ],
+      "name": "Lithuania",
+      "flag": "lt"
+    },
+    {
+      "coordinates": [
+        1034,
+        655
+      ],
+      "name": "Croatia",
+      "flag": "hr"
+    },
+    {
+      "coordinates": [
+        898,
+        348
+      ],
+      "name": "Denmark",
+      "flag": "dk"
+    }
+  ],
+  "map": {
+    "width": 1860,
+    "height": 1072,
+    "num_land_tiles": 994681
+  },
+  "map4x": {
+    "width": 930,
+    "height": 536,
+    "num_land_tiles": 245272
+  },
+  "map16x": {
+    "width": 465,
+    "height": 268,
+    "num_land_tiles": 59944
+  }
+}

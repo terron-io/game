@@ -35,6 +35,22 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // месяц
 // Оценка веса записи без сериализации: ~70 байт/ход (замер прода: 4648 ходов ≈
 // 324КБ JSON). Для бюджета этого достаточно, точный размер считать дорого.
 const BYTES_PER_TURN = 70;
+/**
+ * terron 28.09: в базе попадаются ПУСТЫЕ записи (null) — js_error «Cannot read
+ * properties of null (reading 'savedAt')» с 02.09, 108 раз у 38 игроков. Бросок
+ * шёл внутри onsuccess, мимо try/catch: список «Продолжить» и чистка вставали
+ * навсегда (промис не резолвился). Любую запись сперва проверяем на форму.
+ */
+function isSnapshot(g: unknown): g is LocalGameSnapshot {
+  if (g === null || typeof g !== "object") return false;
+  const r = g as Partial<LocalGameSnapshot>;
+  return (
+    typeof r.gameID === "string" &&
+    typeof r.savedAt === "number" &&
+    Array.isArray(r.turns)
+  );
+}
+
 function estBytes(g: { turns: unknown[] }): number {
   return g.turns.length * BYTES_PER_TURN;
 }
@@ -68,10 +84,7 @@ function openDb(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
-function tx(
-  db: IDBDatabase,
-  mode: IDBTransactionMode,
-): IDBObjectStore {
+function tx(db: IDBDatabase, mode: IDBTransactionMode): IDBObjectStore {
   return db.transaction(STORE, mode).objectStore(STORE);
 }
 
@@ -119,10 +132,10 @@ export async function loadLocalGame(
     try {
       const req = tx(db, "readonly").get(gameID);
       req.onsuccess = () => {
-        const v = req.result as LocalGameSnapshot | undefined;
+        const v: unknown = req.result;
         // Просроченную запись отдаём как отсутствующую (и она уберётся при
         // ближайшем prune) — не поднимаем матч суточной давности.
-        if (!v || Date.now() - v.savedAt > MAX_AGE_MS) {
+        if (!isSnapshot(v) || Date.now() - v.savedAt > MAX_AGE_MS) {
           resolve(null);
           return;
         }
@@ -154,7 +167,7 @@ export async function listLocalGames(): Promise<LocalGameBrief[]> {
     try {
       const req = tx(db, "readonly").getAll();
       req.onsuccess = () => {
-        const all = (req.result as LocalGameSnapshot[]) ?? [];
+        const all = ((req.result as unknown[]) ?? []).filter(isSnapshot);
         const now = Date.now();
         resolve(
           all
@@ -201,9 +214,23 @@ export async function pruneLocalGames(): Promise<void> {
   await new Promise<void>((resolve) => {
     try {
       const store = tx(db, "readwrite");
+      // Ключи берём отдельно: у пустой записи (null) ключ из значения не
+      // достать, а удалить её надо. getAll и getAllKeys идут в одном порядке.
+      const keysReq = store.getAllKeys();
       const req = store.getAll();
       req.onsuccess = () => {
-        const all = (req.result as LocalGameSnapshot[]) ?? [];
+        const raw = (req.result as unknown[]) ?? [];
+        const keys = (keysReq.result as IDBValidKey[] | undefined) ?? [];
+        for (let i = 0; i < raw.length; i++) {
+          if (!isSnapshot(raw[i]) && keys[i] !== undefined) {
+            try {
+              store.delete(keys[i]);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        const all = raw.filter(isSnapshot);
         const now = Date.now();
         const fresh = all
           .filter((g) => now - g.savedAt <= MAX_AGE_MS)

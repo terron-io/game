@@ -51,6 +51,7 @@ import { FogPass } from "./passes/FogPass";
 import { FxPass } from "./passes/fx-pass";
 import { NUKE_EXPLOSION_RADII } from "./passes/fx-pass/FxSpritePass";
 import { LightmapPass } from "./passes/LightmapPass";
+import { MapStylePass } from "./passes/MapStylePass";
 import { MoveIndicatorPass } from "./passes/MoveIndicatorPass";
 import { NamePass } from "./passes/name-pass";
 import { NightCompositePass } from "./passes/NightCompositePass";
@@ -68,6 +69,7 @@ import { SpawnOverlayPass } from "./passes/SpawnOverlayPass";
 import { StructureLevelPass } from "./passes/StructureLevelPass";
 import { StructurePass } from "./passes/StructurePass";
 import { TerrainPass } from "./passes/TerrainPass";
+import type { RendererIntegritySnapshot } from "./passes/TerritoryPass";
 import { TerritoryPass } from "./passes/TerritoryPass";
 import { TrailPass } from "./passes/TrailPass";
 import { UnitPass } from "./passes/UnitPass";
@@ -91,6 +93,7 @@ import {
 import { HeatManager } from "./utils/HeatManager";
 import { eagerProgramPairs } from "./utils/ProgramRegistry";
 import { FALLOUT_BIT } from "./utils/TileCodec";
+import { DEFAULT_VOID_COLOR, type RGB, type VisualStyle } from "./VisualStyles";
 
 /** Ghost types that trigger SAM radius overlay (matches upstream SAMRadiusLayer). */
 const SAM_RADIUS_GHOST_TYPES = new Set([
@@ -166,6 +169,13 @@ export class GPURenderer {
   private falloutLightPass: FalloutLightPass | null = null;
   private lightmapPass: LightmapPass | null = null;
   private nightCompositePass: NightCompositePass | null = null;
+  // terron (визуальные стили): пост-обработка земли. ЛЕНИВАЯ — на «Классике»
+  // пасса нет вовсе, лишнего фулскрин-прохода никто не платит.
+  private mapStylePass: MapStylePass | null = null;
+  /** Цель для стиля, когда включён ещё и ночной композит (два прохода). */
+  private styleTarget: RenderTarget | null = null;
+  /** Цвет «пустоты» за краем карты — часть стиля. */
+  private voidColor: RGB = DEFAULT_VOID_COLOR;
   private pointLight(): PointLightPass {
     return (this.pointLightPass ??= new PointLightPass(
       this.gl,
@@ -331,6 +341,22 @@ export class GPURenderer {
    * или конструирование пассов.
    */
   private buildPhases: Record<string, number> = {};
+  // terron 04.09: разбивка фазы «пассы» по отдельным пассам — только те, что
+  // стоили ≥30 мс. Повод: slow_renderer_build 800 сессий/нед с медианой 3 с,
+  // где «пассы» = 2–10 с одним числом; exit_during_loading на стадии
+  // worker_ready = 530/нед (игрок ждёт на чёрном экране и уходит). Без
+  // разбивки не сказать, что чинить: заливку текстур карты, компиляцию или
+  // конкретный пасс.
+  private lapMark = 0;
+  /** Все лапы без порога — для локального замера (window.__terronBuildLaps). */
+  readonly buildLaps: Record<string, number> = {};
+  private buildLap(name: string): void {
+    const now = performance.now();
+    const d = now - this.lapMark;
+    this.lapMark = now;
+    this.buildLaps[name] = Math.round(d * 10) / 10;
+    if (d >= 30) this.buildPhases[`п:${name}`] = Math.round(d);
+  }
   getBuildPhases(): Readonly<Record<string, number>> {
     return this.buildPhases;
   }
@@ -361,12 +387,55 @@ export class GPURenderer {
   // спавн) за последние GRACE мс; иначе падаем до HEARTBEAT. В активном матче
   // юниты обновляются каждый тик → grace не истекает → плавность не страдает.
   private lastActivityMs = 0;
+  // terron 27.08: ВТОРЫЕ ЧАСЫ — «игрок трогает игру» (камера/ввод), отдельно от
+  // «пришли данные». См. dataOnlyFrameMs ниже.
+  private lastInteractMs = 0;
   private lastDrawMs = 0;
+  // terron 12.09: сколько кадров реально нарисовано — датчику целостности карты
+  // нужно отличать «карта не догоняет» от «кадров нет вовсе».
+  private drawCount = 0;
   private lastCamX = NaN;
   private lastCamY = NaN;
   private lastCamZoom = NaN;
   private readonly idleGraceMs = 700;
   private readonly idleHeartbeatMs = 250;
+  /**
+   * ПОТОЛОК ЧАСТОТЫ, КОГДА ИГРОК НИЧЕГО НЕ ТРОГАЕТ, а меняются только ДАННЫЕ.
+   *
+   * Замер боевого хелса 27.08: на телефонах приходится **4.2 кадра на один тик
+   * симуляции** (40.4 fps при 10.16 тик/с) — мир перерисовывается вчетверо чаще,
+   * чем меняется. Кадро-скип в простое существовал и раньше, но в бою не
+   * срабатывал НИКОГДА: `bumpActivity()` зовётся на каждом обновлении данных, а
+   * они идут каждый тик, поэтому grace не истекал. Теперь часы разведены:
+   * камера/ввод держат полную частоту, а «только данные» — вот этот потолок.
+   *
+   * Цель — 20 fps (2 кадра на тик): юниты между тиками интерполируются, так что
+   * два кадра на тик дают движение, а не слайд-шоу.
+   *
+   * ⚠️ ПОРОГ 45, А НЕ 50, И ЭТО НЕ ОПЕЧАТКА. RAF идёт шагами 16.7 мс, и ровно
+   * 50 не набирается на третьем кадре (3 × 16.667 = 50.0 с точностью до
+   * плавающей точки — сравнение `>= 50` проваливается). Кадр пропускается, и
+   * вместо 20 fps выходит 15. Порог чуть ниже периода ловит третий кадр
+   * надёжно. Поймано тестом, а не глазом.
+   *
+   * ⚠️ ТОЛЬКО ТАЧ-УСТРОЙСТВА. Цель правки — нагрев телефона; на десктопе 0
+   * означает «рисовать каждый кадр», то есть прежнее поведение байт-в-байт.
+   * Расширить на десктоп = убрать проверку coarse (одна строка).
+   */
+  private readonly dataOnlyFrameMs = (() => {
+    // terron 05.09: щадящий режим после потери контекста — потолок 20 fps ВСЕМ,
+    // не только тачу (ContextLossPolicy).
+    if (GPURenderer.safeMode) return 45;
+    try {
+      return typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(pointer: coarse)").matches
+        ? 45
+        : 0;
+    } catch {
+      return 0;
+    }
+  })();
   private frameTick = 0;
   private mapW = 0;
   private mapH = 0;
@@ -413,6 +482,7 @@ export class GPURenderer {
   ) {
     this.canvas = canvas;
     this.settings = createRenderSettings();
+    GPURenderer.applyGraphicsCaps(this.settings);
     this.raf = raf;
     this.caf = caf;
 
@@ -466,6 +536,14 @@ export class GPURenderer {
     this.gl = gl;
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
+    // terron 04.09 ПЕРФ (ДЕВ-эксперимент): KHR_parallel_shader_compile. Без
+    // явного включения ANGLE/Chromium компилирует и линкует шейдеры в GPU-процессе
+    // ПОСЛЕДОВАТЕЛЬНО, и прогрев (prewarmShaders/prewarmPrograms) выигрывает
+    // только у JS-потока. С расширением драйвер раскладывает компиляцию по
+    // потокам: на телефонах фаза «программы» в медленной сборке рендера — 2.4 с
+    // в среднем (231 сессия за неделю), это и есть цель. Возвращаемое значение
+    // нам не нужно — само включение и есть эффект.
+    gl.getExtension("KHR_parallel_shader_compile");
     const floatExt = gl.getExtension("EXT_color_buffer_float");
     if (!floatExt)
       console.warn("EXT_color_buffer_float not available — palette may fail");
@@ -601,6 +679,12 @@ export class GPURenderer {
     // Старт на пару секунд дольше, зато не крэшит. Остальные машины — быстрый путь.
     let phaseMark = performance.now();
     if (!this.weakIntelGpu()) prewarmShaders(gl);
+    // terron 11.09: имя растеризатора известно только с живым контекстом, а капы
+    // применялись в начале конструктора — переприменяем до сборки пассов, чтобы
+    // на программном растеризаторе свет и блум не создавались вовсе.
+    if (GPURenderer.softwareRenderer) {
+      GPURenderer.applyGraphicsCaps(this.settings);
+    }
     this.buildPhases.шейдеры = Math.round(performance.now() - phaseMark);
 
     // Create shared textures except borderTex
@@ -626,9 +710,11 @@ export class GPURenderer {
     }
     this.buildPhases.программы = Math.round(performance.now() - phaseMark);
     phaseMark = performance.now(); // дальше — конструирование пассов
+    this.lapMark = performance.now();
 
     // --- Terrain: рисует из общей R8UI-текстуры через LUT ---
     this.terrainPass = new TerrainPass(gl, this.res.terrainTex, mapW, mapH);
+    this.buildLap("terrainPass");
 
     // --- Border compute (needs tileTex) ---
     this.borderPass = new BorderComputePass(
@@ -638,6 +724,7 @@ export class GPURenderer {
       this.res.tileTex,
       this.settings,
     );
+    this.buildLap("borderPass");
     this.res.borderTex = this.borderPass.getBorderTex();
 
     // --- Defense coverage (needs tileTex) — per-tile "defended by same-owner
@@ -650,6 +737,7 @@ export class GPURenderer {
       this.res.tileTex,
       this.settings,
     );
+    this.buildLap("defenseCoveragePass");
 
     // --- terron: туман войны (опция лобби) — маска видимости + композит ---
     // --- Туман войны: ЛЕНИВЫЙ, см. fog(). 5 GL-программ ради опции лобби,
@@ -665,6 +753,7 @@ export class GPURenderer {
       this.res.heatTexB,
       this.settings,
     );
+    this.buildLap("heatManager");
 
     // --- Territory (needs tileTex, paletteTex, patternTexs, skinTexs) ---
     this.territoryPass = new TerritoryPass(
@@ -682,6 +771,7 @@ export class GPURenderer {
       this.skinBBoxTex,
       this.settings,
     );
+    this.buildLap("territoryPass");
     // Route per-tile changes to the border pass so it can scatter-recompute
     // just the affected tiles instead of rebuilding the whole map. A tile
     // changing owner can also flip its defense-coverage flag (same-owner test),
@@ -705,6 +795,7 @@ export class GPURenderer {
       this.res.tileTex,
       this.settings.spawnOverlay,
     );
+    this.buildLap("spawnOverlayPass");
 
     // --- Trail (needs trailTex, paletteTex) ---
     this.trailPass = new TrailPass(
@@ -715,6 +806,7 @@ export class GPURenderer {
       this.paletteTex,
       this.settings,
     );
+    this.buildLap("trailPass");
 
     // --- Border stamp (needs tileTex, paletteTex, borderTex) ---
     this.borderStampPass = new BorderStampPass(
@@ -726,6 +818,7 @@ export class GPURenderer {
       this.res.borderTex,
       this.settings,
     );
+    this.buildLap("borderStampPass");
     this.borderStampPass.setDefenseCoverageTex(
       this.defenseCoveragePass.getCoverageTex(),
     );
@@ -741,6 +834,7 @@ export class GPURenderer {
 
     // --- SAM radius overlay (dashed green circles during build mode) ---
     this.samRadiusPass = new SAMRadiusPass(gl, mapW, this.settings);
+    this.buildLap("samRadiusPass");
     this.samRadiusPass.setPaletteData(paletteData);
 
     // --- Crosshair (warship placement): ЛЕНИВЫЙ, см. crosshair() ---
@@ -752,12 +846,19 @@ export class GPURenderer {
       this.paletteTex,
       this.settings,
     );
+    this.buildLap("structurePass");
     this.structureLevelPass = new StructureLevelPass(gl, header, this.settings);
+    this.buildLap("structureLevelPass");
     this.unitPass = new UnitPass(gl, header, this.paletteTex, this.settings);
+    this.buildLap("unitPass");
     this.namePass = new NamePass(gl, header, paletteData, this.settings);
+    this.buildLap("namePass");
     this.fxPass = new FxPass(gl, header, this.settings, config);
+    this.buildLap("fxPass");
     this.barPass = new BarPass(gl, header, this.settings, config);
+    this.buildLap("barPass");
     this.worldTextPass = new WorldTextPass(gl, this.settings, config);
+    this.buildLap("worldTextPass");
     this.worldTextPass.setMapWidth(this.mapW);
 
     this.buildPhases.пассы = Math.round(performance.now() - phaseMark);
@@ -814,7 +915,7 @@ export class GPURenderer {
     }
     if (typeof window !== "undefined") {
       for (const ev of this.activityEvents) {
-        window.addEventListener(ev, this.bumpActivity, { passive: true });
+        window.addEventListener(ev, this.bumpInteract, { passive: true });
       }
     }
   }
@@ -838,11 +939,21 @@ export class GPURenderer {
       cam.offsetX !== this.lastCamX ||
       cam.offsetY !== this.lastCamY ||
       cam.zoom !== this.lastCamZoom;
-    if (camMoved) this.lastActivityMs = now;
-    // активность: недавние данные/камера/ввод, ИЛИ фаза спавна (пульсация оверлея)
-    const active =
-      this.inSpawnPhase || now - this.lastActivityMs < this.idleGraceMs;
-    if (active || now - this.lastDrawMs >= this.idleHeartbeatMs) {
+    if (camMoved) this.lastInteractMs = now;
+    // ТРИ РЕЖИМА, а не два:
+    //  • игрок трогает игру (камера/ввод) ИЛИ фаза спавна → полная частота, к
+    //    руке претензий быть не должно;
+    //  • меняются только ДАННЫЕ (тик симуляции) → потолок dataOnlyFrameMs;
+    //  • не меняется ничего → редкий heartbeat, как и раньше.
+    const interacting =
+      this.inSpawnPhase || now - this.lastInteractMs < this.idleGraceMs;
+    const dataFresh = now - this.lastActivityMs < this.idleGraceMs;
+    const sinceDraw = now - this.lastDrawMs;
+    if (
+      interacting ||
+      (dataFresh && sinceDraw >= this.dataOnlyFrameMs) ||
+      sinceDraw >= this.idleHeartbeatMs
+    ) {
       this.lastCamX = cam.offsetX;
       this.lastCamY = cam.offsetY;
       this.lastCamZoom = cam.zoom;
@@ -854,6 +965,16 @@ export class GPURenderer {
   // Любая активность (апдейт данных/ввод) держит рендер на полной частоте grace мс.
   private bumpActivity = (): void => {
     this.lastActivityMs = performance.now();
+  };
+
+  // Игрок ТРОГАЕТ игру: ввод, движение камеры, смена размера холста. Держит
+  // полную частоту кадров grace мс. ⚠️ Отдельно от bumpActivity намеренно: тот
+  // зовётся на каждом обновлении данных (то есть каждый тик), и если кормить
+  // им же — потолок «только данные» не включится никогда, ровно как было.
+  private bumpInteract = (): void => {
+    const now = performance.now();
+    this.lastInteractMs = now;
+    this.lastActivityMs = now;
   };
 
   // Скрытая вкладка/свёрнутое приложение — останавливаем цикл рисования совсем
@@ -901,7 +1022,10 @@ export class GPURenderer {
     // тёмная вспышка (сворачивание софт-клавиатуры/чата на мобиле). Будим рендер
     // и сразу перерисовываем В ЭТОМ ЖЕ ТАСКЕ — очищенный буфер не успевает
     // скомпоноваться. Только когда цикл рисования уже идёт (animId != null).
-    this.bumpActivity();
+    // ⚠️ Именно bumpInteract: смена размера (поворот экрана, софт-клавиатура) —
+    // действие игрока, и отвечать на него надо полной частотой, а не потолком
+    // «только данные», иначе раскладка догоняет рывками.
+    this.bumpInteract();
     if (this.animId !== null) this.draw();
   }
 
@@ -917,9 +1041,64 @@ export class GPURenderer {
   // свалилась снова. Флаг ставит GameView.onContextLost. Диагноз: median-краш
   // 12с = пик памяти при старте; экранные FBO ×DPR² — часть пика.
   static readonly GFX_LOW_KEY = "terron_gfx_low";
+  /** terron 05.09: ЩАДЯЩИЙ РЕЖИМ после потери контекста (ставит GameView до
+   *  пересборки): потолок кадров 20 fps, без освещения и блума, ленивые тяжёлые
+   *  пассы не греем. Цель — не дать GPU упасть второй раз подряд: второй-третий
+   *  «виновный» сброс = Chrome блокирует WebGL сайту до перезапуска браузера. */
+  static safeMode = false;
+  /**
+   * terron 11.09: ПРОГРАММНЫЙ РАСТЕРИЗАТОР — GPU нет вовсе (RDP/VM/битый драйвер:
+   * «Microsoft Basic Render Driver», SwiftShader, llvmpipe). По perf_summary за
+   * 7 дней таких сводок 741 (~3 % матчей ≥8 мин), и у них медиана заминок
+   * >100 мс — 1206 на 10 минут против 1.3 у всех остальных: рисуем полный
+   * конвейер в 1 fps. Хвост p90 у свежих сборок (58 против 9) был целиком ими.
+   * Флаг ставит weakIntelGpu() по UNMASKED_RENDERER; дальше те же капы, что у
+   * щадящего режима, плюс бэкбуфер ×0.5 (effectiveDpr). Статик: один на вкладку,
+   * как safeMode — железо между матчами не меняется.
+   */
+  static softwareRenderer = false;
+  private static readonly SOFTWARE_GPU_RE =
+    /basic render driver|swiftshader|llvmpipe|softpipe|software rasterizer/i;
+  /** Ручной тумблер «Лёгкая графика» (UserSettings LIGHT_GRAPHICS_KEY; setBool пишет "true"). */
+  static lightGraphicsChosen(): boolean {
+    try {
+      return localStorage.getItem("settings.lightGraphics") === "true";
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * terron 05.09 (ревью): ограничения щадящего режима и «Лёгкой графики» — без
+   * освещения и блума. Зовётся и в конструкторе, и после КАЖДОГО пересчёта
+   * настроек (ClientGameRunner.regenerateRenderSettings) — иначе смена тёмного
+   * режима/графики тут же возвращала свет и блум.
+   */
+  static applyGraphicsCaps(settings: RenderSettings): void {
+    if (
+      GPURenderer.safeMode ||
+      GPURenderer.softwareRenderer ||
+      GPURenderer.lightGraphicsChosen()
+    ) {
+      settings.lighting.enabled = false;
+      settings.passEnabled.falloutBloom = false;
+    }
+  }
   private gfxLow(): boolean {
+    // terron 04.09: имя видеокарты нужно телеметрии ВСЕГДА (perf_summary несёт
+    // gpu как знаменатель для доли потерь контекста) — а раньше weakIntelGpu()
+    // с его noteGpuName не звался у тех, кого ранние выходы уже отправили в
+    // low-режим (флаг после потери контекста, ≤3 ГБ ОЗУ): ровно у самых
+    // интересных машин имени не было (53 из 155 сводок без gpu после выката).
+    const weakIntel = this.weakIntelGpu();
+    // terron 11.09: без GPU — всегда лёгкий режим (флаг ставится внутри
+    // weakIntelGpu по имени растеризатора).
+    if (GPURenderer.softwareRenderer) return true;
     try {
       if (localStorage.getItem(GPURenderer.GFX_LOW_KEY) === "1") return true;
+      // terron 05.09: ручной тумблер «Лёгкая графика» из настроек (UserSettings
+      // LIGHT_GRAPHICS_KEY) — игрок с лагами помогает себе сам, не дожидаясь
+      // потери контекста. setBool пишет строку "true".
+      if (GPURenderer.lightGraphicsChosen()) return true;
     } catch {
       /* ignore */
     }
@@ -932,7 +1111,7 @@ export class GPURenderer {
     // Iris) теряют D3D11-контекст под текущей нагрузкой рендера, а на десктопе
     // с 8ГБ RAM гейт выше их НЕ ловит. Репорт K3WEhR4C: диагностика чистая, а
     // в бою webglcontextlost → «WebGL2 not supported» до перезапуска браузера.
-    return this.weakIntelGpu();
+    return weakIntel;
   }
   /** UNMASKED_RENDERER живого контекста (мемо) — слабое интегрированное Intel. */
   private weakGpuMemo: boolean | null = null;
@@ -944,6 +1123,15 @@ export class GPURenderer {
       const r = dbg
         ? String(this.gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? "")
         : "";
+      // Отдаём имя видеокарты телеметрии: без него отказы шейдеров приходят
+      // безымянными и разбирать их не по чему (разбор хелса 01.09).
+      if (r !== "") {
+        void import("../../Health").then(({ noteGpuName }) => noteGpuName(r));
+        // terron 11.09: программный растеризатор — см. softwareRenderer.
+        if (GPURenderer.SOFTWARE_GPU_RE.test(r)) {
+          GPURenderer.softwareRenderer = true;
+        }
+      }
       // «Intel … UHD Graphics / HD Graphics / Iris» = интегрированное видео.
       this.weakGpuMemo = /intel/i.test(r) && /(uhd|hd graphics|iris)/i.test(r);
     } catch {
@@ -951,6 +1139,67 @@ export class GPURenderer {
     }
     return this.weakGpuMemo;
   }
+  /** terron 12.09: снимок для датчика целостности карты (client/TerritoryIntegrity.ts).
+   *  Кроме того, из чего заливается текстура, отдаём состояние цикла рисования:
+   *  без него «карта не догоняет» не отличить от «кадров не было вовсе». */
+  territoryIntegrity(): RendererIntegritySnapshot {
+    const base = this.territoryPass.integritySnapshot();
+    return {
+      ...base,
+      loopRunning: this.animId !== null,
+      visibilityFlushPending: this.pendingVisibilityFlush,
+      fps: Math.round(this.fps),
+      drawAgeMs:
+        this.lastDrawMs === 0
+          ? -1
+          : Math.round(performance.now() - this.lastDrawMs),
+      draws: this.drawCount,
+      // Что ещё рисуется поверх заливки: f — туман, s — стиль карты,
+      // S — щадящий режим, w — программный растеризатор.
+      flags:
+        base.flags +
+        (this.fogPass?.isEnabled() ? "f" : "") +
+        (this.mapStylePass !== null ? "s" : "") +
+        (GPURenderer.safeMode ? "S" : "") +
+        (GPURenderer.softwareRenderer ? "w" : ""),
+    };
+  }
+
+  /** terron 12.09: владельцы тайлов из видеокарты (диагностика на деве). */
+  territoryReadback(
+    x0: number,
+    y0: number,
+    w: number,
+    h: number,
+  ): Uint16Array | null {
+    return this.territoryPass.readbackOwners(x0, y0, w, h);
+  }
+
+  /** terron 04.09: снимок «что рендер делал» для события потери GL-контекста.
+   *  У Intel UHD 630 контекст теряют ~15 % сессий (знаменатель из perf_summary),
+   *  и потеря живёт на 2–5-й минуте матча — а по событию нельзя было сказать
+   *  ни тика, ни размера кадра, ни какие пассы были живы. Зовётся ДО dispose. */
+  lossSnapshot(): Record<string, unknown> {
+    let nukes = 0;
+    const units = this.lastUnits;
+    for (const u of units.values()) {
+      if (/bomb|mirv/i.test(u.unitType)) nukes++;
+    }
+    return {
+      frame: this.frameTick,
+      cw: this.canvas.width,
+      ch: this.canvas.height,
+      edpr: Math.round(this.effectiveDpr() * 100) / 100,
+      light: this.settings.lighting.enabled,
+      lightPass: this.lightmapPass !== null,
+      bloom: this.bloomPass !== null,
+      fog: this.fogPass !== null,
+      style: this.mapStylePass !== null,
+      units: units.size,
+      nukes,
+    };
+  }
+
   private effectiveDpr(): number {
     const dpr = window.devicePixelRatio || 1;
     const coarse =
@@ -974,6 +1223,9 @@ export class GPURenderer {
     } catch {
       /* ignore */
     }
+    // terron 11.09: без GPU каждый пиксель бэкбуфера считает CPU — режем
+    // жёстче любого Intel, ×0.5 сразу (четверть пикселей), не дожидаясь потери.
+    if (GPURenderer.softwareRenderer) return Math.min(dpr, 0.5);
     if (coarse) return Math.min(dpr, low ? (hardLoss ? 1.0 : 1.5) : 2);
     if (low) return Math.min(dpr, hardLoss ? 0.5 : 0.75);
     return dpr;
@@ -1072,9 +1324,12 @@ export class GPURenderer {
     // появился путём, который они не покрыли (новый юнит-взрыватель, edge),
     // свечение молча не появится. Цена: одна битовая проверка на изменённый
     // тайл, и ТОЛЬКО пока heat спит (после пробуждения ветка мертва).
+    // ⚠️ Состояние читаем из буфера, а не из changedTiles[i].state: в живом
+    // режиме там всегда 0 (view/GameView кладёт только ref), и проверка молча
+    // не срабатывала никогда (нашло ревью 12.09).
     if (!this.heatManager.isFullSize()) {
       for (let i = 0; i < changedTiles.length; i++) {
-        if ((changedTiles[i].state & FALLOUT_BIT) !== 0) {
+        if ((tileState[changedTiles[i].ref] & FALLOUT_BIT) !== 0) {
           this.heatManager.ensureFullSize();
           break;
         }
@@ -1098,12 +1353,14 @@ export class GPURenderer {
     falloutOwnerState: Uint16Array,
     dirtyRowMin: number,
     dirtyRowMax: number,
+    dirtyRows: Uint8Array | null,
   ): void {
     this.bumpActivity();
     this.territoryPass.applyFalloutOwnerDelta(
       falloutOwnerState,
       dirtyRowMin,
       dirtyRowMax,
+      dirtyRows,
     );
   }
 
@@ -1257,6 +1514,7 @@ export class GPURenderer {
   // десинков не даёт; читерский клиент юниты увидит.
   setUnitsHidden(smallIDs: ReadonlySet<number>): void {
     this.unitsHidden = smallIDs;
+    this.unitPass.markDirtyAll();
   }
 
   // Фильтр и правило «что видно всегда» — в ClosedCountryFilter.ts
@@ -1296,7 +1554,11 @@ export class GPURenderer {
   ];
   private structScratchIdx = 0;
 
-  updateUnits(units: Map<number, UnitState>, gameTick: number): void {
+  updateUnits(
+    units: Map<number, UnitState>,
+    gameTick: number,
+    changedIds: readonly number[] | null = null,
+  ): void {
     this.bumpActivity();
     this.unitScratchIdx ^= 1;
     units = filterHiddenUnits(
@@ -1306,7 +1568,10 @@ export class GPURenderer {
     );
     this.lastUnits = units;
     this.frameTick++;
-    this.unitPass.updateUnits(units, this.frameTick);
+    // ⚠️ Фильтр Закрытой страны выкидывает юниты ИЗ КАРТЫ, а не помечает их
+    // изменёнными: если набор скрытых поменялся, точечное обновление о них не
+    // узнает. Поэтому смена набора форсит полную пересборку (markDirtyAll).
+    this.unitPass.updateUnits(units, this.frameTick, changedIds);
     this.barPass.updateBars(units, this.lastStructures, gameTick);
     // terron ПЕРФ (07.08): не будим ленивый пасс света ради данных, которые
     // некому рисовать. Свет выключат обратно — пасс уже построен, кормим его.
@@ -1348,6 +1613,11 @@ export class GPURenderer {
   updateRelations(data: Uint8Array, size: number): void {
     this.borderPass.updateRelations(data, size);
     this.affiliationPalette.updateRelations(data, size);
+  }
+
+  /** Забыть слоты юнитов: буферы сгорели/контекст изменился — пересобрать всё. */
+  markUnitsDirty(): void {
+    this.unitPass.markDirtyAll();
   }
 
   updateStructures(units: Map<number, UnitState>): void {
@@ -1437,6 +1707,11 @@ export class GPURenderer {
     if (refs.length === 0) return;
     // Террейн теперь ОДНА общая текстура — RailroadPass/FogPass видят дельту сами.
     this.terrainPass.applyTerrainDelta(refs, terrainBytes);
+  }
+
+  /** Вся карта рельефа одним вызовом (перезаливка после потери контекста). */
+  uploadFullTerrain(terrainBytes: Uint8Array): void {
+    this.terrainPass.uploadFullTerrain(terrainBytes);
   }
 
   applyConquestEvents(events: ConquestFx[]): void {
@@ -1901,6 +2176,7 @@ export class GPURenderer {
 
   draw(): void {
     const now = performance.now();
+    this.drawCount++;
     this.trackFps(now);
     this.uploadTextures();
     this.computeTextures();
@@ -1957,21 +2233,113 @@ export class GPURenderer {
     const cw = this.canvas.width;
     const ch = this.canvas.height;
     const compositingActive = this.isLightCompositingActive();
+    const stylePass = this.mapStylePass;
 
-    if (compositingActive) {
+    // terron: цепочка базового слоя. Порядок «стиль → ночь» намеренный: стиль
+    // красит ЗЕМЛЮ, а свет городов ложится поверх покрашенного — иначе ночной
+    // множитель гасил бы уже добавленное свечение стиля.
+    if (compositingActive || stylePass !== null) {
       this.resizeSceneTargetIfNeeded(cw, ch);
-      const sceneTex = toTarget(this.gl, this.sceneTarget, () =>
+      let mapTex = toTarget(this.gl, this.sceneTarget, () =>
         this.drawBaseLayer(cam),
       );
-      const lightTex = this.lightmap().draw(cam, cw, ch, this.frameTick);
-      toScreen(this.gl, cw, ch, () =>
-        this.nightComposite().draw(sceneTex, lightTex),
-      );
+      if (stylePass !== null) {
+        const drawStyle = () =>
+          stylePass.draw(
+            mapTex,
+            this.camera.offsetX,
+            this.camera.offsetY,
+            cw,
+            ch,
+            zoom,
+          );
+        if (compositingActive) {
+          mapTex = toTarget(this.gl, this.ensureStyleTarget(cw, ch), drawStyle);
+        } else {
+          toScreen(this.gl, cw, ch, drawStyle);
+        }
+      }
+      if (compositingActive) {
+        const lightTex = this.lightmap().draw(cam, cw, ch, this.frameTick);
+        const baseTex = mapTex;
+        toScreen(this.gl, cw, ch, () =>
+          this.nightComposite().draw(baseTex, lightTex),
+        );
+      }
     } else {
       toScreen(this.gl, cw, ch, () => this.drawBaseLayer(cam));
     }
 
     this.renderOverlays(cam, zoom);
+  }
+
+  /**
+   * terron (визуальные стили): ВЕСЬ GPU-побочный эффект смены стиля в одном
+   * месте — палитра рельефа, пост-пасс и цвет пустоты. Настройки рендера
+   * (свет/ники/иконки) применяет клиент через applyVisualStyle: там же лежат
+   * пользовательские оверрайды, и порядок их наложения важен.
+   */
+  setVisualStyle(style: VisualStyle): void {
+    this.voidColor = style.voidColor;
+    this.terrainPass.setPalette(style.terrain);
+    if (style.fx === null) {
+      this.mapStylePass?.dispose();
+      this.mapStylePass = null;
+      return;
+    }
+    if (this.mapStylePass !== null) {
+      this.mapStylePass.setFx(style.fx);
+      return;
+    }
+    this.mapStylePass = new MapStylePass(
+      this.gl,
+      this.mapW,
+      this.mapH,
+      this.res.terrainTex,
+      style.fx,
+    );
+  }
+
+  /** Вторая цель кадра — нужна только связке «стиль + ночной свет». */
+  private ensureStyleTarget(cw: number, ch: number): RenderTarget {
+    const gl = this.gl;
+    if (this.styleTarget === null) {
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const fbo = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        tex,
+        0,
+      );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      this.styleTarget = { fbo, tex, w: 0, h: 0 };
+    }
+    const t = this.styleTarget;
+    if (t.w !== cw || t.h !== ch) {
+      t.w = cw;
+      t.h = ch;
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA8,
+        cw,
+        ch,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        null,
+      );
+    }
+    return t;
   }
 
   private isLightCompositingActive(): boolean {
@@ -2000,7 +2368,12 @@ export class GPURenderer {
   private drawBaseLayer(cam: Float32Array): void {
     const gl = this.gl;
     const pe = this.settings.passEnabled;
-    gl.clearColor(0.04, 0.04, 0.06, 1.0);
+    gl.clearColor(
+      this.voidColor[0] / 255,
+      this.voidColor[1] / 255,
+      this.voidColor[2] / 255,
+      1.0,
+    );
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.BLEND);
     if (pe.terrain) this.terrainPass.draw(cam);
@@ -2087,6 +2460,7 @@ export class GPURenderer {
    * что остаётся дешёвая линковка. Идемпотентно: `??=` внутри геттеров.
    */
   warmLazyPasses(): void {
+    if (GPURenderer.safeMode) return; // terron 05.09: щадящий режим — тяжёлое не греем
     try {
       // Всё «ядерное» — заранее: блум радиоактивного следа, траектория и
       // телеграф ракеты. Иначе первый же пуск собирал бы их на лету (запрос
@@ -2108,7 +2482,7 @@ export class GPURenderer {
     }
     if (typeof window !== "undefined") {
       for (const ev of this.activityEvents) {
-        window.removeEventListener(ev, this.bumpActivity);
+        window.removeEventListener(ev, this.bumpInteract);
       }
     }
     this.terrainPass.dispose();
@@ -2155,6 +2529,12 @@ export class GPURenderer {
     this.skinAtlas.dispose();
     this.gl.deleteFramebuffer(this.sceneTarget.fbo);
     this.gl.deleteTexture(this.sceneTarget.tex);
+    this.mapStylePass?.dispose();
+    if (this.styleTarget !== null) {
+      this.gl.deleteFramebuffer(this.styleTarget.fbo);
+      this.gl.deleteTexture(this.styleTarget.tex);
+      this.styleTarget = null;
+    }
     this.lastUnits = new Map();
     this.lastStructures = new Map();
   }

@@ -1,5 +1,5 @@
 import { Game, Player } from "../game/Game";
-import { GameMap, GameMapImpl, TileRef } from "../game/GameMap";
+import { GameMap, TileRef } from "../game/GameMap";
 import { TrainStation } from "../game/TrainStation";
 import { AStarRail } from "./algorithms/AStar.Rail";
 import { AStarWater } from "./algorithms/AStar.Water";
@@ -157,7 +157,7 @@ export class PathFinding {
  * waterGraphVersion to stagger when each ship invalidates its cached path.
  */
 export class WaterPathFinder implements SteppingPathFinder<TileRef> {
-  private stepper: SteppingPathFinder<TileRef>;
+  private stepper: PathFinderStepper<TileRef>;
   private _waterGraphVersion: number;
   private _rebuilt = false;
 
@@ -232,6 +232,13 @@ export class WaterPathFinder implements SteppingPathFinder<TileRef> {
   findPath(from: TileRef | TileRef[], to: TileRef): TileRef[] | null {
     this.ensureFresh();
     return this.stepper.findPath(from, to);
+  }
+
+  /** terron 04.09 ПЕРФ: см. PathFinderStepper.remainingPath. Свежесть не
+   *  дёргаем: зовётся сразу после next(), который её уже проверил, а
+   *  пересборка здесь обнулила бы кэш и вернула null без пользы. */
+  remainingPath(from: TileRef, to: TileRef): TileRef[] | null {
+    return this.stepper.remainingPath(from, to);
   }
 
   invalidate(): void {

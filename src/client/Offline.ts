@@ -53,13 +53,19 @@ export const BUNDLED_OFFLINE_MAPS = new Set([
   "japan",
 ]);
 
-// Доступна ли карта офлайн за счёт нативного бандла (только в Capacitor-апке).
+// Доступна ли карта офлайн за счёт вшитого бандла.
+// ⚠️ Наборов ДВА, и путать их нельзя: в мобильной апке вшиты 7 карт (там лимит
+// на вес приложения), в десктопной обёртке (Steam) — ВСЕ, и она сообщает об этом
+// сама (`terronDesktop.bundledMaps === "all"`, см. desktop/preload.js). Спрашивать
+// у клиента, «а какая тут платформа», второй раз незачем — источник один.
 export function isBundledOfflineMap(key: string): boolean {
   try {
-    const cap = (
-      window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
-    ).Capacitor;
-    return !!cap?.isNativePlatform?.() && BUNDLED_OFFLINE_MAPS.has(key);
+    const w = window as unknown as {
+      Capacitor?: { isNativePlatform?: () => boolean };
+      terronDesktop?: { bundledMaps?: string };
+    };
+    if (w.terronDesktop?.bundledMaps === "all") return true;
+    return !!w.Capacitor?.isNativePlatform?.() && BUNDLED_OFFLINE_MAPS.has(key);
   } catch {
     return false;
   }

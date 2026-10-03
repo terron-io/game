@@ -3,6 +3,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { assetUrl } from "../../../core/AssetUrls";
 import { EventBus } from "../../../core/EventBus";
 import {
+  FUEL_AFFECTED_UNITS,
+  fuelSpeedFrom,
+} from "../../../core/game/FuelSpeed";
+import {
   PlayerProfile,
   PlayerType,
   Relation,
@@ -12,9 +16,9 @@ import {
 import { TileRef } from "../../../core/game/GameMap";
 import { AllianceView } from "../../../core/game/GameUpdates";
 import { GameView, PlayerView, UnitView } from "../../../core/game/GameView";
+import { NAME_TWO_LINE_THRESHOLD, splitClanName } from "../../../core/Util";
 import { Controller } from "../../Controller";
 import { flagImageUrl, flagImageUrlSync } from "../../Cosmetics";
-import { unitMeta } from "../../UnitCatalog";
 import {
   ContextMenuEvent,
   MouseMoveEvent,
@@ -22,9 +26,10 @@ import {
 } from "../../InputHandler";
 import { themeProvider } from "../../theme/ThemeProvider";
 import { TransformHandler } from "../../TransformHandler";
-import { unitNameI18nKey } from "../../UnitCatalog";
+import { unitMeta, unitNameI18nKey } from "../../UnitCatalog";
 import {
   getTranslatedPlayerTeamLabel,
+  isDevSite,
   renderDuration,
   renderNumber,
   renderTroops,
@@ -40,21 +45,9 @@ import { ImmunityBarVisibleEvent } from "./ImmunityTimer";
 import { CloseRadialMenuEvent } from "./RadialMenu";
 import "./RelationSmiley";
 import { SpawnBarVisibleEvent } from "./SpawnTimer";
-import { fuelSpeedMult } from "../../../core/game/FuelSpeed";
-import type { Player } from "../../../core/game/Game";
-import {
-  NAME_TWO_LINE_THRESHOLD,
-  splitClanName,
-} from "../../../core/Util";
-import { isDevSite } from "../../Utils";
+import { VictoryBarVisibleEvent } from "./VictoryTimer";
 
 /** terron: юниты, на которых распространяется пассив Топлива (FUEL.md). */
-const FUEL_AFFECTED: UnitType[] = [
-  UnitType.Warship,
-  UnitType.TradeShip,
-  UnitType.TransportShip,
-  UnitType.Train,
-];
 const soldierIconAquarius = assetUrl("images/SoldierIconAquarius.svg");
 const allianceIcon = assetUrl("images/AllianceIcon.svg");
 const warshipIcon = assetUrl("images/BattleshipIconWhite.svg");
@@ -136,11 +129,20 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
   private spawnBarVisible = false;
   @state()
   private immunityBarVisible = false;
+  // terron 01.09: победная полоса тоже участвует в стеке сверху — иначе панель
+  // накрывает её плашку и игрок не читает, кто и через сколько побеждает.
+  // Высоту сообщает сама полоса (она её меряет), константы тут нет намеренно.
+  @state()
+  private victoryBarPx = 0;
 
   private _isActive = false;
 
   private get barOffset(): number {
-    return (this.spawnBarVisible ? 7 : 0) + (this.immunityBarVisible ? 7 : 0);
+    return (
+      (this.spawnBarVisible ? 7 : 0) +
+      (this.immunityBarVisible ? 7 : 0) +
+      this.victoryBarPx
+    );
   }
 
   private lastMouseUpdate = 0;
@@ -159,6 +161,9 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
     });
     this.eventBus.on(ImmunityBarVisibleEvent, (e) => {
       this.immunityBarVisible = e.visible;
+    });
+    this.eventBus.on(VictoryBarVisibleEvent, (e) => {
+      this.victoryBarPx = e.visible ? e.heightPx : 0;
     });
     this._isActive = true;
   }
@@ -334,7 +339,7 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
     if (!meta) return html``;
     const name = translateText("unit_type." + meta.key);
     return html`<span
-      class="inline-flex items-center gap-1 px-1 py-0.5 rounded-sm border border-yellow-500/60 bg-yellow-600/20 text-[11px] font-bold text-yellow-200"
+      class="inline-flex shrink-0 items-center gap-1 px-1 py-0.5 rounded-sm border border-yellow-500/60 bg-yellow-600/20 text-[11px] font-bold text-yellow-200"
       title=${name}
     >
       <img src=${meta.icon} class="w-4 h-4" alt="" />
@@ -431,7 +436,7 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
         <!-- Right: Player identity + Units below -->
         <div class="flex flex-col justify-between self-stretch">
           <div
-            class="flex items-center gap-2 font-bold text-sm lg:text-lg ${this.getPlayerNameColor(
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 font-bold text-sm lg:text-lg ${this.getPlayerNameColor(
               isFriendly ?? false,
             )}"
           >
@@ -626,15 +631,37 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
             // кораблей нет» проверить было нечем: скорость на глаз не мерится,
             // а владелец лодки под курсором может быть вообще чужим (на его
             // скринах наведение было на ТОРГОВЫЙ КОРАБЛЬ СОСЕДА).
-            isDevSite() && FUEL_AFFECTED.includes(unit.type())
+            isDevSite() && FUEL_AFFECTED_UNITS.includes(unit.type())
               ? html`<div class="text-xs opacity-70 mt-1">
-                  скорость ×${fuelSpeedMult(unit.owner() as unknown as Player)}
+                  скорость
+                  ×${fuelSpeedFrom(
+                    unit.owner().hasUltimate(UnitType.Fuel),
+                    this.industrialOn(unit.owner()),
+                  )}
                 </div>`
               : ""
           }
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Идёт ли у ЭТОГО игрока «Индустриальная революция» — глазами клиента.
+   *
+   * ⚠️ Флаг живёт ТОЛЬКО в симуляции (`PlayerImpl._industrialUntil`) и клиенту
+   * не едет вовсе, поэтому спросить игрока напрямую нельзя. Зато каст ставит на
+   * карту здание-маркер, и оно видно всем.
+   * ⚠️ Маркер принадлежит КАСТЕРУ, а стоит на земле ЦЕЛИ (каст наводится и на
+   * чужую страну) — значит «чей баф» читается по ВЛАДЕЛЬЦУ ТАЙЛА под маркером,
+   * а не по владельцу маркера. Перепутать здесь легко и незаметно.
+   * ⚠️ Диагностика дев-тултипа: под туманом/Закрытой страной маркера может быть
+   * не видно, и подсказка честно покажет скорость без каста.
+   */
+  private industrialOn(p: PlayerView): boolean {
+    return this.game
+      .units(UnitType.IndustrialRevolution)
+      .some((m) => this.game.owner(m.tile()) === p);
   }
 
   render() {

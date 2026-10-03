@@ -93,7 +93,13 @@ export interface PlayerState {
   ultReligionTiles?: number;
   ultReligionTithe?: number;
   ultWaterTiles?: number; // terron: ультимейты — «Реки вспять»
+  ultLandTiles?: number; // terron: терраформинг — «Насыпь»
   aggressors?: number[]; // terron: РЕВАНШИЗМ — кто напал первым
+  // terron 26.08: РЕВАНШИЗМ — живые показания (ховер статуи + тултип слота).
+  // undefined = монумента нет, показывать нечего.
+  revanchismLevel?: number;
+  revanchismSlowPct?: number;
+  revanchismLostPct?: number;
   // terron: ультимейты — Раскол: маркер одной цифры-таймера спасения Т (или null).
   splitRescue?: { x: number; y: number; w: number; expiry: number } | null;
 }

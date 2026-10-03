@@ -1,6 +1,4 @@
 import { html, LitElement, TemplateResult } from "lit";
-import { actionCooldown } from "../../Cooldowns";
-import { cooldownOverlay } from "../CooldownBadge";
 import { customElement } from "lit/decorators.js";
 import { assetUrl } from "../../../core/AssetUrls";
 import { EventBus } from "../../../core/EventBus";
@@ -9,8 +7,10 @@ import {
   BuildableUnit,
   CAST_UNLOCKED_BY,
   Gold,
+  Nukes,
   PlayerActions,
   Structures,
+  ULTIMATE_REGISTRY,
   Ultimates,
   UnitType,
 } from "../../../core/game/Game";
@@ -18,11 +18,13 @@ import { TileRef } from "../../../core/game/GameMap";
 import { GameView, PlayerView } from "../../../core/game/GameView";
 import { AimLayout, UserSettings } from "../../../core/game/UserSettings";
 import { Controller } from "../../Controller";
+import { actionCooldown } from "../../Cooldowns";
 import { ContextMenuEvent, MouseUpEvent, TouchEvent } from "../../InputHandler";
 import { TransformHandler } from "../../TransformHandler";
 import { UIState } from "../../UIState";
-import { unitIcon, unitNameI18nKey } from "../../UnitCatalog";
+import { buttonFor } from "../../UltSlots";
 import { L, renderNumber, translateText } from "../../Utils";
+import { cooldownOverlay } from "../CooldownBadge";
 import { BuildMenu } from "./BuildMenu";
 import { PlayerActionHandler } from "./PlayerActionHandler";
 
@@ -77,12 +79,26 @@ const ATTACK_ORDER: readonly UnitType[] = [
   UnitType.SuicideDrone,
 ];
 
-/** Необратимое — держать втрое дольше. */
-const DANGEROUS: ReadonlySet<UnitType> = new Set([
-  UnitType.AtomBomb,
-  UnitType.HydrogenBomb,
-  UnitType.MIRV,
-  UnitType.WaterNuke,
+/**
+ * terron 25.08: слотовые касты ульт — те, что встают в ЗОЛОТУЮ кнопку.
+ * Дополнительные (`extraCasts`) занимают чужие слоты и сюда не попадают.
+ */
+const PRIMARY_CASTS: ReadonlySet<UnitType> = new Set(
+  ULTIMATE_REGISTRY.map((u) => u.cast?.type).filter(
+    (t): t is UnitType => t !== undefined,
+  ),
+);
+
+/**
+ * Необратимое — держать втрое дольше.
+ *
+ * ⚠️ Ядерное берём ГРУППОЙ `Nukes` из ядра, а не перечислением: список ракет
+ * растёт (Терраформинг добавил сразу три), и забытая ракета получила бы
+ * обычное короткое удержание — то есть срабатывала бы от случайного тычка.
+ * Руками дописано только неядерное необратимое.
+ */
+const DANGEROUS: ReadonlySet<UnitType> = new Set<UnitType>([
+  ...Nukes.types,
   UnitType.SatelliteStrike,
   UnitType.Split,
   UnitType.SuicideDrone,
@@ -250,7 +266,10 @@ export class AimControl extends LitElement implements Controller {
       if (Ultimates.has(bu.type) && Structures.has(bu.type)) {
         this.ultType = bu.type;
       }
-      if (CAST_UNLOCKED_BY[bu.type] !== undefined) {
+      // terron 25.08: в золотой слот берём ТОЛЬКО слотовый каст ульты. С
+      // Терраформингом кастов три, и без этой проверки в золотую кнопку
+      // попадал бы тот, что встретился последним.
+      if (PRIMARY_CASTS.has(bu.type)) {
         this.castType = bu.type;
       }
     }
@@ -336,13 +355,26 @@ export class AimControl extends LitElement implements Controller {
     return this.actions?.buildableUnits?.find((b) => b.type === t);
   }
 
-  private unitItem(t: UnitType, gold = false): PadItem {
+  /**
+   * Одна кнопка панели прицеливания.
+   *
+   * ⚠️ terron 01.09: `slot` — то, что стоит в раскладке; ЧТО ОНО НА САМОМ ДЕЛЕ
+   * показывает и строит, решает `buttonFor` — он знает ОБЕ подмены ульты
+   * (чужой слот кастом и подмену самого юнита). Раньше здесь брались голые
+   * `unitIcon`/`unitNameI18nKey`, и на телефоне у Пиратства кнопка корабля
+   * показывала линкор с подписью «Боевой корабль» — ровно тот репорт, который
+   * для радиала уже чинили 23.08.
+   */
+  private unitItem(slot: UnitType, gold = false): PadItem {
+    const hasUlt = (u: UnitType) =>
+      this.game.myPlayer()?.hasUltimate(u) ?? false;
+    const btn = buttonFor(slot, hasUlt);
+    const t = btn.type;
     const bu = this.buildable(t);
-    const key = unitNameI18nKey(t);
     return {
       id: "u:" + t,
-      label: key ? translateText(key) : String(t),
-      icon: unitIcon(t) ?? "",
+      label: translateText(btn.nameKey),
+      icon: btn.icon,
       cost: bu?.cost ?? null,
       enabled:
         bu !== undefined && (bu.canBuild !== false || bu.canUpgrade !== false),
@@ -369,6 +401,23 @@ export class AimControl extends LitElement implements Controller {
       const item = this.unitItem(this.ultType, true);
       if (!own) item.enabled = false;
       gold.push(item);
+    }
+    // terron 31.08 (репорт: «Топливо на себя нельзя, спутник не отправить»):
+    // касты живут в пачке АТАК, а она на своей земле не показывается вовсе —
+    // поэтому каст, который ядро разрешает по СВОЕЙ земле, с телефона применить
+    // было невозможно. Таких два: «Индустриальная революция» (Топливо, цель —
+    // любой игрок, ВКЛЮЧАЯ себя) и «Сбить спутники» (Небо: носитель ставится на
+    // своей земле). На десктопе они работали — там панель берёт пункты из
+    // каталога, а не из деления «своя земля / чужая».
+    //
+    // ⚠️ Признак «можно ли сюда» берём У СЕРВЕРА (`buildableUnits` для этого
+    // тайла), а не заводим второй список в клиенте: правило живёт в
+    // `PlayerImpl.canSpawnUnitType`, и копия здесь неизбежно бы с ним разъехалась.
+    if (own && this.castType !== null) {
+      const bu = this.buildable(this.castType);
+      if (bu !== undefined && bu.canBuild !== false) {
+        gold.push(this.unitItem(this.castType, true));
+      }
     }
     return { grid, gold };
   }
@@ -409,8 +458,12 @@ export class AimControl extends LitElement implements Controller {
         },
       },
     ];
-    for (const t of this.attackCatalog()) {
-      const item = this.unitItem(t);
+    for (const slot of this.attackCatalog()) {
+      // terron 25.08: ТЕРРАФОРМИНГ — кнопки обычных ядерок у владельца ульты
+      // показывают её ракеты («Насыпь» и «Ядерный удар»). Подмена делается
+      // ЗДЕСЬ, а не в каталоге: каталог считается один раз за матч, а ульту
+      // выбирают уже в бою. client/UltSlots.ts
+      const item = this.unitItem(slot);
       if (!foreign) item.enabled = false;
       grid.push(item);
     }

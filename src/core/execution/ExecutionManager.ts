@@ -1,4 +1,4 @@
-import { Execution, Game } from "../game/Game";
+import { Execution, Game, PlayerInfo, PlayerType } from "../game/Game";
 import { PseudoRandom } from "../PseudoRandom";
 import { ClientID, GameID, StampedIntent, Turn } from "../Schemas";
 import { simpleHash } from "../Util";
@@ -17,6 +17,12 @@ import { DonateTroopsExecution } from "./DonateTroopExecution";
 import { EmbargoAllExecution } from "./EmbargoAllExecution";
 import { EmbargoExecution } from "./EmbargoExecution";
 import { EmojiExecution } from "./EmojiExecution";
+import { FairBotExecution } from "./fairbot/FairBotExecution";
+import {
+  fairBotByKey,
+  fairBotPlayerId,
+  fairBotVersionOf,
+} from "./fairbot/FairBotRoster";
 import { MarkDisconnectedExecution } from "./MarkDisconnectedExecution";
 import { MoveWarshipExecution } from "./MoveWarshipExecution";
 import { NationExecution } from "./NationExecution";
@@ -146,6 +152,34 @@ export class Executor {
   // terron: авто-спавн людей, не выбравших место, по истечении грейса.
   spawnGraceAuto(): Execution {
     return new SpawnGraceAutoExecution(this.gameID);
+  }
+
+  /**
+   * terron 23.09: ЧЕСТНЫЕ БОТЫ матча (лобби /fair). Список персон едет в
+   * конфиге (GameConfig.fairBots, ставит сервер), поэтому у всех клиентов и в
+   * реплее боты одни и те же: то же имя, тот же id, тот же порядок. Незнакомый
+   * ключ (старая/чужая сборка) пропускаем, а не роняем матч.
+   */
+  fairBotExecutions(): Execution[] {
+    const keys = this.mg.config().gameConfig().fairBots ?? [];
+    const version = fairBotVersionOf(
+      this.mg.config().gameConfig().fairBotVersion,
+    );
+    const execs: Execution[] = [];
+    const seen = new Set<string>();
+    for (const key of keys) {
+      const persona = fairBotByKey(key);
+      if (persona === undefined || seen.has(key)) continue;
+      seen.add(key);
+      const info = new PlayerInfo(
+        persona.en,
+        PlayerType.Human,
+        null,
+        fairBotPlayerId(execs.length),
+      );
+      execs.push(new FairBotExecution(this.gameID, info, version));
+    }
+    return execs;
   }
 
   nationExecutions(): Execution[] {

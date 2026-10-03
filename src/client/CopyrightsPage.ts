@@ -7,7 +7,7 @@ import {
   showForkRules,
   type ForkVariant,
 } from "./ForkRules";
-import { L, translateText } from "./Utils";
+import { L, onPlatformSurface, translateText } from "./Utils";
 
 // terron: /copyrights — авторство и лицензии. Сохраняет требуемую атрибуцию
 // (© OpenFront LLC and contributors), показывает родословную жанра и ссылки на
@@ -44,38 +44,26 @@ export class CopyrightsPage extends BaseModal {
     </div>`;
   }
 
-  // terron: nofollow — со страницы авторства мы никуда не передаём вес и не
-  // подсказываем краулерам путь к репозиторию исходников. Полностью скрыть его
-  // от индексации нельзя (у публичных репозиториев GitHub такой настройки нет),
-  // но со своей стороны ссылку не скармливаем. SEO-смысла тут и так нет.
   private a(href: string, text: string): TemplateResult {
+    // terron 10.09: внутри площадки атрибуция остаётся ТЕКСТОМ (это условие
+    // лицензии, решение владельца), но не ссылкой — Яндекс 8.4.2 запрещает
+    // переходы наружу. На terron.io ссылки живые.
+    if (onPlatformSurface()) {
+      return html`<span class="t-link" style="cursor:default">${text}</span>`;
+    }
     // terron: ссылки на GitHub (наш репозиторий и апстрим) сначала показывают
     // памятку об условиях форка — см. ForkRules.ts. Обычный клик перехватываем,
     // но href оставляем настоящим: правый клик, «открыть в новой вкладке» и
     // краулеры должны видеть реальный адрес.
-    // Памятка форкнувшему — только на ВХОДАХ В РЕПОЗИТОРИИ. Документные
-    // ссылки (/blob/ — CREDITS.md и подобное) открываются напрямую: человек
-    // идёт ЧИТАТЬ атрибуцию, а не форкать, и экран согласия там неуместен.
-    // WarFront — тоже напрямую: он целиком MIT, предупреждать не о чем.
-    const isRepo =
-      /github\.com/i.test(href) &&
-      !/\/blob\//i.test(href) &&
-      !/WarFrontIO/i.test(href);
+    const isRepo = /github\.com/i.test(href);
     // MIT-точки входа апстрима (ссылки на конкретные коммиты до смены лицензии)
     // получают ДРУГУЮ памятку: там обязательств почти нет, и человеку честнее
     // сказать «делаешь своё — начинай отсюда», чем пугать копилефтом.
-    // Выбор памятки по адресату: MIT-коммиты → без галочек; наш репозиторий →
-    // список с НАШИМ нотисом (© TERRON.io) и без MIT-подсказки (у TERRON
-    // MIT-входа нет); всё остальное на github — репозиторий апстрима.
-    const variant: ForkVariant = /\/commit\//i.test(href)
-      ? "mit"
-      : /terron-io\//i.test(href)
-        ? "ours"
-        : "upstream";
+    const variant: ForkVariant = /\/commit\//i.test(href) ? "mit" : "agpl";
     return html`<a
       href=${href}
       target="_blank"
-      rel="noopener noreferrer nofollow"
+      rel="noopener noreferrer"
       class="t-link"
       @click=${isRepo
         ? (e: MouseEvent) => {
@@ -112,7 +100,7 @@ export class CopyrightsPage extends BaseModal {
         <b>WarFront.io</b> ${L("(ранний открытый клон, MIT)", "(early open clone, MIT)")} →
         <b>OpenFront.io</b>
         ${L("(© OpenFront LLC, сейчас AGPLv3)", "(© OpenFront LLC, now AGPLv3)")} →
-        <b>TERRON.io</b> ${L("(этот форк)", "(this fork)")}
+        <b>TERRON.io</b> ${L("(этот форк, СНГ)", "(this fork, CIS)")}
       </div>
 
       ${this.section(L("Атрибуция (по лицензии)", "Attribution (per license)"))}
@@ -120,29 +108,8 @@ export class CopyrightsPage extends BaseModal {
         <li>${L("Код игры: © OpenFront LLC and contributors, WarFront.io Team.", "Game code: © OpenFront LLC and contributors, WarFront.io Team.")}</li>
         <li>${L("Лицензия кода: GNU AGPLv3.", "Code license: GNU AGPLv3.")}</li>
         <li>${L("Ассеты (resources/): Creative Commons BY-SA 4.0 — «OpenFront» / «OpenFront Inc.».", "Assets (resources/): Creative Commons BY-SA 4.0 — “OpenFront” / “OpenFront Inc.”.")}</li>
-        <li>
-          ${L("Изменения, дополнения и собственные ассеты TERRON: ", "TERRON's changes, additions and original assets: ")}
-          <b>© TERRON.io</b>
-          ${L("(перечень — ниже).", "(listed below).")}
-        </li>
+        <li>${L("Изменения, дополнения и собственные ассеты TERRON: © TERRON.io (перечень — ниже).", "TERRON's changes, additions and original assets: © TERRON.io (listed below).")}</li>
       </ul>
-
-      <!-- terron: НАШЕ требование по §7(b). Апстрим таким же блоком в LICENSE
-           требует сохранять «© OpenFront and Contributors»; мы вправе поступить
-           так же со СВОИМ вкладом — §7 прямо разрешает добавлять условия «for
-           material you add to a covered work». ⚠️ Область строго ограничена:
-           на код апстрима наши условия НЕ распространяются. Полный текст —
-           NOTICE.md в репозитории исходников. Чтобы требование действовало,
-           оно должно быть ВИДНО — потому и стоит здесь, а не только в файле. -->
-      <div
-        style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--t-sheet);border-left:3px solid var(--t-red,#a8432b)"
-      >
-        <b>${L("Форкаешь TERRON?", "Forking TERRON?")}</b>
-        ${L(
-          "Сохрани «© TERRON.io» рядом с уведомлениями апстрима — это дополнительное условие по §7(b) AGPL на наш собственный вклад. И помни: имя и логотип лицензия не даёт — ни AGPL, ни MIT.",
-          "Keep “© TERRON.io” alongside the upstream notices — an AGPL Section 7(b) additional term covering TERRON's own contributions. And remember: no license grants a name or logo — neither AGPL nor MIT.",
-        )}
-      </div>
 
       ${this.section(L("Что добавил TERRON", "What TERRON added"))}
       <!-- terron: AGPL §5(a) требует ОБОЗНАЧАТЬ свои изменения, а не только
@@ -242,7 +209,7 @@ export class CopyrightsPage extends BaseModal {
       <ul style="margin:0;padding-left:18px;line-height:1.8">
         <li>
           <b>${L("Исходный код TERRON:", "TERRON source code:")}</b>
-          ${this.a(OUR_REPO, "github.com/terron-io/game")}
+          ${this.a(OUR_REPO, "github.com/terron-io/terron")}
           <span class="t-muted"
             >— ${L(
               "полный исходник этой версии (AGPLv3 §13)",
@@ -254,10 +221,6 @@ export class CopyrightsPage extends BaseModal {
         <li>
           ${L("MIT-точки входа:", "MIT entry points:")}
           ${this.a(MIT_COMMIT_1, "9866dbb")}, ${this.a(MIT_COMMIT_2, "9d5c108")}
-        </li>
-        <li>
-          ${L("Предок жанра (целиком MIT):", "Genre ancestor (MIT in full):")}
-          ${this.a("https://github.com/WarFrontIO", "github.com/WarFrontIO")}
         </li>
         <li>${L("Первоисточник жанра:", "Genre origin:")} ${this.a(TERRITORIAL, "territorial.io")}</li>
       </ul>

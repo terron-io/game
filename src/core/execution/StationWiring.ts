@@ -23,6 +23,19 @@ const FACTORY_NEIGHBORS: UnitType[] = [
   UnitType.Airport,
 ];
 
+/**
+ * Здания, которым в принципе положена станция: соседи фабрики + всё, что само
+ * работает как фабрика (Депо смерти объявлено через `actsAs`).
+ *
+ * ⚠️ terron 31.08 — ЭКСПОРТИРУЕТСЯ РАДИ КЛИЕНТА. Гост стройки рисует будущие
+ * рельсы по своему списку, и тот отстал: аэропорта в нём не было, хотя сим его
+ * к сети подключает. Игрок ставил аэропорт у фабрики и рельсов в превью не
+ * видел — то есть превью врало о последствиях постройки.
+ */
+export function stationCapableTypes(): UnitType[] {
+  return [...new Set([...FACTORY_NEIGHBORS, ...actingAs(UnitType.Factory)])];
+}
+
 /** Здание «работает как фабрика» (Депо смерти объявлено через actsAs). */
 function isFactoryLike(unit: Unit): boolean {
   return actingAs(UnitType.Factory).includes(unit.type());

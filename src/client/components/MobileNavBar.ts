@@ -2,8 +2,10 @@ import { html, LitElement, TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { isLoggedIn } from "../Auth";
 import { navPath } from "../Navigation";
+import { Host } from "../PlatformHost";
 import { hasReferral } from "../Referral";
-import { brandWordmark, isItchEmbed, L, translateText } from "../Utils";
+import { L, translateText } from "../Utils";
+import { brandLogo } from "./ui/brandLogo";
 import { NavNotificationsController } from "./NavNotificationsController";
 
 @customElement("mobile-nav-bar")
@@ -28,6 +30,10 @@ export class MobileNavBar extends LitElement {
     window.addEventListener("showPage", this._onShowPage);
     // Адреса разделов появляются после регистрации роутера — перерисуемся.
     window.addEventListener("nav-paths-ready", this._onNavPaths);
+    // terron 09.09: словарь площадки едет кросс-доменно и может прийти позже
+    // таймеров ниже — логотип остался бы на фолбэке «terron» (модерация Яндекса:
+    // «название на английском» в шапке). Перерисовываемся по факту прихода.
+    window.addEventListener("terron-lang-loaded", this._onNavPaths);
     window.addEventListener("terron-auth-changed", this._onAuthChanged);
     window.addEventListener("gp-login-pending", this._onLoginPending);
     window.addEventListener("gp-login-done", this._onLoginDone);
@@ -51,6 +57,7 @@ export class MobileNavBar extends LitElement {
     super.disconnectedCallback();
     window.removeEventListener("showPage", this._onShowPage);
     window.removeEventListener("nav-paths-ready", this._onNavPaths);
+    window.removeEventListener("terron-lang-loaded", this._onNavPaths);
     window.removeEventListener("terron-auth-changed", this._onAuthChanged);
     window.removeEventListener("gp-login-pending", this._onLoginPending);
     window.removeEventListener("gp-login-done", this._onLoginDone);
@@ -128,7 +135,7 @@ export class MobileNavBar extends LitElement {
                   softHome(),
                 );
               }}
-              >${brandWordmark()}</a
+              >${brandLogo()}</a
             >
             <div
               id="game-version"
@@ -137,7 +144,7 @@ export class MobileNavBar extends LitElement {
           </div>
         </div>
         <!-- Mobile Navigation Menu Items -->
-        ${isItchEmbed()
+        ${Host.isItch()
           ? html`<a
               class="nav-menu-item nav-openout block w-full text-left font-bold uppercase tracking-[0.05em] text-[clamp(18px,2.8vh,32px)] py-[clamp(0.2rem,0.8vh,0.75rem)]"
               href="https://terron.io/?utm_source=itchio&utm_medium=embed"

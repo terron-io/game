@@ -19,6 +19,15 @@ import {
   createTexture2D,
   shaderSrc,
 } from "../utils/GlUtils";
+import { buildStyledTerrainLut } from "../utils/TerrainPalette";
+import type { TerrainPalette } from "../VisualStyles";
+
+/** Родной LUT (PastelTheme) — 256 вариантов байта рельефа. */
+function defaultTerrainLut(): Uint8Array {
+  const lut = new Uint8Array(256 * 4);
+  for (let b = 0; b < 256; b++) encodeTerrainTile(b, lut, b * 4);
+  return lut;
+}
 
 // ---------------------------------------------------------------------------
 // TerrainPass
@@ -32,6 +41,7 @@ export class TerrainPass {
   private vao: WebGLVertexArrayObject;
   private uCamera: WebGLUniformLocation;
   private mapW: number;
+  private mapH: number;
   // Scratch buffer for 1×1 sub-uploads; reused across applyTerrainDelta calls.
   private readonly byteScratch = new Uint8Array(1);
 
@@ -42,6 +52,7 @@ export class TerrainPass {
     mapH: number,
   ) {
     this.mapW = mapW;
+    this.mapH = mapH;
     this.tex = terrainTex;
     this.program = createProgram(
       gl,
@@ -55,17 +66,13 @@ export class TerrainPass {
 
     // LUT: все 256 вариантов terrain-байта → RGBA-цвет (та же функция, что
     // раньше красила весь массив на CPU — теперь 256 вызовов вместо 4М+).
-    const lut = new Uint8Array(256 * 4);
-    for (let b = 0; b < 256; b++) {
-      encodeTerrainTile(b, lut, b * 4);
-    }
     this.lutTex = createTexture2D(gl, {
       width: 256,
       height: 1,
       internalFormat: gl.RGBA8,
       format: gl.RGBA,
       type: gl.UNSIGNED_BYTE,
-      data: lut,
+      data: defaultTerrainLut(),
       filter: gl.NEAREST,
     });
 
@@ -75,6 +82,32 @@ export class TerrainPass {
   /** LUT байт→цвет — FogPass красит ею приглушённый рельеф под туманом. */
   getLutTex(): WebGLTexture {
     return this.lutTex;
+  }
+
+  /**
+   * terron (визуальные стили): подменить палитру рельефа. `null` — родная
+   * (классика, байт-в-байт прежние цвета).
+   *
+   * ⚠️ Перезаливаем ТУ ЖЕ текстуру, а не создаём новую: на неё уже смотрит
+   * FogPass (рельеф под туманом) — новый объект он бы не увидел, и под туманом
+   * осталась бы палитра прошлого стиля.
+   */
+  setPalette(palette: TerrainPalette | null): void {
+    const gl = this.gl;
+    const lut = palette ? buildStyledTerrainLut(palette) : defaultTerrainLut();
+    gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      256,
+      1,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      lut,
+    );
   }
 
   /**
@@ -104,6 +137,31 @@ export class TerrainPass {
         this.byteScratch,
       );
     }
+  }
+
+  /**
+   * terron 13.09: вся карта ОДНИМ вызовом — для перезаливки после потери
+   * GL-контекста. Раньше туда шла applyTerrainDelta со ВСЕМИ тайлами: 3–8 млн
+   * texSubImage2D по пикселю. Страница висела минутами, GPU-процесс захлёбывался
+   * и контекст умирал второй раз прямо на пересборке (на маке владельца это
+   * дважды уронило систему целиком). `bytes` — байт рельефа на КАЖДЫЙ тайл.
+   */
+  uploadFullTerrain(bytes: Uint8Array): void {
+    if (bytes.length < this.mapW * this.mapH) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      this.mapW,
+      this.mapH,
+      gl.RED_INTEGER,
+      gl.UNSIGNED_BYTE,
+      bytes,
+    );
   }
 
   /** Render the terrain. Call with depth test disabled, no blending. */

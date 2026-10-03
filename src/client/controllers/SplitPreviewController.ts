@@ -15,6 +15,7 @@ import {
   TERRON_BLOCKADE_PORT_RANGE,
   TERRON_CAPTURED_ULT_SELFDESTRUCT_TICKS,
   TERRON_INDUSTRIAL_TICKS,
+  TERRON_OURSKY_BUILD_TICKS,
   TERRON_PIRACY_SHIP_COOLDOWN_TICKS,
   TERRON_RAILGUN_RANGE,
   TERRON_SPLIT_ASPECT_H,
@@ -1061,9 +1062,22 @@ export class SplitPreviewController implements Controller {
       //   Вынесенный на два спрайта в сторону, отсчёт читается как отдельный
       //   объект — репорт владельца «точка с таймером очень далеко от здания».
       const far = e.kind === "cooldown";
-      const sx = p.x + tsize * (far ? 5.2 : 1.6);
-      const sy = p.y - tsize * (far ? 4.0 : 1.2);
+      // ⚠️ 01.09 (репорт владельца «таймер разве в этой точке рисуется?»):
+      // ульты и их касты рисуются ЗВЕЗДОЙ вдвое крупнее обычного здания, и
+      // отступ 1.6 тайла клал значок ПРЯМО НА спрайт — он закрывал иконку.
+      // У крупных спрайтов отступ тоже вдвое: значок садится сразу за лучом.
+      const near = e.big === true ? 3.2 : 1.6;
+      const nearY = e.big === true ? 2.4 : 1.2;
       const fontPx = Math.max(8, badge);
+      // ⚠️ 06.09 (репорт Smart: «таймеры улетают от своих объектов при
+      // масштабировании карты»): отступ задан в ТАЙЛАХ, и на приближении
+      // 5.2 тайла превращались в сотни пикселей — значок читался как отдельный
+      // объект где-то в стороне. Держим отступ в тайлах (значок ездит вместе с
+      // картой), но ЗАЖИМАЕМ его в экранных пикселях по размеру самого значка.
+      const off = (tiles: number): number =>
+        Math.min(tsize * tiles, Math.max(24, fontPx * 3));
+      const sx = p.x + off(far ? 5.2 : near);
+      const sy = p.y - off(far ? 4.0 : nearY);
       const danger = e.kind === "danger";
       const fill = danger
         ? "#ff4d4d"
@@ -1123,12 +1137,14 @@ export class SplitPreviewController implements Controller {
     remaining: number;
     total: number;
     kind: "danger" | "cooldown" | "buff";
+    big?: boolean;
   }[] {
     const out: {
       tile: TileRef;
       remaining: number;
       total: number;
       kind: "danger" | "cooldown" | "buff";
+      big?: boolean;
     }[] = [];
     const now = this.game.ticks();
 
@@ -1146,6 +1162,7 @@ export class SplitPreviewController implements Controller {
             remaining,
             total: TERRON_CAPTURED_ULT_SELFDESTRUCT_TICKS,
             kind: "danger",
+            big: true,
           });
         }
       }
@@ -1163,6 +1180,24 @@ export class SplitPreviewController implements Controller {
         remaining: left,
         total: TERRON_INDUSTRIAL_TICKS,
         kind: "buff",
+        big: true,
+      });
+    }
+
+    // (1.7) terron 01.09: НОСИТЕЛЬ «НЕБА НАШЕГО» — минуту собирается, и это
+    // телеграф: отсчёт обязаны видеть ВСЕ, потому что снести носитель и есть
+    // контрплей. Без цифры каст читался как «ничего не произошло» — минуту на
+    // экране не менялось ровным счётом ничего (репорт владельца и тестера).
+    for (const u of this.game.units(UnitType.SatelliteStrike)) {
+      if (!u.isActive()) continue;
+      const left = u.railEta();
+      if (left <= 0) continue;
+      out.push({
+        tile: u.tile(),
+        remaining: left,
+        total: TERRON_OURSKY_BUILD_TICKS,
+        kind: "danger",
+        big: true,
       });
     }
 

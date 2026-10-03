@@ -41,6 +41,18 @@ const HOST_TO_SLUG: Array<[string[], string]> = [
   [["boosty.to"], "boosty"],
 ];
 
+/**
+ * terron 22.09: плоский список хостов белого списка — его зеркалит серверный
+ * `platform-api/src/chats.ts` (LINK_HOST_WHITELIST): ссылки в ЛС/чате клана
+ * разрешены ТОЛЬКО на эти соцсети. Сторож в тестах сверяет оба списка.
+ */
+export const SOCIAL_HOSTS: string[] = HOST_TO_SLUG.flatMap(([d]) => d);
+
+/** Разрешён ли хост в чатах (белый список соцсетей, с поддоменами). */
+export function socialHostAllowed(host: string): boolean {
+  return slugForHost(host) !== null;
+}
+
 function slugForHost(host: string): string | null {
   const h = host.toLowerCase().replace(/^www\./, "");
   for (const [domains, slug] of HOST_TO_SLUG) {

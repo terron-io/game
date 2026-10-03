@@ -200,6 +200,10 @@ export const PublicGameTypeSchema = z.enum([
   "special",
   "golden",
   "diamond",
+  // terron 23.09: лобби честных ботов (/fair, ТОЛЬКО ДЕВ): по расписанию, как
+  // золотое, но без награды; в матче FAIR_BOTS_PER_MATCH честных ботов
+  // (new-units/FAIRBOT.md). Мастер держит его лишь при TERRON_ENV=dev.
+  "fair",
 ]);
 
 export const UsernameSchema = z
@@ -376,6 +380,23 @@ export const GameConfigSchema = z.object({
   // клиента: цифру крутят переменной окружения игрового сервера, и бандл ради
   // этого пересобирать незачем. Ставит и перезаписывает ТОЛЬКО сервер.
   eventRewardPts: z.number().int().min(1).max(500).optional(),
+  // terron 26.09: ВЕЧЕРНИЙ АЛМАЗНЫЙ (TerronTuning §ВЕЧЕРНИЙ). "team" — 2 команды,
+  // eventRewardPts тогда ПУЛ на победившую команду, а eventRewardCapPts —
+  // потолок на человека; "solo" — обычный ффа. Ставит ТОЛЬКО сервер.
+  eventEvening: z.enum(["team", "solo"]).optional(),
+  eventRewardCapPts: z.number().int().min(1).max(500).optional(),
+  // terron 23.09: ЧЕСТНЫЕ БОТЫ матча — ключи персон из FairBotRoster (имя,
+  // флаг, скин). Ставит ТОЛЬКО сервер лобби /fair (гард в конструкторе
+  // GameServer, в HOST_UPDATABLE_CONFIG_KEYS поля нет): едет в конфиге, чтобы
+  // все клиенты и реплей создали ботов одинаково. new-units/FAIRBOT.md
+  fairBots: z
+    .array(z.string().regex(/^[a-z_]{2,24}$/))
+    .max(8)
+    .optional(),
+  // terron 23.09: ВЕРСИЯ мозга честных ботов (FairBotRoster.FAIR_BOT_VERSIONS).
+  // Ставит тот же сервер лобби /fair. Нет поля (старые реплеи) = v1: мозг
+  // обязан быть тем, с которым матч играли, иначе реплей разъедется.
+  fairBotVersion: z.number().int().min(1).max(2).optional(),
   disableAlliances: z.boolean().nullable().optional(),
   disableClanTags: z.boolean().optional(),
   waterNukes: z.boolean().nullable().optional(),
@@ -835,6 +856,13 @@ export const ServerStartGameMessageSchema = z.object({
   // The clientID assigned to this connection by the server.
   // Absent for replays where the viewer has no player identity.
   myClientID: ID.optional(),
+  // terron 28.09: отпечаток ядра, на котором матч НАЧАЛСЯ (сервер помнит его
+  // и после рестарта). Не совпал с отпечатком бандла клиента — игрок загрузил
+  // новую сборку посреди матча, его симуляция разойдётся с остальными.
+  coreHash: z.string().optional(),
+  // terron 28.09: отпечаток ядра ТЕКУЩЕЙ сборки сервера — присылается, только
+  // если он уже отличается от coreHash (обновление вышло посреди матча).
+  serverCoreHash: z.string().optional(),
 });
 
 export const ServerDesyncSchema = z.object({

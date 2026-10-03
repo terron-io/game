@@ -609,7 +609,9 @@ describe("NationStructureBehavior.sampleTilesNearFront", () => {
     // collects exactly `count` tiles before stopping. Each iteration produces
     // a distinct ref so we verify the cap, not deduplication.
     const player: any = {
-      borderTiles: () => [0],
+      // terron 04.09: граница — тайл-сентинел -999 с x=0, кандидаты x=50
+      // (TileDistanceIndex считает дистанцию по x/y, а не через manhattanDist).
+      borderTiles: () => [-999],
       units: () => [],
       canBuild: () => true,
     };
@@ -618,7 +620,7 @@ describe("NationStructureBehavior.sampleTilesNearFront", () => {
       config: () => ({
         nukeMagnitudes: () => ({ outer: 50 }),
       }),
-      x: (t: number) => t,
+      x: (t: number) => (t === -999 ? 0 : 50),
       y: () => 0,
       isValidCoord: () => true,
       ref: () => nextRef++, // unique ref per call
@@ -641,13 +643,15 @@ describe("NationStructureBehavior.sampleTilesNearFront", () => {
   it("filters out tiles where canBuild returns false (phase 1 rejects all → falls through to fallback)", () => {
     const canBuild = vi.fn((_unitType: any, _tile: any) => false);
     const player: any = {
-      borderTiles: () => [0],
+      // terron 04.09: граница — тайл-сентинел -999 с x=0, кандидаты x=50
+      // (TileDistanceIndex считает дистанцию по x/y, а не через manhattanDist).
+      borderTiles: () => [-999],
       units: () => [],
       canBuild,
     };
     const game: any = {
       config: () => ({ nukeMagnitudes: () => ({ outer: 50 }) }),
-      x: (t: number) => t,
+      x: (t: number) => (t === -999 ? 0 : 50),
       y: () => 0,
       isValidCoord: () => true,
       ref: (x: number) => x,
@@ -667,13 +671,15 @@ describe("NationStructureBehavior.sampleTilesNearFront", () => {
   it("calls canBuild with the supplied unitType", () => {
     const canBuild = vi.fn((_unitType: any, _tile: any) => true);
     const player: any = {
-      borderTiles: () => [0],
+      // terron 04.09: граница — тайл-сентинел -999 с x=0, кандидаты x=50
+      // (TileDistanceIndex считает дистанцию по x/y, а не через manhattanDist).
+      borderTiles: () => [-999],
       units: () => [],
       canBuild,
     };
     const game: any = {
       config: () => ({ nukeMagnitudes: () => ({ outer: 50 }) }),
-      x: (t: number) => t,
+      x: (t: number) => (t === -999 ? 0 : 50),
       y: () => 0,
       isValidCoord: () => true,
       ref: (x: number) => x,

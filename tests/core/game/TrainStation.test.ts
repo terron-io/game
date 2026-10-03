@@ -39,7 +39,7 @@ describe("TrainStation", () => {
     game = {
       ticks: vi.fn().mockReturnValue(123),
       config: vi.fn().mockReturnValue({
-        trainGold: (rel: string, _tradeStopsVisited: number) =>
+        trainGold: (rel: string, _cars: number, _tiles: number) =>
           rel !== "other" ? BigInt(1000) : BigInt(500),
       }),
       addUpdate: vi.fn(),
@@ -68,7 +68,9 @@ describe("TrainStation", () => {
       loadCargo: vi.fn(),
       owner: vi.fn().mockReturnValue(player),
       level: vi.fn(),
-      tradeStopsVisited: vi.fn().mockReturnValue(0),
+      payCars: vi.fn().mockReturnValue(3),
+      paidTiles: vi.fn().mockReturnValue(0),
+      paidStopIndex: vi.fn().mockReturnValue(0),
     } as any;
   });
 
@@ -127,22 +129,36 @@ describe("TrainStation", () => {
     expect(gameStats.trainSelfTrade).toHaveBeenCalledWith(trainOwner, 500n);
   });
 
-  it("passes tradeStopsVisited to trainGold", () => {
+  it("passes paying cars and path tiles to trainGold", () => {
     unit.type.mockReturnValue(UnitType.City);
     const trainGoldSpy = vi.fn().mockReturnValue(500n);
     (game.config as any).mockReturnValue({
       trainGold: trainGoldSpy,
     });
-    (trainExecution as any).tradeStopsVisited = vi.fn().mockReturnValue(3);
+    (trainExecution as any).payCars = vi.fn().mockReturnValue(7);
+    (trainExecution as any).paidTiles = vi.fn().mockReturnValue(42);
+    (trainExecution as any).paidStopIndex = vi.fn().mockReturnValue(2);
     const station = new TrainStation(game, unit);
 
     station.onTrainStop(trainExecution);
 
     expect(trainGoldSpy).toHaveBeenCalledWith(
       expect.any(String),
-      3,
+      7,
+      42,
       expect.anything(),
+      2,
     );
+  });
+
+  // terron 24.09: фабрика в сети — платная точка, как город.
+  it("handles Factory stop", () => {
+    unit.type.mockReturnValue(UnitType.Factory);
+    const station = new TrainStation(game, unit);
+
+    station.onTrainStop(trainExecution);
+
+    expect(unit.owner().addGold).toHaveBeenCalledWith(1000n, unit.tile());
   });
 
   it("checks trade availability (same owner)", () => {
@@ -205,7 +221,7 @@ describe("TrainStation", () => {
   });
 });
 
-describe("Config.trainGold trade stop penalty", () => {
+describe("Config.trainGold per car and distance", () => {
   let config: Config;
   let mockPlayer: Player;
 
@@ -230,35 +246,37 @@ describe("Config.trainGold trade stop penalty", () => {
     mockPlayer = { isLobbyCreator: () => false } as unknown as Player;
   });
 
-  it("returns full base gold within free window (stops 0-9)", () => {
-    // first 10 stops (0-9) are free — no penalty
-    expect(config.trainGold("self", 0, mockPlayer)).toBe(10_000n);
-    expect(config.trainGold("self", 9, mockPlayer)).toBe(10_000n);
+  // terron 24.09: РЕБАЛАНС ПОЕЗДОВ (TerronTuning §ФАБРИКИ И ПОЕЗДА): за точку —
+  // вагоны × (10 000 + 100 × тайлы, тайлов не больше 120) × отношение; нерф
+  // 26.09 — вся выплата ×0.8.
+  it("pays per car: base plus distance since the last paid stop", () => {
+    expect(config.trainGold("self", 3, 0, mockPlayer)).toBe(24_000n);
+    expect(config.trainGold("self", 3, 40, mockPlayer)).toBe(33_600n);
+    expect(config.trainGold("self", 7, 40, mockPlayer)).toBe(78_400n);
   });
 
-  it("reduces gold by 5k per stop after the free window", () => {
-    // stop 10: effective = 10-9 = 1 -> 10k - 5k = 5k
-    expect(config.trainGold("self", 10, mockPlayer)).toBe(5_000n);
+  it("caps paid distance", () => {
+    expect(config.trainGold("self", 1, 500, mockPlayer)).toBe(
+      config.trainGold("self", 1, 120, mockPlayer),
+    );
+    expect(config.trainGold("self", 1, 120, mockPlayer)).toBe(17_600n);
   });
 
-  it("floors at 5k when penalty exceeds base gold", () => {
-    // stop 12: effective = 3 -> 10k - 15k -> floor at 5k
-    expect(config.trainGold("self", 12, mockPlayer)).toBe(5_000n);
+  // 26.09: решение владельца «×1 и свои, и союзные».
+  it("foreign, team and ally pay the same as own", () => {
+    expect(config.trainGold("other", 1, 0, mockPlayer)).toBe(8_000n);
+    expect(config.trainGold("team", 1, 0, mockPlayer)).toBe(8_000n);
+    expect(config.trainGold("ally", 1, 0, mockPlayer)).toBe(8_000n);
   });
 
-  it("floors at 5k for ally base even with heavy penalty", () => {
-    // ally base 35k, stop 20: effective = 11 -> penalty 55k -> floor at 5k
-    expect(config.trainGold("ally", 20, mockPlayer)).toBe(5_000n);
+  it("each next paid stop is ×0.85", () => {
+    expect(config.trainGold("self", 1, 0, mockPlayer, 1)).toBe(6_800n);
+    expect(config.trainGold("self", 1, 0, mockPlayer, 2)).toBe(5_779n); // 8000 × 0.85² = 5779.99… → вниз
   });
 
-  it("ally base gold reduces correctly after free window", () => {
-    // ally base 35k, stop 11: effective = 2 -> 35k - 10k = 25k
-    expect(config.trainGold("ally", 11, mockPlayer)).toBe(25_000n);
-  });
-
-  it("other/team base gold reduces correctly after free window", () => {
-    // other base 25k, stop 10: effective = 1 -> 25k - 5k = 20k
-    expect(config.trainGold("other", 10, mockPlayer)).toBe(20_000n);
-    expect(config.trainGold("team", 10, mockPlayer)).toBe(20_000n);
+  it("cars grow with factory level: one per level", () => {
+    expect([1, 2, 3, 5, 30].map((l) => config.trainCars(l))).toEqual([
+      1, 2, 3, 5, 30,
+    ]);
   });
 });

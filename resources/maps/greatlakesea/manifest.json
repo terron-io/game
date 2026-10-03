@@ -1,0 +1,292 @@
+{
+  "name": "Great Lakes (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        129,
+        297
+      ],
+      "name": "Duluth",
+      "flag": "Minnesota"
+    },
+    {
+      "coordinates": [
+        405,
+        146
+      ],
+      "name": "Thunder Bay",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        813,
+        75
+      ],
+      "name": "Marathon",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        981,
+        184
+      ],
+      "name": "Wawa",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        993,
+        419
+      ],
+      "name": "Sault Ste. Marie",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1491,
+        565
+      ],
+      "name": "Parry Sound",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        582,
+        385
+      ],
+      "name": "Marquette",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        652,
+        568
+      ],
+      "name": "Escanaba",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        547,
+        762
+      ],
+      "name": "Green Bay",
+      "flag": "Wisconsin"
+    },
+    {
+      "coordinates": [
+        515,
+        1012
+      ],
+      "name": "Milwaukee",
+      "flag": "Wisconsin"
+    },
+    {
+      "coordinates": [
+        583,
+        1261
+      ],
+      "name": "Chicago",
+      "flag": "Illinois"
+    },
+    {
+      "coordinates": [
+        781,
+        982
+      ],
+      "name": "Muskegon",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        723,
+        1255
+      ],
+      "name": "Gary",
+      "flag": "Indiana"
+    },
+    {
+      "coordinates": [
+        1060,
+        660
+      ],
+      "name": "Alpena",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        1901,
+        717
+      ],
+      "name": "Kingston",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1932,
+        939
+      ],
+      "name": "Rochester",
+      "flag": "New_York"
+    },
+    {
+      "coordinates": [
+        1687,
+        1012
+      ],
+      "name": "Buffalo",
+      "flag": "New_York"
+    },
+    {
+      "coordinates": [
+        1599,
+        849
+      ],
+      "name": "Toronto",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1132,
+        1079
+      ],
+      "name": "Detroit",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        1017,
+        921
+      ],
+      "name": "Saginaw",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        1125,
+        1258
+      ],
+      "name": "Toledo",
+      "flag": "Ohio"
+    },
+    {
+      "coordinates": [
+        1383,
+        1252
+      ],
+      "name": "Cleveland",
+      "flag": "Ohio"
+    },
+    {
+      "coordinates": [
+        1561,
+        1166
+      ],
+      "name": "Erie",
+      "flag": "Pennsylvania"
+    },
+    {
+      "coordinates": [
+        1347,
+        885
+      ],
+      "name": "Goderich",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1259,
+        1077
+      ],
+      "name": "Windsor",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1919,
+        517
+      ],
+      "name": "Ottawa",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        266,
+        1010
+      ],
+      "name": "Madison",
+      "flag": "Wisconsin"
+    },
+    {
+      "coordinates": [
+        309,
+        426
+      ],
+      "name": "Ashland",
+      "flag": "Wisconsin"
+    },
+    {
+      "coordinates": [
+        294,
+        652
+      ],
+      "name": "Wausau",
+      "flag": "Wisconsin"
+    },
+    {
+      "coordinates": [
+        158,
+        1205
+      ],
+      "name": "Davenport",
+      "flag": "Iowa"
+    },
+    {
+      "coordinates": [
+        1538,
+        364
+      ],
+      "name": "North Bay",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        1293,
+        149
+      ],
+      "name": "Timmins",
+      "flag": "ca"
+    },
+    {
+      "coordinates": [
+        938,
+        1100
+      ],
+      "name": "Lansing",
+      "flag": "Michigan"
+    },
+    {
+      "coordinates": [
+        1606,
+        97
+      ],
+      "name": "Rouyn-Noranda",
+      "flag": "ca"
+    }
+  ],
+  "map": {
+    "width": 2024,
+    "height": 1280,
+    "num_land_tiles": 1942463
+  },
+  "map4x": {
+    "width": 1012,
+    "height": 640,
+    "num_land_tiles": 477093
+  },
+  "map16x": {
+    "width": 506,
+    "height": 320,
+    "num_land_tiles": 115680
+  }
+}

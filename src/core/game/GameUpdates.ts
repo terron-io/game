@@ -89,6 +89,7 @@ export enum GameUpdateType {
   SpawnPhaseEnd,
   GamePaused,
   DonateEvent,
+  VictoryCountdown,
   // terron: ультимейты — Небо наше: ракета ушла, спутники будут сбиты.
   SatBlackout,
   Blockade, // terron: ПИРАТСТВО — объявлена зона блокады (клиент рисует круг)
@@ -122,7 +123,8 @@ export type GameUpdate =
   | DonateEventUpdate
   | SatBlackoutUpdate
   | FortShotUpdate
-  | BlockadeUpdate;
+  | BlockadeUpdate
+  | VictoryCountdownUpdate;
 
 // terron: ПИРАТСТВО — зона блокады «флаг»: шлётся при появлении и при каждом
 // изменении числа лодок (ships=0 → зона исчезла). Клиент рисует флаг на оверлее.
@@ -336,9 +338,19 @@ export interface PlayerUpdate {
   ultReligionTiles?: number;
   ultReligionTithe?: number;
   ultWaterTiles?: number; // terron: ультимейты — «Реки вспять» (земель затоплено)
+  ultLandTiles?: number; // terron: терраформинг — «Насыпь» (воды поднято)
   // terron: РЕВАНШИЗМ — smallID тех, кто напал на меня ПЕРВЫМ (ховер статуи
   // показывает, «на кого обиделись»). Пусто → поля нет.
   aggressors?: number[];
+  // terron 26.08: РЕВАНШИЗМ — ЖИВЫЕ ПОКАЗАНИЯ для ховера/тултипа (просьба
+  // владельца «показывай текущие состояния»). Всё в ЦЕЛЫХ процентах и целом
+  // уровне — дробям на проводе делать нечего.
+  // ⚠️ Едут ТОЛЬКО пока монумент стоит (иначе это 3 числа на КАЖДОГО игрока
+  // каждый тик: они меняются с каждым захваченным тайлом, и дельта-сжатие бы их
+  // не поймало).
+  revanchismLevel?: number; // 1..3, уровень стоящего монумента
+  revanchismSlowPct?: number; // на сколько % медленнее идёт захват моей земли
+  revanchismLostPct?: number; // сколько % срезано от исторического пика
   // terron: ультимейты — Раскол. Один маркер «спасения Т» для клиента: центр буквы
   // (перекрестье полос), ширина ножки в тайлах и турн истечения — рисуем ОДНУ
   // крупную цифру-отсчёт в центре Т, а не по цифре на каждом тайле. null = нет.
@@ -461,6 +473,24 @@ export interface EmbargoUpdate {
 export interface SpawnPhaseEndUpdate {
   type: GameUpdateType.SpawnPhaseEnd;
   startTick: Tick;
+}
+
+// terron 26.08: ПОБЕДА С УДЕРЖАНИЕМ. Шлётся один раз при СТАРТЕ отсчёта и
+// один раз при сбросе (`active:false`) — не каждый тик: клиент получает
+// границы окна и считает остаток сам по `game.ticks()`, поэтому полоса едет
+// плавно, а по проводу идут два сообщения на матч.
+export interface VictoryCountdownUpdate {
+  type: GameUpdateType.VictoryCountdown;
+  active: boolean;
+  /** Кто держит порог. Для командного режима — smallID лидера команды. */
+  playerSmallID: number;
+  /** Название команды, если режим командный (иначе пусто). */
+  teamName: string;
+  /** Порог в процентах — печатается в надписи («достиг 80%»). */
+  thresholdPct: number;
+  startTick: Tick;
+  /** Тик, на котором победа станет окончательной. */
+  endTick: Tick;
 }
 
 export interface GamePausedUpdate {

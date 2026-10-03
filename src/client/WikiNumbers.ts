@@ -11,6 +11,7 @@ import {
   UnitType,
 } from "../core/game/Game";
 import { GameConfig } from "../core/Schemas";
+import { GOLDEN_BASE_PTS, GOLDEN_MAX_PTS } from "./GoldenReward";
 
 /**
  * terron: ЦИФРЫ ВИКИ — ЖИВЫЕ, из тех же модулей, что кормят симуляцию.
@@ -143,8 +144,11 @@ export const CFG = {
   defensePostRange: C.defensePostRange(),
   defensePostDefenseBonus: C.defensePostDefenseBonus(),
   defensePostSpeedBonus: C.defensePostSpeedBonus(),
-  defensePostShellRate: toSec(C.defensePostShellAttackRate()),
-  defensePostTargetRange: C.defensePostTargettingRange(),
+  // ⚠️ terron 01.09: обстрел кораблей бункером в вики БОЛЬШЕ НЕ ОПИСАН —
+  // механики нет (в DefensePostExecution выбор цели закомментирован апстримом,
+  // `shoot()` не срабатывает никогда). Числа отсюда убраны намеренно: пока их
+  // никто не показывает, мёртвые поля только разъедутся с конфигом. Вернётся
+  // механика — вернутся и они.
   cityTroopIncrease: C.cityTroopIncrease(),
 
   // ПВО и шахты
@@ -228,22 +232,46 @@ export function nationStartTroops(difficulty: Difficulty): number {
   return cfg.startManpower({ playerType: PlayerType.Nation } as PlayerInfo);
 }
 
-/** Оплата поезда за остановку (живой опрос Config.trainGold). */
+/**
+ * Оплата поезда за ОДНУ точку сети (живой опрос Config.trainGold, ребаланс
+ * 24.09): поезд фабрики `level`, путь `tiles` тайлов от прошлой платной точки.
+ */
 export function trainGold(
   rel: "self" | "team" | "ally" | "other",
-  citiesVisited = 0,
+  level = 1,
+  tiles = 0,
 ): string {
-  return gold(C.trainGold(rel, citiesVisited, stubPlayer()));
+  return gold(C.trainGold(rel, C.trainCars(level), tiles, stubPlayer()));
+}
+
+/** Вагонов у поезда фабрики уровня `level`. */
+export function trainCars(level: number): number {
+  return C.trainCars(level);
+}
+
+/** На сколько процентов каждая следующая точка рейса платит меньше (нерф 26.09). */
+export function trainStopDecayPct(): number {
+  return Math.round((1 - T.TERRON_TRAIN_STOP_DECAY) * 100);
+}
+
+/** Платных точек за один рейс — не больше. */
+export function trainMaxStops(): number {
+  return T.TERRON_TRAIN_MAX_STOPS;
+}
+
+/** Столько вагонов рисуем; сверх — платят, но не видны. */
+export function trainVisualCars(): number {
+  return T.TERRON_TRAIN_CARS_VISUAL_MAX;
+}
+
+/** Поезд фабрики выходит раз в столько секунд. */
+export function trainIntervalSec(): number {
+  return C.trainIntervalTicks() / 10;
 }
 
 /** Доход торгового корабля/самолёта на дистанции (живой опрос Config). */
 export function tradeGold(dist: number): string {
   return gold(C.tradeShipGold(dist, stubPlayer()));
-}
-
-/** Ожидаемое число поездов при N фабриках (см. комментарий Config.trainSpawnRate). */
-export function trainSpawnRate(factories: number): number {
-  return C.trainSpawnRate(factories);
 }
 
 // ── терроновские константы (напрямую из TerronTuning) ───────────────────────
@@ -261,6 +289,8 @@ export const TUN = {
   fogCollapseSec: toSec(T.TERRON_FOG_REVEAL_COLLAPSE_TICKS),
 
   goldenRewardPts: T.TERRON_GOLDEN_REWARD_PTS,
+  goldenBasePts: GOLDEN_BASE_PTS,
+  goldenMaxPts: GOLDEN_MAX_PTS,
   goldenPeriodMin: T.goldenPeriodMin(),
   diamondRewardPts: T.diamondRewardPts(),
   diamondSchedule: T.diamondScheduleLabel(),
@@ -316,9 +346,49 @@ export const TUN = {
   riversNukeInner: T.TERRON_RIVERS_NUKE_INNER,
   riversNukeOuter: T.TERRON_RIVERS_NUKE_OUTER,
   riversNukeCost: T.TERRON_RIVERS_NUKE_COST,
+  // terron 01.09: у Терраформинга своя цена и своя воронка — числа обязаны
+  // ехать в тексты ОТСЮДА, иначе описание снова разойдётся с конфигом.
+  terraNukeInner: T.TERRON_TERRA_NUKE_INNER,
+  terraNukeOuter: T.TERRON_TERRA_NUKE_OUTER,
+  terraNukeCost: T.TERRON_TERRA_NUKE_COST,
 
-  revanchismScale: T.TERRON_REVANCHISM_SCALE,
-  revanchismMaxPct: T.TERRON_REVANCHISM_MAX_BUFF * 100,
+  // terron: РЕВАНШИЗМ (реворк 26.08) — замедление захвата, а не рост затрат.
+  // «×N на конце шкалы» = во сколько раз медленнее едет фронт при полной потере
+  // земель, по уровням монумента. Считаем из тюнинга, чтобы текст не разъезжался.
+  revanchismSlowLvl1: 1 + T.TERRON_REVANCHISM_BASE,
+
+  // terron 01.09: ДОРА зависит от числа фабрик — цифры описания берём из
+  // тюнинга, а не пишем руками (там уже врало «минутная перезарядка» при 30 с).
+  railgunReloadBaseSec: T.TERRON_RAILGUN_RELOAD_TICKS / 10,
+  railgunReloadMinSec: T.TERRON_RAILGUN_RELOAD_MIN_SEC,
+  railgunReloadStepSec: T.TERRON_RAILGUN_RELOAD_PER_FACTORY_SEC,
+  railgunFactoryDiscountPct: Math.round(
+    T.TERRON_RAILGUN_FACTORY_DISCOUNT * 100,
+  ),
+  railgunFactoriesForMinReload: T.railgunFactoriesForMinReload(),
+  railgunSpeedMaxPerSec: T.TERRON_RAILGUN_SPEED_MAX * 10,
+  revanchismSlowLvl2:
+    1 + T.TERRON_REVANCHISM_BASE + T.TERRON_REVANCHISM_PER_LEVEL,
+  revanchismSlowMax:
+    1 +
+    T.TERRON_REVANCHISM_BASE +
+    T.TERRON_REVANCHISM_MAX_EXTRA_LEVELS * T.TERRON_REVANCHISM_PER_LEVEL,
+  revanchismMaxLevel: 1 + T.TERRON_REVANCHISM_MAX_EXTRA_LEVELS,
+  revanchismPerLevelPct: T.TERRON_REVANCHISM_PER_LEVEL * 100,
+  revanchismLvlCaptured: T.TERRON_REVANCHISM_LEVEL_PER_LOSS.captured,
+  revanchismLvlDestroyed: T.TERRON_REVANCHISM_LEVEL_PER_LOSS.destroyed,
+  revanchismLvlSelf: T.TERRON_REVANCHISM_LEVEL_PER_LOSS.selfDestruct,
+  /** Сколько САМОСНОСОВ нужно до потолка (0 = самоснос выключен рубильником). */
+  revanchismSelfToMax:
+    T.TERRON_REVANCHISM_LEVEL_PER_LOSS.selfDestruct > 0
+      ? Math.ceil(
+          T.TERRON_REVANCHISM_MAX_EXTRA_LEVELS /
+            T.TERRON_REVANCHISM_LEVEL_PER_LOSS.selfDestruct,
+        )
+      : 0,
+  revanchismRevengePct: Math.round(
+    (1 / T.TERRON_REVANCHISM_REVENGE_MULT - 1) * 100,
+  ),
 
   ourSkyBuildSec: toSec(T.TERRON_OURSKY_BUILD_TICKS),
   ourSkyBlastSec: toSec(T.TERRON_OURSKY_BLAST_DELAY_TICKS),
@@ -437,6 +507,20 @@ export const TUN = {
 // build_menu.desc с динамическим ключом.
 export const BUILD_DESC_PARAMS = {
   mining_pct: TUN.miningKillPct,
+  // terron 26.08: РЕВАНШИЗМ — уровни и замедление в описание подставляются
+  // отсюда. Старый текст был написан руками, врал про «пассив без здания» и про
+  // направление мести, и разъезжался с кодом при каждой правке баланса.
+  revanchism_slow_lvl1: TUN.revanchismSlowLvl1,
+  revanchism_slow_max: TUN.revanchismSlowMax,
+  revanchism_max_level: TUN.revanchismMaxLevel,
+  revanchism_per_level_pct: TUN.revanchismPerLevelPct,
+  revanchism_revenge_pct: TUN.revanchismRevengePct,
+  railgun_reload_base_s: TUN.railgunReloadBaseSec,
+  railgun_reload_min_s: TUN.railgunReloadMinSec,
+  railgun_reload_step_s: TUN.railgunReloadStepSec,
+  railgun_factory_discount_pct: TUN.railgunFactoryDiscountPct,
+  railgun_factories_min_reload: TUN.railgunFactoriesForMinReload,
+  railgun_speed_max_s: TUN.railgunSpeedMaxPerSec,
 } as const;
 
 // ── DERIVED: производные величины (считаем, а не хардкодим) ─────────────────

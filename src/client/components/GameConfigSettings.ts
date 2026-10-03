@@ -1,3 +1,4 @@
+import "../EqualAreaMaps";
 import {
   LitElement,
   SVGTemplateResult,
@@ -83,10 +84,13 @@ function renderSection(
   titleKey: string,
   content: TemplateResult | TemplateResult[],
   sectionClass = "space-y-6",
+  // terron 26.09: элемент справа в заголовке секции («Честные размеры» у карты).
+  extra: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
   return html`
     <section class=${sectionClass}>
-      ${renderSectionHeader(iconSvg, colorClass, bgClass, titleKey)} ${content}
+      ${renderSectionHeader(iconSvg, colorClass, bgClass, titleKey, extra)}
+      ${content}
     </section>
   `;
 }
@@ -168,8 +172,12 @@ export const ultimateOptions: {
   const m = unitMeta(t);
   return {
     type: t,
-    translationKey: "unit_type." + (m?.key ?? "mirv"),
-    icon: m?.icon ?? assetUrl("images/MIRVIcon.svg"),
+    // ⚠️ Нет записи в каталоге — показываем СЫРОЙ тип и пустую иконку, а не
+    // подставляем МИРВ. Фолбэк, который вместо «не знаю» называет другую ульту,
+    // читается как правда: ровно так «Небо наше» подписывалось МЕДИЕЙ (31.08).
+    // Сегодня ветка мёртвая — её держит тест «ульты описаны в каталоге».
+    translationKey: m ? `unit_type.${m.key}` : String(t),
+    icon: m?.icon ?? "",
   };
 });
 
@@ -214,6 +222,7 @@ function renderSectionHeader(
   colorClass: string,
   bgClass: string,
   titleKey: string,
+  extra: TemplateResult | typeof nothing = nothing,
 ): TemplateResult {
   return html`
     <div class="flex items-center gap-4 pb-2 border-b border-white/10">
@@ -232,6 +241,7 @@ function renderSectionHeader(
       <h3 class="text-lg font-bold text-white uppercase tracking-wider">
         ${translateText(titleKey)}
       </h3>
+      ${extra}
     </div>
   `;
 }
@@ -509,6 +519,8 @@ export class GameConfigSettings extends LitElement {
               .onSelectMap=${this.handleSelectMap}
               .onSelectRandom=${this.handleSelectRandom}
             ></map-picker>`,
+            "space-y-6",
+            html`<equal-area-toggle class="ml-auto"></equal-area-toggle>`,
           ),
         )}
         ${renderSection(

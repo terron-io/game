@@ -1,11 +1,17 @@
 import { EventBus, GameEvent } from "../core/EventBus";
-import { PlayerBuildableUnitType, UnitType } from "../core/game/Game";
+import { ALL_BUILD_KEYS } from "../core/game/BuildSlots";
+import {
+  PlayerBuildable,
+  PlayerBuildableUnitType,
+  UnitType,
+} from "../core/game/Game";
 import { GameView, UnitView } from "../core/game/GameView";
 import { UserSettings } from "../core/game/UserSettings";
 import { camDiag } from "./CamDiag";
 import { recordPointerInput } from "./InputMode";
 import { Platform } from "./Platform";
 import { UIState } from "./UIState";
+import { slotUnitType, ultSlotUnitType } from "./UltSlots";
 import { ReplaySpeedMultiplier } from "./utilities/ReplaySpeedMultiplier";
 
 export class MouseUpEvent implements GameEvent {
@@ -194,6 +200,27 @@ export class TickMetricsEvent implements GameEvent {
     public readonly tickDelay?: number,
   ) {}
 }
+
+/**
+ * terron 01.09: клавиши стройки ВЫВЕДЕНЫ из единой разметки кнопок
+ * (`core/game/BuildSlots`) — той же, по которой рисуется панель, собираются
+ * дефолты клавиш и строки настроек управления. Свой список здесь был пятой
+ * копией одного и того же и молча отставал.
+ *
+ * ⚠️ Фильтр `PlayerBuildable.has` — НЕ формальность, а замена лживому касту:
+ * тип, который игрок построить не может, не должен доезжать до госта. Что
+ * список при этом не худеет, стережёт тест.
+ */
+const BUILD_KEYBINDS: ReadonlyArray<{
+  keybind: string;
+  type: PlayerBuildableUnitType;
+}> = ALL_BUILD_KEYS.filter(
+  (
+    s,
+  ): s is (typeof ALL_BUILD_KEYS)[number] & {
+    type: PlayerBuildableUnitType;
+  } => PlayerBuildable.has(s.type),
+);
 
 export class InputHandler {
   private lastPointerX: number = 0;
@@ -780,6 +807,29 @@ export class InputHandler {
     const dist =
       Math.abs(event.x - this.lastPointerDownX) +
       Math.abs(event.y - this.lastPointerDownY);
+    // terron 25.08: ШАГАЮЩИЙ ГОРОД — ДРОП ПЕРЕТАСКА (репорт владельца
+    // «драг-н-дроп не заработал», клик-клик при этом работал).
+    //
+    // ⚠️ ПРИЧИНА БЫЛА ЗДЕСЬ, А НЕ В САМОМ ПЕРЕТАСКЕ. Ниже MouseUpEvent шлётся
+    // ТОЛЬКО когда указатель почти не сдвинулся — так клик отделяют от
+    // панорамы карты. Но перетаск здания ПО ОПРЕДЕЛЕНИЮ уезжает далеко, то
+    // есть его отпускание не доходило до контроллера ВООБЩЕ: здание
+    // «бралось» (MouseDownEvent на нажатии есть), а поставить его было нечем.
+    // Хуже того, захват оставался взведённым, и следующий клик уходил уже
+    // второй фазой — со стороны это выглядело как «ульта живёт своей жизнью».
+    //
+    // Пока каст взведён, отпускание после НАСТОЯЩЕГО перетаска — это ДРОП.
+    // Тот же приём, что у рамки выделения кораблей выше (она тоже завершается
+    // на dist >= порога). Работает и мышью, и пальцем: пан карты при взведённом
+    // касте уже подавлен в onPointerMove, а MouseDownEvent на таче тоже идёт.
+    if (
+      this.uiState.ghostStructure === UnitType.CityTransfer &&
+      dist >= this.DRAG_THRESHOLD_PX
+    ) {
+      this.eventBus.emit(new MouseUpEvent(event.x, event.y));
+      event.preventDefault();
+      return;
+    }
     if (dist < this.DRAG_THRESHOLD_PX) {
       if (event.pointerType === "touch") {
         if (this.suppressNextTap) {
@@ -1055,32 +1105,52 @@ export class InputHandler {
     code: string,
     shiftKey: boolean,
   ): PlayerBuildableUnitType | null {
-    const buildKeybinds: ReadonlyArray<{
-      key: string;
-      type: PlayerBuildableUnitType;
-    }> = [
-      { key: "buildCity", type: UnitType.City },
-      { key: "buildFactory", type: UnitType.Factory },
-      { key: "buildPort", type: UnitType.Port },
-      { key: "buildDefensePost", type: UnitType.DefensePost },
-      { key: "buildMissileSilo", type: UnitType.MissileSilo },
-      { key: "buildSamLauncher", type: UnitType.SAMLauncher },
-      { key: "buildAtomBomb", type: UnitType.AtomBomb },
-      { key: "buildHydrogenBomb", type: UnitType.HydrogenBomb },
-      { key: "buildWarship", type: UnitType.Warship },
-      { key: "buildAirport", type: UnitType.Airport }, // terron: авиация
-      { key: "buildMIRV", type: UnitType.MIRV },
-      { key: "buildOilRig", type: UnitType.OilRig }, // terron: вышка в океане
-    ];
-    for (const { key, type } of buildKeybinds) {
+    for (const { keybind: key, type } of BUILD_KEYBINDS) {
       if (this.buildKeybindMatches(code, shiftKey, this.keybinds[key]))
-        return type;
+        return this.applySlotSubstitution(type);
     }
-    for (const { key, type } of buildKeybinds) {
+    for (const { keybind: key, type } of BUILD_KEYBINDS) {
       if (this.buildKeybindMatchesDigit(code, shiftKey, this.keybinds[key]))
-        return type;
+        return this.applySlotSubstitution(type);
     }
     return null;
+  }
+
+  /**
+   * terron 01.09 — ЧЕТВЁРТАЯ ПОВЕРХНОСТЬ ВВОДА: ХОТКЕЙ.
+   *
+   * Ульта может ПОДМЕНИТЬ кнопку панели своим кастом (`extraCasts`): у
+   * Терраформинга три ракеты на один слот ульты, поэтому две лишние встают на
+   * кнопки обычных ядерок, а сами ядерки владельцу запрещены гейтом ядра.
+   * Панель, радиал и прицельное управление про подмену знали, а ХОТКЕЙ — нет:
+   * клавиша 9 по-прежнему целилась в обычную ядерку, то есть в запрещённый
+   * юнит, и ракета не запускалась вовсе (репорт boom871, 01.09: «кликом с
+   * панели ок, а хоткей вызывает обычную ядерку»).
+   *
+   * ⚠️ Подмену спрашиваем у ТОГО ЖЕ `UltSlots`, что и остальные три
+   * поверхности. Свой список пар «слот → каст» здесь — ровно тот способ снова
+   * разъехаться, из-за которого этот баг и появился.
+   */
+  private applySlotSubstitution(
+    slot: PlayerBuildableUnitType,
+  ): PlayerBuildableUnitType {
+    const me = this.gameView.myPlayer?.();
+    if (!me) return slot;
+    // Слот ульты («звезда») подписан клавишей buildMIRV исторически — на деле
+    // там стоит выбранная игроком ульта или её каст. Без этого клавиша целилась
+    // в МИРВ, запрещённый владельцу любой ДРУГОЙ ульты, и не делала ничего.
+    // ⚠️ Выбор ещё не зафиксирован (в слоте звезда) → ultSlotUnitType вернёт
+    // null, и клавиша остаётся МИРВом — ровно как рисует панель, когда ульты
+    // выключены в лобби.
+    if (slot === UnitType.MIRV) {
+      const inSlot = ultSlotUnitType(me.ultimateChoice() ?? null, (t) =>
+        me.units(t).some((u) => !u.isUnderConstruction()),
+      );
+      if (inSlot !== null && PlayerBuildable.has(inSlot)) return inSlot;
+      return slot;
+    }
+    const actual = slotUnitType(slot, (t) => me.hasUltimate(t));
+    return PlayerBuildable.has(actual) ? actual : slot;
   }
 
   private canUseBuildKeybinds(): boolean {

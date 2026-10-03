@@ -65,8 +65,10 @@ export class NuclearPlantExecution implements Execution {
     const inner2 = r * r;
     const cx = mg.x(this.site);
     const cy = mg.y(this.site);
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
+    // Радиус бывает дробным — шаг перебора нет (см. NukeExecution.tilesToDestroy).
+    const rBox = Math.ceil(r);
+    for (let dy = -rBox; dy <= rBox; dy++) {
+      for (let dx = -rBox; dx <= rBox; dx++) {
         if (dx * dx + dy * dy > inner2) continue;
         const x = cx + dx;
         const y = cy + dy;

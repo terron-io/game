@@ -10,6 +10,7 @@
 //
 // Мини-карта грузится лениво при первом госте станции (loadTerrainMap
 // мемоизирован — бины уже в кэше после старта матча, парсинг копеечный).
+import { stationCapableTypes } from "../core/execution/StationWiring";
 import { UnitType } from "../core/game/Game";
 import { TileRef } from "../core/game/GameMap";
 import { GameView } from "../core/game/GameView";
@@ -20,13 +21,15 @@ import { MiniMapTransformer } from "../core/pathfinding/transformers/MiniMapTran
 import { PathStatus } from "../core/pathfinding/types";
 import { terrainMapFileLoader } from "./TerrainMapFileLoader";
 
-/** Гост каких построек тянет за собой рельсы (станции ж/д). */
-export const RAIL_STATION_GHOSTS: ReadonlySet<UnitType> = new Set([
-  UnitType.City,
-  UnitType.Factory,
-  UnitType.Port,
-  UnitType.TrainDepot,
-]);
+/**
+ * Гост каких построек тянет за собой рельсы (станции ж/д).
+ *
+ * ⚠️ Список НЕ перечисляется: правило «кому положена станция» живёт в симе
+ * (`StationWiring`), а копия здесь уже разъезжалась — в ней не было аэропорта.
+ */
+export const RAIL_STATION_GHOSTS: ReadonlySet<UnitType> = new Set(
+  stationCapableTypes(),
+);
 
 type Finder = { findPath(from: TileRef, to: TileRef): TileRef[] | null };
 

@@ -28,6 +28,43 @@ import overlayVertSrc from "../shaders/map-overlay/overlay.vert.glsl?raw";
 import territoryFragSrc from "../shaders/map-overlay/territory.frag.glsl?raw";
 import { TileScatterPass } from "./TileScatterPass";
 
+/**
+ * terron 12.09: снимок для датчика целостности карты (client/TerritoryIntegrity.ts):
+ * ровно то, из чего заливается текстура территории.
+ */
+export interface TerritoryIntegritySnapshot {
+  cpu: Uint16Array;
+  buckets: ReadonlyArray<ReadonlyArray<number>>;
+  queued: number;
+  fullPending: boolean;
+  tilesDirty: boolean;
+  scatterPending: number;
+  /** Сколько раз очередь переполнилась и схлопнулась в полную заливку. */
+  capHits: number;
+  /** Сколько полных заливок текстуры сделано за матч. */
+  fullUploads: number;
+  /** Самая большая точечная заливка за один раз (тайлов). */
+  maxScatter: number;
+  /** Последняя заливка: "f" полная / "s" точечная / "" ещё не было. */
+  lastFlushKind: string;
+  lastFlushN: number;
+  /** performance.now() последней заливки (0 — не было). */
+  lastFlushAt: number;
+  /** Последний тайл, ушедший в текстуру (−1 — не было): сюда целит обратное чтение. */
+  lastFlushedRef: number;
+  /** Флаги отрисовки заливки: t — растянутый скин, p — узоры, A — альт-вид. */
+  flags: string;
+}
+export interface RendererIntegritySnapshot extends TerritoryIntegritySnapshot {
+  loopRunning: boolean;
+  visibilityFlushPending: boolean;
+  fps: number;
+  /** Сколько мс назад рисовался кадр (−1 — не рисовался ни разу). */
+  drawAgeMs: number;
+  /** Счётчик нарисованных кадров с начала матча. */
+  draws: number;
+}
+
 export class TerritoryPass {
   private gl: WebGL2RenderingContext;
   private settings: RenderSettings;
@@ -78,6 +115,9 @@ export class TerritoryPass {
   private falloutOwnerTex: WebGLTexture;
   private falloutOwnerFull = false;
   private falloutOwnerRef: Uint16Array | null = null;
+  // terron 27.08: КАКИЕ строки грязные (1 = грязная). Владеет массивом GameView,
+  // мы его только читаем и гасим отданные строки.
+  private foDirtyRows: Uint8Array | null = null;
   private foDirtyRowMin = Infinity;
   private foDirtyRowMax = -1;
 
@@ -94,6 +134,17 @@ export class TerritoryPass {
    * scatter patches — those are already covered by the full upload.
    */
   private fullUploadPending = false;
+
+  // terron 12.09: счётчики для датчика целостности карты — какими путями
+  // территория уезжала в текстуру (см. TerritoryIntegritySnapshot).
+  private capHits = 0;
+  private fullUploads = 0;
+  private maxScatter = 0;
+  private lastFlushKind = "";
+  private lastFlushN = 0;
+  private lastFlushAt = 0;
+  private lastFlushedRef = -1;
+  private readbackRaw: Uint32Array | null = null;
 
   /**
    * GPU scatter pass for per-frame patches. Replaces the old dirty-row bbox
@@ -120,6 +171,8 @@ export class TerritoryPass {
   private readonly nBuckets: number;
   private dripBuckets: number[][] = [];
   private currentBucket = 0;
+  /** terron 12.09: FBO для обратного чтения текстуры датчиком (только дев). */
+  private readbackFbo: WebGLFramebuffer | null = null;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -300,6 +353,7 @@ export class TerritoryPass {
     this.queuedDripPairs += changedTiles.length;
     if (this.queuedDripPairs > TerritoryPass.DRIP_QUEUE_CAP) {
       // Рендер спит и очередь распухла — переключаемся на полный аплоад.
+      this.capHits++;
       this.uploadFullTileState(tileState);
       return;
     }
@@ -320,8 +374,13 @@ export class TerritoryPass {
     falloutOwnerState: Uint16Array,
     dirtyRowMin: number,
     dirtyRowMax: number,
+    dirtyRows: Uint8Array | null = null,
   ): void {
     this.falloutOwnerRef = falloutOwnerState;
+    // ⚠️ БЕЗУСЛОВНО, включая null. null = «залей весь диапазон» (восстановление
+    // после потери GL-контекста). Оставь мы тут старую карту строк — заливка
+    // после сброса контекста стала бы частичной, и текстура осталась бы с дырами.
+    this.foDirtyRows = dirtyRows;
     if (!this.falloutOwnerFull) {
       this.falloutOwnerFull = true;
       const gl = this.gl;
@@ -347,26 +406,55 @@ export class TerritoryPass {
     if (!src) return;
     const gl = this.gl;
     const minRow = Math.max(0, this.foDirtyRowMin);
-    const rowCount = Math.min(this.mapH - 1, this.foDirtyRowMax) - minRow + 1;
-    if (rowCount <= 0) return;
-    const offset = minRow * this.mapW;
+    const maxRow = Math.min(this.mapH - 1, this.foDirtyRowMax);
+    if (maxRow < minRow) return;
     // Работаем на юните 11 (родном для этой текстуры): флаш зовётся из draw()
     // ПОСЛЕ привязки tileTex к юниту 0 — трогать TEXTURE0 здесь нельзя.
     gl.activeTexture(gl.TEXTURE11);
     gl.bindTexture(gl.TEXTURE_2D, this.falloutOwnerTex);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      0,
-      minRow,
-      this.mapW,
-      rowCount,
-      gl.RED_INTEGER,
-      gl.UNSIGNED_SHORT,
-      src.subarray(offset, offset + rowCount * this.mapW),
-    );
+    const rows = this.foDirtyRows;
+    if (rows === null) {
+      // Нет карты строк (старый вызов) — заливаем весь диапазон, как раньше.
+      this.uploadRows(minRow, maxRow - minRow + 1, src);
+    } else {
+      // ⚠️ Заливаем НЕПРЕРЫВНЫЕ УЧАСТКИ помеченных строк, а не всё между первой
+      // и последней. Две воронки на разных концах карты — это два маленьких
+      // участка, а не половина текстуры. Ради этого карта строк и заведена.
+      let runStart = -1;
+      for (let r = minRow; r <= maxRow; r++) {
+        if (rows[r] === 1) {
+          if (runStart < 0) runStart = r;
+          rows[r] = 0;
+        } else if (runStart >= 0) {
+          this.uploadRows(runStart, r - runStart, src);
+          runStart = -1;
+        }
+      }
+      if (runStart >= 0) this.uploadRows(runStart, maxRow - runStart + 1, src);
+    }
     this.foDirtyRowMin = Infinity;
     this.foDirtyRowMax = -1;
+  }
+
+  /** Одна заливка непрерывного блока строк текстуры «чей пепел». */
+  private uploadRows(
+    startRow: number,
+    rowCount: number,
+    src: Uint16Array,
+  ): void {
+    if (rowCount <= 0) return;
+    const offset = startRow * this.mapW;
+    this.gl.texSubImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      0,
+      startRow,
+      this.mapW,
+      rowCount,
+      this.gl.RED_INTEGER,
+      this.gl.UNSIGNED_SHORT,
+      src.subarray(offset, offset + rowCount * this.mapW),
+    );
   }
 
   /** Drain one drip bucket into cpuTileState. Called once per render frame. */
@@ -392,6 +480,7 @@ export class TerritoryPass {
           if (borderFn) borderFn(x, y);
         }
       }
+      this.lastFlushedRef = bucket[bucket.length - 2];
       bucket.length = 0;
       this.tilesDirty = true;
     }
@@ -423,12 +512,91 @@ export class TerritoryPass {
           if (borderFn) borderFn(x, y);
         }
       }
+      this.lastFlushedRef = bucket[bucket.length - 2];
       bucket.length = 0;
     }
     if (any) {
       this.tilesDirty = true;
     }
     this.queuedDripPairs = 0;
+  }
+
+  /** terron 12.09: снимок для датчика целостности — см. TerritoryIntegritySnapshot. */
+  integritySnapshot(): TerritoryIntegritySnapshot {
+    return {
+      cpu: this.cpuTileState,
+      buckets: this.dripBuckets,
+      queued: this.queuedDripPairs,
+      fullPending: this.fullUploadPending,
+      tilesDirty: this.tilesDirty,
+      scatterPending: this.scatter.count,
+      capHits: this.capHits,
+      fullUploads: this.fullUploads,
+      maxScatter: this.maxScatter,
+      lastFlushKind: this.lastFlushKind,
+      lastFlushN: this.lastFlushN,
+      lastFlushAt: this.lastFlushAt,
+      lastFlushedRef: this.lastFlushedRef,
+      flags:
+        (this.needSkinBBox ? "t" : "") +
+        (this.showPatterns ? "p" : "") +
+        (this.altView ? "A" : ""),
+    };
+  }
+
+  /**
+   * terron 12.09: владельцы тайлов прямо из ВИДЕОКАРТЫ в окне (owner-биты).
+   * Только диагностика на деве: readPixels синхронный и тормозит конвейер,
+   * поэтому окно маленькое и редкое. null — не вышло (контекст потерян и т.п.).
+   * Привязку framebuffer возвращаем как было — рендер между кадрами её ждёт.
+   */
+  readbackOwners(
+    x0: number,
+    y0: number,
+    w: number,
+    h: number,
+  ): Uint16Array | null {
+    const gl = this.gl;
+    if (gl.isContextLost() || w <= 0 || h <= 0) return null;
+    const prev = gl.getParameter(
+      gl.FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    try {
+      this.readbackFbo ??= gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.readbackFbo);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        this.tileTex,
+        0,
+      );
+      if (
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE
+      ) {
+        return null;
+      }
+      // Для беззнаковых целочисленных буферов спецификация гарантирует пару
+      // RGBA_INTEGER / UNSIGNED_INT — владелец лежит в канале R.
+      const len = w * h * 4;
+      if (!this.readbackRaw || this.readbackRaw.length < len) {
+        this.readbackRaw = new Uint32Array(len);
+      }
+      const raw = this.readbackRaw;
+      gl.readPixels(x0, y0, w, h, gl.RGBA_INTEGER, gl.UNSIGNED_INT, raw);
+      // ⚠️ Отказ readPixels (или потеря контекста посреди чтения) исключением
+      // НЕ приходит — только через getError. Без проверки вернули бы окно
+      // нулей, и датчик записал бы ложное «текстура ≠ копии». Ошибку заодно
+      // выбираем из очереди: иначе её подберёт диагностика шейдеров.
+      if (gl.getError() !== gl.NO_ERROR || gl.isContextLost()) return null;
+      const out = new Uint16Array(w * h);
+      for (let i = 0; i < w * h; i++) out[i] = raw[i * 4] & OWNER_MASK;
+      return out;
+    } catch {
+      return null;
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prev);
+    }
   }
 
   private clearDripBuckets(): void {
@@ -560,11 +728,20 @@ export class TerritoryPass {
       this.scatter.clear();
       this.fullUploadPending = false;
       this.tilesDirty = false;
+      this.fullUploads++;
+      this.lastFlushKind = "f";
+      this.lastFlushN = this.mapW * this.mapH;
+      this.lastFlushAt = performance.now();
       return "full";
     }
     if (this.scatter.count > 0) {
       // Per-frame patches — scatter via FBO + POINTS draw. Constant cost in
       // patch count regardless of spatial distribution.
+      const n = this.scatter.count;
+      if (n > this.maxScatter) this.maxScatter = n;
+      this.lastFlushKind = "s";
+      this.lastFlushN = n;
+      this.lastFlushAt = performance.now();
       this.scatter.flush();
       this.tilesDirty = false;
       return "scatter";
@@ -693,6 +870,7 @@ export class TerritoryPass {
     gl.deleteProgram(this.program);
     gl.deleteVertexArray(this.vao);
     this.scatter.dispose();
+    if (this.readbackFbo) gl.deleteFramebuffer(this.readbackFbo);
     // terron: скины пепла — текстура наша (не GPUResources), чистим сами.
     gl.deleteTexture(this.falloutOwnerTex);
     // tileTex, paletteTex, patternMetaTex, patternDataTex owned by GPUResources / renderer

@@ -209,10 +209,6 @@
         "scale": 2.0,
         "iconFill": 0.5
       },
-      "Train Depot": {
-        "scale": 2.0,
-        "iconFill": 0.5
-      },
       "Fortifications": {
         "scale": 2.0,
         "iconFill": 0.5
@@ -254,6 +250,10 @@
         "iconFill": 0.5
       },
       "Rivers Back": {
+        "scale": 2.0,
+        "iconFill": 0.5
+      },
+      "Terraforming": {
         "scale": 2.0,
         "iconFill": 0.5
       },

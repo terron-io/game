@@ -1,4 +1,4 @@
-import { ULTIMATE_REGISTRY } from "../../../core/game/Game";
+import { ultCasts, ULTIMATE_REGISTRY } from "../../../core/game/Game";
 
 /**
  * Canonical unit type string constants.
@@ -76,6 +76,9 @@ export const UT_MEDIA = "Media" as const; // terron: ультимейты — М
 export const UT_NUCLEAR_FACTORY = "NuclearFactory" as const; // terron: ультимейты — Ядерный завод (штаб → разблок МИРВ)
 export const UT_RIVERS_BACK = "Rivers Back" as const; // terron: ультимейты — «Реки вспять» (штаб → каст водяной ракеты)
 export const UT_WATER_NUKE = "Water Nuke" as const;
+// terron 01.09: ТЕРРАФОРМИНГ — отдельная закрытая ульта поверх «Рек вспять».
+export const UT_TERRAFORMING = "Terraforming" as const;
+export const UT_TERRA_FLOOD = "Terra Flood" as const;
 export const UT_OIL_RIG = "Oil Rig" as const; // terron: нефтяная вышка (строится в океане)
 export const UT_SUBMARINE_BASE = "Submarine Base" as const; // terron: ультимейты — подводный флот // terron: ультимейты — водяная ракета (топит землю)
 
@@ -122,6 +125,7 @@ export const STRUCTURE_TYPES: ReadonlySet<string> = new Set<string>([
   UT_MEDIA, // terron: ультимейты — МЕДИА (штаб)
   UT_NUCLEAR_FACTORY, // terron: ультимейты — Ядерный завод (штаб)
   UT_RIVERS_BACK, // terron: ультимейты — «Реки вспять» (штаб)
+  UT_TERRAFORMING, // terron 01.09: терраформинг (штаб)
   UT_OIL_RIG, // terron: нефтяная вышка (структура в океане)
   UT_SUBMARINE_BASE, // terron: ультимейты — подводный флот (штаб)
   ...ULTIMATE_REGISTRY.map((u) => u.type as string),
@@ -132,6 +136,7 @@ export const NUKE_TYPES: ReadonlySet<string> = new Set([
   UT_HYDROGEN_BOMB,
   UT_MIRV,
   UT_WATER_NUKE, // terron: ультимейты — «Реки вспять»
+  UT_TERRA_FLOOD, // terron 01.09: терраформинг — «Затопление»
 ]);
 
 /** Blast radii (in tiles) matching upstream DefaultConfig.nukeMagnitudes(). */
@@ -214,9 +219,9 @@ const BASE_UNIT_TYPES = [
 
 const ULT_RENDER_TYPES: readonly string[] = [
   ...ULTIMATE_REGISTRY.map((u) => u.type as string),
-  ...ULTIMATE_REGISTRY.filter((u) => u.cast !== undefined).map(
-    (u) => u.cast!.type as string,
-  ),
+  // terron 25.08: ВСЕ касты (cast + extraCasts). Пропуск в этом списке = у
+  // юнита есть эффект и тултип, но НЕТ СПРАЙТА (см. ULTIMATES.md).
+  ...ULTIMATE_REGISTRY.flatMap((u) => ultCasts(u).map((c) => c.type as string)),
 ];
 
 export const ALL_UNIT_TYPES: readonly string[] = [

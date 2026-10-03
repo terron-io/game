@@ -25,8 +25,10 @@ class TradeStationStopHandler implements TrainStopHandler {
       .config()
       .trainGold(
         rel(trainOwner, stationOwner),
-        trainExecution.tradeStopsVisited(),
+        trainExecution.payCars(),
+        trainExecution.paidTiles(),
         trainOwner,
+        trainExecution.paidStopIndex(),
       );
     // Share revenue with the station owner if it's not the current player
     if (trainOwner !== stationOwner) {
@@ -42,14 +44,6 @@ class TradeStationStopHandler implements TrainStopHandler {
   }
 }
 
-class FactoryStopHandler implements TrainStopHandler {
-  onStop(
-    mg: Game,
-    station: TrainStation,
-    trainExecution: TrainExecution,
-  ): void {}
-}
-
 export function createTrainStopHandlers(
   random: PseudoRandom,
 ): Partial<Record<UnitType, TrainStopHandler>> {
@@ -59,7 +53,9 @@ export function createTrainStopHandlers(
     // terron: авиация — аэропорт = полноценный ж/д трейд-узел (гибрид фабрика/порт):
     // поезда останавливаются и приносят золото, как в городе/порту. Спека: airport.md
     [UnitType.Airport]: new TradeStationStopHandler(),
-    [UnitType.Factory]: new FactoryStopHandler(),
+    // terron 24.09: фабрика в сети — тоже платная точка (решение владельца:
+    // «фабрика, порт, аэропорт в сети — получить за каждый поинт»).
+    [UnitType.Factory]: new TradeStationStopHandler(),
   };
 }
 
@@ -176,7 +172,8 @@ export class Cluster {
     return (
       type === UnitType.City ||
       type === UnitType.Port ||
-      type === UnitType.Airport
+      type === UnitType.Airport ||
+      type === UnitType.Factory
     );
   }
 

@@ -20,48 +20,49 @@ import {
   UT_AIRPORT,
   UT_CENTRAL_BANK,
   UT_CITY,
+  UT_CLOSED_COUNTRY,
   UT_DEFENSE_POST,
   UT_FACTORY,
+  UT_FANATICISM,
   UT_FORTIFICATIONS,
+  UT_FUEL,
+  UT_GREENS,
+  UT_INDUSTRIAL_REVOLUTION,
   UT_MEDIA,
   UT_MINING,
   UT_MINISTRY,
   UT_MISSILE_SILO,
   UT_NUCLEAR_FACTORY,
+  UT_NUCLEAR_PLANT,
   UT_OIL_RIG,
+  UT_OLYMPICS,
   UT_OUR_SKY,
+  UT_PEACE_PALACE,
+  UT_PEACEFUL_SKY,
+  UT_PIRACY,
   UT_PORT,
+  UT_PRIDE,
+  UT_RAIL_GUN,
   UT_RELIGION,
   UT_REVANCHISM,
   UT_RIVERS_BACK,
   UT_SAM_LAUNCHER,
+  UT_SECRET_TREASURE,
+  UT_SPACEPORT,
   UT_SUBMARINE_BASE,
   UT_TANK_FACTORY,
-  UT_PIRACY,
-  UT_RAIL_GUN,
-  UT_SPACEPORT,
-  UT_CLOSED_COUNTRY,
-  UT_PRIDE,
-  UT_OLYMPICS,
-  UT_FANATICISM,
-  UT_VICTORY_BANNER,
-  UT_PEACE_PALACE,
-  UT_GREENS,
-  UT_NUCLEAR_PLANT,
-  UT_FUEL,
-  UT_PEACEFUL_SKY,
-  UT_INDUSTRIAL_REVOLUTION,
-  UT_SECRET_TREASURE,
   UT_TRAIN_DEPOT,
+  UT_VICTORY_BANNER,
   UT_WALKING_CITY,
 } from "../../types";
 import { DynamicInstanceBuffer } from "../DynamicBuffer";
 import type { RenderSettings } from "../RenderSettings";
+import { loadAtlasImage, reportAtlasFailure } from "../utils/AtlasImage";
 import { getPaletteSize } from "../utils/ColorUtils";
 import { createProgram, shaderSrc } from "../utils/GlUtils";
 
-import { ULTIMATE_REGISTRY } from "../../../../core/game/Game";
 import { assetUrl } from "src/core/AssetUrls";
+import { ultCasts, ULTIMATE_REGISTRY } from "../../../../core/game/Game";
 import structureFragSrc from "../shaders/structure/structure.frag.glsl?raw";
 import structureVertSrc from "../shaders/structure/structure.vert.glsl?raw";
 
@@ -153,9 +154,12 @@ const ATLAS_COLS = STRUCTURE_ORDER.length;
 const STRUCTURE_ATLAS_ALIASES: [string, string][] = ULTIMATE_REGISTRY.flatMap(
   (u) => {
     const out: [string, string][] = [];
-    if ("alias" in u.atlas) out.push([u.type as string, u.atlas.alias as string]);
-    if (u.cast !== undefined && "alias" in u.cast.atlas) {
-      out.push([u.cast.type as string, u.cast.atlas.alias as string]);
+    if ("alias" in u.atlas)
+      out.push([u.type as string, u.atlas.alias as string]);
+    for (const c of ultCasts(u)) {
+      if ("alias" in c.atlas) {
+        out.push([c.type as string, c.atlas.alias as string]);
+      }
     }
     return out;
   },
@@ -346,7 +350,7 @@ export class StructurePass {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     // Start async atlas build
-    this.loadAtlas();
+    void this.loadAtlas().catch((e) => reportAtlasFailure("icon", e));
 
     // --- Instance buffers ---
     const instanceGlBuf = gl.createBuffer()!;
@@ -392,10 +396,7 @@ export class StructurePass {
   }
 
   private async loadAtlas(): Promise<void> {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = iconAtlasUrl;
-    await img.decode();
+    const img = await loadAtlasImage(iconAtlasUrl);
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
@@ -434,7 +435,10 @@ export class StructurePass {
       if (prev !== undefined && prev !== unit.pos) {
         const px = prev % this.mapW;
         const py = (prev - px) / this.mapW;
-        if (Math.abs(px - x) <= MOTION_MAX_STEP && Math.abs(py - y) <= MOTION_MAX_STEP) {
+        if (
+          Math.abs(px - x) <= MOTION_MAX_STEP &&
+          Math.abs(py - y) <= MOTION_MAX_STEP
+        ) {
           this.motion.set(unit.id, {
             fx: px,
             fy: py,

@@ -1,10 +1,10 @@
 import { LitElement, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import medalIconRaw from "../../../../resources/images/MedalIconWhite.svg?raw";
-import { Difficulty, GameMapType } from "../../../core/game/Game";
+import { classicOf, Difficulty, GameMapType } from "../../../core/game/Game";
 import { listCachedMapNames } from "../../../core/game/MapCache";
-import { terrainMapFileLoader } from "../../TerrainMapFileLoader";
 import { isBundledOfflineMap, isOffline } from "../../Offline";
+import { terrainMapFileLoader } from "../../TerrainMapFileLoader";
 import { L, translateText } from "../../Utils";
 
 const medalMaskUrl = `url('data:image/svg+xml;utf8,${encodeURIComponent(medalIconRaw)}') no-repeat center / contain`;
@@ -124,6 +124,13 @@ export class MapDisplay extends LitElement {
     event.preventDefault();
   }
 
+  // terron 26.09: равновеликая версия карты («Честные размеры») — имя то же, что у
+  // исходной, отличает её крошечный глобус в конце подписи (просьба владельца).
+  private isEqualArea(): boolean {
+    const m = GameMapType[this.mapKey as keyof typeof GameMapType];
+    return m !== undefined && classicOf(m) !== null;
+  }
+
   render() {
     return html`
       <div
@@ -184,7 +191,24 @@ export class MapDisplay extends LitElement {
         <div
           class="text-xs font-bold text-white uppercase tracking-wider text-center leading-tight break-words hyphens-auto"
         >
-          ${this.translation || this.mapName}
+          ${this.translation || this.mapName}${this.isEqualArea()
+            ? html`<svg
+                class="equal-area-mark"
+                viewBox="0 0 16 16"
+                width="10"
+                height="10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="display:inline-block;vertical-align:1px;margin-left:4px;opacity:.75"
+                aria-label=${L("честные размеры", "true size")}
+              >
+                <title>${L("Честные размеры", "True size")}</title>
+                <circle cx="8" cy="8" r="6.5" />
+                <ellipse cx="8" cy="8" rx="2.8" ry="6.5" />
+                <path d="M1.5 8h13" />
+              </svg>`
+            : ""}
         </div>
       </div>
     `;

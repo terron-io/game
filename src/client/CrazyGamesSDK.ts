@@ -1,3 +1,4 @@
+declare const __PLATFORM_BUILD__: string | undefined;
 declare global {
   interface Window {
     CrazyGames?: {
@@ -78,6 +79,17 @@ export class CrazyGamesSDK {
   }
 
   isOnCrazyGames(): boolean {
+    // ⚠️ В ПЛАТФОРМЕННОЙ СБОРКЕ ПЛОЩАДКА ИЗВЕСТНА ЗАРАНЕЕ — и это не CrazyGames.
+    // Апстримный фолбэк ниже считает CrazyGames'ом ЛЮБОЙ cross-origin iframe без
+    // подходящего referrer («safari private … just assume») — в кадре Playgama
+    // это давало ложный true и поток «SDK not ready, cannot create invite link»
+    // на каждую перерисовку лобби.
+    if (
+      typeof __PLATFORM_BUILD__ === "string" &&
+      __PLATFORM_BUILD__.length > 0
+    ) {
+      return false;
+    }
     try {
       // Check if we're in an iframe
       if (window.self !== window.top) {
@@ -93,8 +105,21 @@ export class CrazyGamesSDK {
         return true;
       }
 
-      // Fallback: on safari private we can't get referrer, so just assume we are in crazygames if in iframe
-      return window.self !== window.top;
+      // terron 17.09: апстрим здесь «на всякий случай» считал CrazyGames'ом ЛЮБОЙ
+      // чужой iframe без реферера. У нас кадров много (песочница GamePush, ВК,
+      // itch), а на CrazyGames мы не выходим вовсе (решение 05.07) — ложный true
+      // прятал всё с классом `no-crazygames`: магазин, кланы, друзей (репорт
+      // владельца из песочницы GamePush: «нет кнопки магазин, хотя я залогинен»).
+      // Второй признак — список предков кадра (Chromium/Safari); нет его — нет.
+      try {
+        const anc = window.location.ancestorOrigins;
+        for (let i = 0; anc && i < anc.length; i++) {
+          if (anc[i].includes("crazygames")) return true;
+        }
+      } catch {
+        /* ancestorOrigins недоступен */
+      }
+      return false;
     }
   }
 

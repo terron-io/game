@@ -12,10 +12,10 @@ import {
   GameType,
 } from "../core/game/Game";
 import { generateID } from "../core/Util";
-import { L } from "./Utils";
 import { getLocalStartCosmetics } from "./Cosmetics";
 import type { JoinLobbyEvent } from "./Main";
 import type { UsernameInput } from "./UsernameInput";
+import { L } from "./Utils";
 
 // terron 01.08: КОГДА ПРЯЧЕМ ПРЕДЛОЖЕНИЕ ОБУЧЕНИЯ (решение владельца).
 // Два условия, любого достаточно:
@@ -51,8 +51,16 @@ export function shouldShowTutorialEntry(): boolean {
 
 /** Обучение пройдено. Локально сразу, в аккаунт — если игрок вошёл. */
 export function markTutorialDone(): void {
-  const isNew = setFlag(TUT_DONE_KEY);
-  if (!isNew) return;
+  setFlag(TUT_DONE_KEY);
+  // ⚠️ terron 28.09: в аккаунт сообщаем при КАЖДОМ прохождении, а не только
+  // при первом на устройстве. Раньше отчёт гейтился «флаг новый»: кто проходил
+  // обучение анонимом (или чей запрос не дошёл), тот больше не мог получить
+  // ачивку никогда — локальный флаг уже стоял (репорт iScrag 28.09). Сервер
+  // идемпотентен (on conflict do nothing), гость отчёт не шлёт вовсе.
+  reportDone();
+}
+
+function reportDone(): void {
   void import("./Api").then(({ reportTutorialDone }) =>
     reportTutorialDone().catch(() => {
       /* аноним/офлайн — хватит локального флага */
@@ -74,6 +82,10 @@ export function syncTutorialFlagsFromAccount(acc: {
   wins?: number;
 }): void {
   if (acc.tutorialDone) setFlag(TUT_DONE_KEY);
+  // terron 28.09: на устройстве обучение пройдено, а аккаунт об этом не знает
+  // (прошёл анонимом, отчёт потерялся) — досылаем. Зовётся только для
+  // вошедшего игрока (syncNickWithAccount), так что уйдёт в его аккаунт.
+  else if (flag(TUT_DONE_KEY)) reportDone();
   if ((acc.wins ?? 0) > 0) setFlag(REAL_WIN_KEY);
 }
 

@@ -15,6 +15,36 @@ import { ClientID, GameStartInfo, Turn } from "../Schemas";
 import { generateID } from "../Util";
 import { WorkerMessage } from "./WorkerMessages";
 
+/**
+ * terron 12.09: пачку ходов от воркера раздаём ПО ОДНОМУ ходу под своим
+ * try. Раньше исключение на k-м ходе обрывало цикл, и ходы k+1..n молча
+ * выбрасывались: зеркало карты навсегда теряло их тайлы, а числа интерфейса
+ * (игрок приходит целиком каждый ход) оставались верными — ровно «карта
+ * застыла, войска живые». Первую ошибку пробрасываем отдельной задачей,
+ * чтобы её увидели глобальные датчики. Возвращает число упавших ходов.
+ */
+export function dispatchUpdateBatch<T>(
+  items: readonly T[],
+  cb: (item: T) => void,
+  rethrow: (err: unknown) => void = (err) =>
+    setTimeout(() => {
+      throw err;
+    }, 0),
+): number {
+  let failed = 0;
+  let first: unknown = null;
+  for (const item of items) {
+    try {
+      cb(item);
+    } catch (err) {
+      if (failed === 0) first = err;
+      failed++;
+    }
+  }
+  if (failed > 0) rethrow(first);
+  return failed;
+}
+
 // terron (офлайн-iOS): база ассетов для воркера. Воркер — инлайн-Blob; его
 // self.location = blob:… → корне-относительный fetch ("/_assets/…") из blob-
 // воркера НЕ резолвится → "Failed to parse URL" → бины/манифест карт не грузятся
@@ -51,19 +81,70 @@ function workerAssetBase(): string {
 // нибудь окажется на чужом origin, `new Worker(url)` кинет SecurityError — тогда
 // заводим воркер из blob с одной строкой `import "<abs url>"` (модульный импорт
 // cross-origin разрешён при CORS), это и есть штатный обход ограничения.
+declare const __PLATFORM_BUILD__: string | undefined;
+
+/**
+ * Откуда брать САМ ФАЙЛ воркера — это НЕ то же, что база ассетов.
+ *
+ * ⚠️ В сборке под чужую площадку (Playgama) ассеты идут с нашего домена
+ * (cdnBase), а вот КОД воркера обязан грузиться ЛОКАЛЬНО, из самого бандла.
+ * Иначе так: прямой `new Worker(https://terron.io/...)` падает SecurityError
+ * (cross-origin), включается blob-фолбэк, а тот тянет с terron.io чанки ТОЙ
+ * сборки — которых там нет, потому что у сайта свои хэши. Итог — «Worker init
+ * failed: Failed to fetch» и матч, зависший на загрузке (поймано живой
+ * проверкой бандла на стороннем origin).
+ */
+function isPlatformBuild(): boolean {
+  return (
+    typeof __PLATFORM_BUILD__ === "string" && __PLATFORM_BUILD__.length > 0
+  );
+}
+
+function workerScriptBase(): string {
+  const isPlatform = isPlatformBuild();
+  if (isPlatform) {
+    try {
+      return location.origin && location.origin !== "null"
+        ? location.origin
+        : "";
+    } catch {
+      return "";
+    }
+  }
+  return workerAssetBase();
+}
+
 declare const __BUILD_TIME__: number | undefined;
 function createGameWorker(): Worker {
   if (import.meta.env.DEV) {
     // dev-сервер Vite отдаёт .ts воркера как ES-модуль напрямую.
     return new Worker("/src/core/worker/Worker.worker.ts", { type: "module" });
   }
-  const v =
-    typeof __BUILD_TIME__ === "number" ? `?v=${__BUILD_TIME__}` : "";
-  const url = `${workerAssetBase()}/assets/simworker.js${v}`;
+  const v = typeof __BUILD_TIME__ === "number" ? `?v=${__BUILD_TIME__}` : "";
+  // ⚠️ В ПЛАТФОРМЕННОЙ СБОРКЕ АДРЕС СЧИТАЕМ ОТ САМОГО СЕБЯ, а не от origin.
+  // Площадка кладёт игру в СВОЮ ПОДПАПКУ (`/<id-игры>/assets/…`), поэтому
+  // `${location.origin}/assets/simworker.js` уходил в КОРЕНЬ домена, получал 404
+  // и воркер не поднимался вовсе — «Error: Worker initialization timeout» и матч,
+  // навсегда застрявший на «загрузке карты» (репорт владельца 30.08 из их
+  // QA-инструмента). `import.meta.url` — это URL текущего чанка, он всегда лежит
+  // рядом с simworker.js, в какой бы подпапке площадка нас ни разместила.
+  // ⚠️ БАЗУ СЧИТАЕМ СТРОКОЙ, а не через `new URL(..., import.meta.url)`.
+  // Rolldown распознаёт этот шаблон как ссылку на ассет и подменяет его своим
+  // `import.meta.glob(...)`, который на нашем `?v=` ключе даёт undefined —
+  // проверено грепом собранного бандла. Обычная строковая арифметика бандлеру
+  // не видна и делает ровно то, что нужно.
+  const selfUrl = import.meta.url;
+  const dir = selfUrl.slice(0, selfUrl.lastIndexOf("/") + 1);
+  const url = isPlatformBuild()
+    ? `${dir}simworker.js${v}`
+    : `${workerScriptBase()}/assets/simworker.js${v}`;
   try {
     return new Worker(url, { type: "module" });
   } catch (e) {
-    console.warn("[worker] прямой запуск не удался, фолбэк через blob-import", e);
+    console.warn(
+      "[worker] прямой запуск не удался, фолбэк через blob-import",
+      e,
+    );
     const blob = new Blob([`import ${JSON.stringify(url)};`], {
       type: "text/javascript",
     });
@@ -104,9 +185,8 @@ export class WorkerClient {
         break;
       case "game_update_batch":
         if (this.gameUpdateCallback && message.gameUpdates) {
-          for (const gu of message.gameUpdates) {
-            this.gameUpdateCallback(gu);
-          }
+          const cb = this.gameUpdateCallback;
+          dispatchUpdateBatch(message.gameUpdates, (gu) => cb(gu));
         }
         break;
       case "game_error":

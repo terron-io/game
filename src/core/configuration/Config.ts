@@ -20,7 +20,7 @@ import { TileRef } from "../game/GameMap";
 import { PlayerView } from "../game/GameView";
 import { UserSettings } from "../game/UserSettings";
 import { GameConfig, TeamCountConfig } from "../Schemas";
-import { NukeType } from "../StatsSchemas";
+import { LaunchableNukeType } from "../StatsSchemas";
 import { assertNever, sigmoid, toInt, within } from "../Util";
 import {
   fortHqRangeMult,
@@ -40,10 +40,12 @@ import {
   TERRON_OILRIG_BUILD_TICKS,
   TERRON_OILRIG_MIN_DIST_FROM_LAND,
   TERRON_OLYMPICS_COST,
+  TERRON_OURSKY_BUILD_TICKS,
   TERRON_PACT_COST,
   TERRON_PEACEFUL_SKY_SAM_DISCOUNT,
   TERRON_PIRACY_SHIP_COST,
   TERRON_PRIDE_COST,
+  TERRON_RAILGUN_FACTORY_DISCOUNT,
   TERRON_RAILGUN_SHOT_COST,
   TERRON_RECULT_COST,
   TERRON_RESPITE_COST,
@@ -55,14 +57,29 @@ import {
   TERRON_SPAWN_PHASE_TURNS,
   TERRON_SPLIT_BASE_GOLD,
   TERRON_TANK_ATTACK_MULT,
+  TERRON_TERRA_NUKE_COST,
+  TERRON_TERRA_NUKE_INNER,
+  TERRON_TERRA_NUKE_OUTER,
   TERRON_TERROR_COST,
+  TERRON_TRAIN_CARS_BASE,
+  TERRON_TRAIN_CARS_PER_LEVEL,
+  TERRON_TRAIN_GOLD_PER_CAR,
+  TERRON_TRAIN_GOLD_PER_CAR_TILE,
+  TERRON_TRAIN_INTERVAL_TICKS,
+  TERRON_TRAIN_PAID_TILES_MAX,
+  TERRON_TRAIN_REL_MULT,
+  TERRON_TRAIN_GOLD_MULT,
+  TERRON_TRAIN_STOP_DECAY,
+  TERRON_PORT_GOLD_MULT,
   TERRON_TRAINS_BLAST_MULT,
   TERRON_TRAINS_COST,
-  TERRON_WALK_COST,
   TERRON_TREASURE_BUILD_TICKS,
   TERRON_TRUCE_COST,
   TERRON_ULT_BUILDING_BUILD_TICKS,
   TERRON_ULT_BUILDING_COST,
+  TERRON_WALK_COST,
+  UPSTREAM_BLAST_DEATH_MULT,
+  victoryHoldSeconds,
 } from "./TerronTuning";
 
 declare global {
@@ -294,34 +311,46 @@ export class Config {
     return this.startingGoldFor(playerInfo);
   }
 
-  trainSpawnRate(numPlayerFactories: number): number {
-    // hyperbolic decay, midpoint at 10 factories
-    // expected number of trains = numPlayerFactories  / trainSpawnRate(numPlayerFactories)
-    return (numPlayerFactories + 10) * 15;
+  // terron 24.09: РЕБАЛАНС ПОЕЗДОВ (TerronTuning §ФАБРИКИ И ПОЕЗДА).
+  /** Поезд фабрики выходит раз в столько тиков. */
+  trainIntervalTicks(): number {
+    return TERRON_TRAIN_INTERVAL_TICKS;
   }
+  /** Сколько вагонов (и выплат) у поезда фабрики данного уровня. */
+  trainCars(factoryLevel: number): number {
+    return (
+      TERRON_TRAIN_CARS_BASE +
+      TERRON_TRAIN_CARS_PER_LEVEL * Math.max(1, factoryLevel)
+    );
+  }
+  /**
+   * Выплата поезда за ОДНУ точку сети: вагоны × (база + тайлы пути от прошлой
+   * платной точки × плата за тайл) × множитель отношений. Пути засчитываем не
+   * больше TERRON_TRAIN_PAID_TILES_MAX. `stopIndex` — какая по счёту платная
+   * точка рейса (0 — первая): каждая следующая ×TERRON_TRAIN_STOP_DECAY.
+   */
   trainGold(
     rel: "self" | "team" | "ally" | "other",
-    citiesVisited: number,
+    cars: number,
+    pathTiles: number,
     player: Player | PlayerView,
+    stopIndex = 0,
   ): Gold {
-    // No penalty for the first 10 cities.
-    citiesVisited = Math.max(0, citiesVisited - 9);
-    let baseGold: number;
-    switch (rel) {
-      case "ally":
-        baseGold = 35_000;
-        break;
-      case "team":
-      case "other":
-        baseGold = 25_000;
-        break;
-      case "self":
-        baseGold = 10_000;
-        break;
-    }
-    const distPenalty = citiesVisited * 5_000;
-    const gold = Math.max(5000, baseGold - distPenalty);
-    return toInt(gold * this.goldMultiplierFor(player));
+    const tiles = Math.min(Math.max(0, pathTiles), TERRON_TRAIN_PAID_TILES_MAX);
+    const perCar =
+      TERRON_TRAIN_GOLD_PER_CAR + tiles * TERRON_TRAIN_GOLD_PER_CAR_TILE;
+    // Спад умножением в цикле, а не Math.pow: умножение IEEE одинаково во всех
+    // движках, а золото — часть симуляции (иначе риск десинка).
+    let decay = 1;
+    for (let i = 0; i < stopIndex; i++) decay *= TERRON_TRAIN_STOP_DECAY;
+    return toInt(
+      Math.max(1, cars) *
+        perCar *
+        TERRON_TRAIN_REL_MULT[rel] *
+        TERRON_TRAIN_GOLD_MULT *
+        decay *
+        this.goldMultiplierFor(player),
+    );
   }
 
   trainStationMinRange(): number {
@@ -339,7 +368,12 @@ export class Config {
     const debuff = this.tradeShipShortRangeDebuff();
     const baseGold =
       75_000 / (1 + Math.exp(-0.03 * (dist - debuff))) + 50 * dist;
-    return BigInt(Math.floor(baseGold * this.goldMultiplierFor(player)));
+    // terron 26.09: нерф портов −20 % (TerronTuning TERRON_PORT_GOLD_MULT).
+    return BigInt(
+      Math.floor(
+        baseGold * TERRON_PORT_GOLD_MULT * this.goldMultiplierFor(player),
+      ),
+    );
   }
 
   // Probability of trade ship spawn = 1 / tradeShipSpawnRate
@@ -411,13 +445,14 @@ export class Config {
           upgradable: true,
         };
         break;
-      // terron: НЕФТЯНАЯ ВЫШКА — цена растёт вдвое за каждую следующую (как порт),
-      // но старт и потолок выше: вышка платит ×5 за рейс. TerronTuning §ВЫШКА.
+      // terron: НЕФТЯНАЯ ВЫШКА — цена растёт ШАГОМ 5M за каждую следующую
+      // (решение владельца 31.08): 5M, 10M, 15M, 20M… TerronTuning §ВЫШКА.
       case UnitType.OilRig:
         info = {
-          // Плоские 5M за каждую вышку (решение владельца 07.08).
+          // numUnits — сколько вышек УЖЕ стоит (costWrapper считает построенные
+          // и принадлежащие игроку), поэтому первая обходится в один BASE_COST.
           cost: this.costWrapper(
-            () => TERRON_OILRIG_BASE_COST,
+            (numUnits: number) => TERRON_OILRIG_BASE_COST * (numUnits + 1),
             UnitType.OilRig,
           ),
           constructionDuration: this.instantBuild()
@@ -444,12 +479,21 @@ export class Config {
         break;
       // terron: ультимейты — «Реки вспять»: цена пуска водяной ракеты. Гейт
       // «нужен живой штаб RiversBack» — общий реестр CAST_UNLOCKED_BY.
+      // terron 25.08: ТЕРРАФОРМИНГ — все ТРИ ракеты ульты стоят одинаково
+      // (решение владельца). Один case на группу: цена, объявленная в трёх
+      // местах, разъезжается на первой же правке.
       case UnitType.WaterNuke:
         info = {
-          cost: this.costWrapper(
-            () => TERRON_RIVERS_NUKE_COST,
-            UnitType.WaterNuke,
-          ),
+          cost: this.costWrapper(() => TERRON_RIVERS_NUKE_COST, type),
+        };
+        break;
+      // terron 01.09: ракеты ТЕРРАФОРМИНГА — своя цена, вдвое выше
+      // (решение владельца). Раньше все три делили цену «Рек вспять».
+      case UnitType.TerraFlood:
+      case UnitType.LandNuke:
+      case UnitType.BlastNuke:
+        info = {
+          cost: this.costWrapper(() => TERRON_TERRA_NUKE_COST, type),
         };
         break;
       case UnitType.HydrogenBomb:
@@ -566,9 +610,19 @@ export class Config {
         break;
       case UnitType.Factory:
         info = {
+          // terron 01.09 (решение владельца): пока у игрока стоит ДОРА, новые
+          // фабрики дешевле на TERRON_RAILGUN_FACTORY_DISCOUNT. Скидка тут, в
+          // цене по типу, — но зависит от ИГРОКА, поэтому считается внутри
+          // функции, а не константой: у соседа без орудия цена прежняя.
           cost: this.costWrapper(
-            (numUnits: number) =>
-              Math.min(1_000_000, Math.pow(2, numUnits) * 125_000),
+            (numUnits: number, player?: Player) => {
+              const base = Math.min(1_000_000, Math.pow(2, numUnits) * 125_000);
+              const hasGun =
+                player !== undefined && player.unitCount(UnitType.RailGun) > 0;
+              return hasGun
+                ? Math.floor(base * (1 - TERRON_RAILGUN_FACTORY_DISCOUNT))
+                : base;
+            },
             UnitType.Factory,
             UnitType.Port,
           ),
@@ -630,8 +684,8 @@ export class Config {
         break;
       // terron: «Небо наше» после реворка 21.08 — СТАНДАРТНЫЙ штаб (5M/10с),
       // своего case больше нет: его ловит default-ветка Ultimates+Structures.
-      // Телеграф 60с переехал на каст «Сбить спутники» (ниже). NEBO.md
-      // terron: «Сбить спутники» — ракета-каст Неба нашего. Цена 1M; сборку 60с
+      // Телеграф 60с переехал на каст «Небо наше» (бывш. «Сбить спутники») (ниже). NEBO.md
+      // terron: «Небо наше» (бывш. «Сбить спутники») — ракета-каст Неба нашего. Цена 1M; сборку 60с
       // (телеграф) ведёт СВОЯ экзекуция, не флоу стройки (каст — не структура).
       case UnitType.SatelliteStrike:
         info = {
@@ -639,6 +693,14 @@ export class Config {
             () => TERRON_SATSTRIKE_COST,
             UnitType.SatelliteStrike,
           ),
+          // ⚠️ 01.09 (репорт владельца «постройка заняла 10 секунд вместо
+          // реального времени»): полоса стройки берёт ИМЕННО это поле, а его у
+          // носителя не было — BarPass падал в дефолт 50 тиков (5 с) и полоса
+          // добегала до конца, пока ракета собиралась ещё 55 секунд. Берём ТУ
+          // ЖЕ константу, по которой считает экзекуция: второй копии срока нет.
+          constructionDuration: this.instantBuild()
+            ? 0
+            : TERRON_OURSKY_BUILD_TICKS,
         };
         break;
       // terron: «Блокада» — каст Пиратства: зона паники для чужой торговли.
@@ -894,8 +956,14 @@ export class Config {
     };
   }
 
+  /**
+   * ⚠️ terron 01.09: costFn получает ВТОРЫМ аргументом игрока. Он нужен ценам,
+   * которые зависят не от числа построек, а от того, ЧТО у игрока есть (скидка
+   * на фабрики от Доры). Старые функции второй аргумент просто игнорируют —
+   * правка обратносовместима.
+   */
   private costWrapper(
-    costFn: (units: number) => number,
+    costFn: (units: number, player?: Player) => number,
     ...types: UnitType[]
   ): (g: Game, p: Player) => bigint {
     return (game: Game, player: Player) => {
@@ -911,7 +979,7 @@ export class Config {
           Math.min(player.unitsOwned(type), player.unitsConstructed(type)),
         0,
       );
-      return BigInt(costFn(numUnits));
+      return BigInt(costFn(numUnits, player));
     };
   }
 
@@ -955,7 +1023,10 @@ export class Config {
     return 30 * 10;
   }
   allianceDuration(): Tick {
-    return 300 * 10; // 5 minutes.
+    // terron 31.08 (решение владельца): союз живёт 3 минуты вместо апстримовых 5.
+    // ⚠️ От этого же значения зависит длительность НАВЯЗАННОГО союза у «Пакта»
+    // (Дворец наций) и кулдаун его повторного каста — они укорачиваются вместе.
+    return 180 * 10; // 3 minutes.
   }
   temporaryEmbargoDuration(): Tick {
     return 300 * 10; // 5 minutes.
@@ -969,6 +1040,21 @@ export class Config {
       return 95;
     }
     return 80;
+  }
+
+  /**
+   * terron 26.08: сколько ТИКОВ надо удерживать порог территории, прежде чем
+   * будет объявлена победа. Цифра берётся по тиру матча (обычный / золотой /
+   * алмазный) — один источник и для сима, и для полосы на экране.
+   *
+   * ⚠️ Едет из ЛОББИ-конфига матча, а он одинаков у всех клиентов, поэтому
+   * симуляция остаётся детерминированной.
+   */
+  victoryHoldTurns(): number {
+    return Math.max(
+      0,
+      Math.round(victoryHoldSeconds(this._gameConfig.eventTier) * 10),
+    );
   }
   boatMaxNumber(): number {
     if (this.isUnitDisabled(UnitType.TransportShip)) {
@@ -1039,7 +1125,11 @@ export class Config {
         }
       }
       // Обычные бункеры (радиус растёт с уровнем штаба у владельца ульты).
-      if (!defended) {
+      // terron 04.09 ПЕРФ: у защитника без единого бункера сетку юнитов не
+      // сканируем (unitCount — кэш; nearbyUnits на КАЖДЫЙ захваченный тайл
+      // = 0.56 с из 53 в профиле). Ниже засчитываются только бункеры САМОГО
+      // защитника, так что при нуле результат тот же.
+      if (!defended && defender.unitCount(UnitType.DefensePost) > 0) {
         const range = base * (fort ? fortRangeMult(level) : 1);
         for (const dp of gm.nearbyUnits(
           tileToConquer,
@@ -1078,13 +1168,19 @@ export class Config {
       mag *= TERRON_FANATICISM_ATTACK_LOSS_MULT;
     }
 
-    // terron: РЕВАНШИЗМ (ультимейт-ЗДАНИЕ «статуя») — пока стоит штаб-статуя,
-    // теряя земли от исторического пика, защитник получает баф обороны по ВСЕЙ
-    // территории (0..+200% к mag). Как бункеры, но глобально. Танки НЕ игнорируют
-    // (это не бункер). См. Player.revanchismBuff() / TERRON_REVANCHISM_*.
+    // terron: РЕВАНШИЗМ (ультимейт-ЗДАНИЕ «статуя») — пока стоит монумент, теряя
+    // земли от исторического пика, защитник ЗАМЕДЛЯЕТ захват по ВСЕЙ территории.
+    // Как бункеры, но глобально; с ними МНОЖИТСЯ (до ×9 внутри их покрытия) —
+    // осознанно, решение владельца 26.08. Танки НЕ игнорируют (это не бункер).
+    //
+    // ⚠️ ИМЕННО `speed`, А НЕ `mag` (переезд 26.08). Раньше баф повышал потери
+    // атакующего и не трогал темп: земля уходила с той же скоростью, свои потери
+    // те же — менялся только невидимый игроку счёт врага, отсюда полгода жалоб
+    // «ульта не работает». Затраты атакующего теперь не трогаем совсем.
+    // См. Player.revanchismBuff() / TerronTuning §РЕВАНШИЗМ.
     if (defender.isPlayer() && defender.hasUltimate(UnitType.Revanchism)) {
       const rev = defender.revanchismBuff();
-      if (rev > 0) mag *= 1 + rev;
+      if (rev > 0) speed *= 1 + rev;
     }
 
     // terron: РЕВАНШИЗМ, вторая половина — МЕСТЬ. Мои атаки по тому, кто напал
@@ -1382,6 +1478,16 @@ export class Config {
           inner: TERRON_RIVERS_NUKE_INNER,
           outer: TERRON_RIVERS_NUKE_OUTER,
         };
+      // terron 01.09: ракеты ТЕРРАФОРМИНГА — своя, чуть меньшая воронка
+      // (см. TERRON_TERRA_NUKE_*). Раньше все три делили радиус «Рек вспять»;
+      // после разделения на две ульты это разные вещи.
+      case UnitType.TerraFlood:
+      case UnitType.LandNuke:
+      case UnitType.BlastNuke:
+        return {
+          inner: TERRON_TERRA_NUKE_INNER,
+          outer: TERRON_TERRA_NUKE_OUTER,
+        };
     }
     throw new Error(`Unknown nuke type: ${unitType}`);
   }
@@ -1419,13 +1525,16 @@ export class Config {
   nukeDeathFactor(
     // terron: ультимейты — «Реки вспять» пользуется той же формулой потерь
     // (не-МИРВ ветка), но в схему статистики бомб не входит. См. NukeExecution.
-    nukeType: NukeType | UnitType.WaterNuke,
+    nukeType: LaunchableNukeType,
     humans: number,
     tilesOwned: number,
     maxTroops: number,
+    // terron 24.09: множитель потерь за тайл. Ракеты передают
+    // TERRON_NUKE_DEATH_MULT, прочие взрывы — апстримовские 5 (TerronTuning §ЯДЕРКА).
+    deathMult: number = UPSTREAM_BLAST_DEATH_MULT,
   ): number {
     if (nukeType !== UnitType.MIRVWarhead) {
-      return (5 * humans) / Math.max(1, tilesOwned);
+      return (deathMult * humans) / Math.max(1, tilesOwned);
     }
     const targetTroops = 0.03 * maxTroops;
     const excessTroops = Math.max(0, humans - targetTroops);

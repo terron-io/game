@@ -16,7 +16,13 @@ import {
 } from "./WorkerMessages";
 
 const ctx: Worker = self as any;
-globalThis.__ASSET_MANIFEST__ = __ASSET_MANIFEST__;
+// terron: в dev-сервере Vite `define` до модуля воркера НЕ ДОЕЗЖАЕТ (проверено
+// запросом трансформа: в отданном коде остаётся голый идентификатор). Без гарда
+// воркер падал на первой же строке — `ReferenceError: __ASSET_MANIFEST__ is not
+// defined`, симуляция не поднималась, и любой локальный матч вечно висел на
+// «ЗАГРУЗКА КАРТЫ…». В dev манифест и не нужен: ассеты там не хэшируются.
+globalThis.__ASSET_MANIFEST__ =
+  typeof __ASSET_MANIFEST__ === "undefined" ? undefined : __ASSET_MANIFEST__;
 let gameRunner: Promise<GameRunner> | null = null;
 const mapLoader = new FetchGameMapLoader((path) => assetUrl(`maps/${path}`));
 // Yield threshold; not a backlog cap. Used to avoid monopolizing the worker task
@@ -200,7 +206,9 @@ ctx.addEventListener("message", async (e: MessageEvent<MainThreadMessage>) => {
               type: "initialized",
               id: message.id,
               error:
-                err instanceof Error ? err.message : String(err ?? "init failed"),
+                err instanceof Error
+                  ? err.message
+                  : String(err ?? "init failed"),
             } as InitializedMessage);
             throw err;
           });

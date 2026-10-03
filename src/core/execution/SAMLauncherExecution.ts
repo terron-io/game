@@ -8,6 +8,7 @@ import {
   isUnit,
   MessageType,
   Player,
+  SamInterceptable,
   Unit,
   UnitType,
 } from "../game/Game";
@@ -30,10 +31,23 @@ export function samEffectiveRange(mg: Game, sam: Unit): number {
 // захваченный чужой — пассивки работают у захватчика), ВСЕ его ПВО
 // перезаряжаются быстрее. Целые тики (детерминизм). NEBO.md
 export function samEffectiveCooldown(mg: Game, owner: Player): number {
-  const base = mg.config().SAMCooldown();
-  return owner.hasUltimate(UnitType.OurSky)
-    ? Math.round(base * TERRON_OURSKY_SAM_RELOAD_MULT)
-    : base;
+  return samCooldownFrom(
+    mg.config().SAMCooldown(),
+    owner.hasUltimate(UnitType.OurSky),
+  );
+}
+
+/**
+ * Голая арифметика перезарядки ПВО — её зовёт И симуляция, И циферблат на
+ * карте.
+ *
+ * ⚠️ 01.09: раньше формула жила только здесь, а клиент рисовал циферблат по
+ * БАЗОВОЙ перезарядке — то есть у владельца «Неба нашего» подсказка врала вдвое.
+ * Тот же приём, что у скорости от Топлива (`fuelSpeedFrom`): голые факты
+ * отдельно, обёртка для сима отдельно, второй копии арифметики нет.
+ */
+export function samCooldownFrom(base: number, hasOurSky: boolean): number {
+  return hasOurSky ? Math.round(base * TERRON_OURSKY_SAM_RELOAD_MULT) : base;
 }
 
 type Target = {
@@ -136,14 +150,15 @@ class SAMTargetingSystem {
 
     // Look beyond the SAM range so it can preshot nukes
     // (terron: у штаба Неба радиус ×5 — окно обнаружения обязано его покрывать)
-    const detectionRange =
-      Math.max(this.mg.config().maxSamRange(), range) * 2;
+    const detectionRange = Math.max(this.mg.config().maxSamRange(), range) * 2;
     const nukes = this.mg.nearbyUnits(
       samTile,
       detectionRange,
       // terron: ультимейты — «Реки вспять» перехватывается как обычная ракета
       // (контрплей: у неё необратимый эффект, значит должна быть сбиваема).
-      [UnitType.AtomBomb, UnitType.HydrogenBomb, UnitType.WaterNuke],
+      // terron 25.08: ТЕРРАФОРМИНГ — все три ракеты ульты берём ГРУППОЙ, а не
+      // списком: ровно так забытый тип однажды перестал перехватываться.
+      [...SamInterceptable.types],
       ({ unit }) => {
         if (!isUnit(unit) || unit.targetedBySAM()) return false;
         if (unit.owner() === this.sam.owner()) return false;
@@ -311,9 +326,10 @@ export class SAMLauncherExecution implements Execution {
     // юнитов — O(игроков) без аллокаций; пустой результат запроса эквивалентен
     // пропуску, детерминизм не затронут.
     if (
-      this.mg.unitCount(UnitType.AtomBomb) === 0 &&
-      this.mg.unitCount(UnitType.HydrogenBomb) === 0 &&
-      this.mg.unitCount(UnitType.WaterNuke) === 0 &&
+      // terron 01.09: «в небе пусто» — по ТОЙ ЖЕ группе, что и список целей
+      // ПВО. Раньше это были два разных перечисления, и стоило одной ракете
+      // выйти из группы, как ПВО молча переставало её видеть.
+      SamInterceptable.types.every((t) => this.mg.unitCount(t) === 0) &&
       this.mg.unitCount(UnitType.MIRVWarhead) === 0 &&
       this.mg.unitCount(UnitType.AirborneAssault) === 0 &&
       this.mg.unitCount(UnitType.SuicideDrone) === 0

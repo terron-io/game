@@ -1,10 +1,12 @@
 import { Centrifuge, type Subscription } from "centrifuge";
+import type { Colord } from "colord";
 import { html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { ClientInfo } from "../core/Schemas";
 import { simpleHash } from "../core/Util";
 import { getApiBase } from "./Api";
 import { getAuthHeader } from "./Auth";
+import { chatDeviceId, deviceTraceHeaders } from "./DeviceTrace";
 import { humanColors } from "./theme/Colors";
 import { L } from "./Utils";
 
@@ -18,10 +20,26 @@ interface LobbyChatMsg {
 // игре (humanColors), детерминированно по игровому clientID — так ник в чате
 // перекликается с цветом территории игрока. Хэш-выбор как в ColorAllocator
 // (ветка random / >50 игроков).
+/** Выше этой яркости (0..1, colord.brightness) ник на светлом листе не читается. */
+const MAX_NICK_BRIGHTNESS = 0.55;
+
 function nickColor(cid: string | undefined): string {
   if (!cid) return "rgb(148,163,184)"; // slate-400 для анонимов без cid
-  const c = humanColors[simpleHash(cid) % humanColors.length];
-  return c.toRgbString();
+  return readableOnSheet(humanColors[simpleHash(cid) % humanColors.length]);
+}
+
+/**
+ * terron 30.09 (скрин KDaniilW «сделать ник в чате лобби читаемым»): в палитре
+ * территорий есть бледные цвета (светло-жёлтый, мятный), а чат лобби лежит на
+ * светлом листе — ник сливался с фоном. Тон сохраняем (ник по-прежнему
+ * перекликается с территорией), затемняем, пока яркость не станет читаемой.
+ */
+export function readableOnSheet(c: Colord): string {
+  let col = c;
+  for (let i = 0; i < 12 && col.brightness() > MAX_NICK_BRIGHTNESS; i++) {
+    col = col.darken(0.05);
+  }
+  return col.toRgbString();
 }
 
 // terron: чат ЛОББИ (до старта матча). ТОТ ЖЕ канал, что и внутриигровой чат —
@@ -132,7 +150,10 @@ export class LobbyChatPanel extends LitElement {
 
   private async fetchToken(): Promise<string> {
     const res = await fetch(`${getApiBase()}/realtime/token`, {
-      headers: { authorization: await getAuthHeader() },
+      headers: {
+        authorization: await getAuthHeader(),
+        ...deviceTraceHeaders(),
+      },
     });
     if (!res.ok) throw new Error("realtime token failed");
     const j = (await res.json()) as {
@@ -274,9 +295,11 @@ export class LobbyChatPanel extends LitElement {
     );
     this.startCooldown();
     // cid = игровой clientID → приёмники красят ник в «цвет территории».
-    this.sub.publish({ text, name, cid: this.myClientID }).catch(() => {
-      /* 429/409/413 — у отправителя сообщение уже есть, глотаем */
-    });
+    this.sub
+      .publish({ text, name, cid: this.myClientID, did: chatDeviceId() })
+      .catch(() => {
+        /* 429/409/413 — у отправителя сообщение уже есть, глотаем */
+      });
   }
 
   private startCooldown() {

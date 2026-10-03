@@ -1,4 +1,3 @@
-import { setDevUnlockAll } from "./UltUnlocks";
 import { Config } from "src/core/configuration/Config";
 import { translateText } from "../client/Utils";
 import { EventBus, EventConstructor, GameEvent } from "../core/EventBus";
@@ -53,6 +52,7 @@ import {
 } from "./Analytics";
 import { getPersistentID } from "./Auth";
 import { camDiag, perfDiagEnabled } from "./CamDiag";
+import { coreMismatchNoticed, noteMatchCoreHash } from "./CoreVersionCheck";
 import { reportPresence, stopPresence } from "./FriendsPresence";
 import { installHideUiMode, resetHideUiMode } from "./HideUiMode";
 import {
@@ -78,7 +78,9 @@ import { perfHud } from "./PerfHud";
 import { fireReferralMatch } from "./Referral";
 import { initSyncStatus, syncStatus } from "./SyncStatus";
 import { terrainMapFileLoader } from "./TerrainMapFileLoader";
+import { territoryIntegrity } from "./TerritoryIntegrity";
 import { toast } from "./Toast";
+import { checkSpawnSpacing } from "./SpawnSpacingHint";
 import { GoToPlayerEvent } from "./TransformHandler";
 import {
   MoveWarshipIntentEvent,
@@ -92,12 +94,15 @@ import {
   SendUpgradeStructureIntentEvent,
   Transport,
 } from "./Transport";
+import { setDevUnlockAll } from "./UltUnlocks";
 import { createCanvas, getCurrentLang, L } from "./Utils";
+import { currentVisualStyle, onVisualStyleChange } from "./VisualStyleStore";
 import { WebGLFrameBuilder } from "./WebGLFrameBuilder";
 import { createRenderer, GameRenderer } from "./hud/GameRenderer";
 import {
   applyDarkModeOverride,
   applyGraphicsOverrides,
+  applyVisualStyle,
   createDebugGui,
   createRenderSettings,
   deepAssign,
@@ -106,6 +111,7 @@ import {
   releaseGlContext,
   GameView as WebGLGameView,
 } from "./render/gl";
+import { WEBGL_BLOCKED_RE } from "./render/gl/ContextLossPolicy";
 import { prewarmStats } from "./render/gl/utils/GlUtils";
 import { ALL_UNIT_TYPES, UnitState } from "./render/types";
 import { isMuted } from "./sound/AudioBus";
@@ -217,9 +223,23 @@ export function joinLobby(
   traceMark("join"); // terron: трассировка холодного старта (LoadTrace)
   startGame(lobbyConfig.gameID, lobbyConfig.gameStartInfo?.config ?? {});
 
+  // terron 11.09: КЭШ КАРТ ЧИСТИМ И НА ВХОДЕ, а не только на teardown. Кэш
+  // отдаёт один и тот же GameMapImpl с МУТИРУЕМЫМ owner-стейтом; если teardown
+  // прошлой игры не случился (джойн перебит вторым кликом — см. `stopped` ниже),
+  // два матча делили бы одну карту: чужой GameView с пустым smallIDToID читал бы
+  // владельцев тайлов живой игры → «small id N not found» на каждый ховер.
+  clearTerrainMapCache();
   const transport = new Transport(lobbyConfig, eventBus);
 
   let currentGameRunner: ClientGameRunner | null = null;
+  // terron 11.09: ПЕРЕБИТЫЙ ДЖОЙН НЕ ДОЛЖЕН ДОСТРАИВАТЬ МАТЧ. `stop()` до
+  // готовности раннера успевал только `transport.leaveGame()`, а висящий
+  // `createClientGame(...).then(r => r.start())` всё равно собирал графику,
+  // вешал контроллеры на ОБЩУЮ шину и стартовал осиротевший матч (телеметрия:
+  // «small id 1 not found» в /tutorial — 92 события/мес, ids = игроки ЖИВОЙ
+  // игры, а бросал GameView сироты). Флаг читают и `start`-сообщение, и
+  // `.then`: пришло после stop() — раннер гасим, а не стартуем.
+  let stopped = false;
 
   const onconnect = async () => {
     // Drop the tag if the ownership check failed; the server re-checks anyway.
@@ -275,6 +295,13 @@ export function joinLobby(
       // старт (веха между play_click и загрузкой в игру). Не реплей/не одиночка.
       if (!isSingleplayer && lobbyConfig.gameRecord === undefined) {
         trackLobbyStarted();
+        // terron 28.09: матч начат на другой версии ядра (выкат посреди матча,
+        // а игрок перезагрузил вкладку) — предупреждаем сразу, см. CoreVersionCheck.
+        noteMatchCoreHash(
+          message.coreHash,
+          message.gameStartInfo.gameID,
+          message.serverCoreHash,
+        );
       }
       // Trigger prestart for singleplayer games
       resolvePrestart();
@@ -295,6 +322,7 @@ export function joinLobby(
       }
       // For multiplayer games, GameStartInfo is not known until game starts.
       lobbyConfig.gameStartInfo = message.gameStartInfo;
+      if (stopped) return; // из лобби уже вышли — матч не собираем
       createClientGame(
         lobbyConfig,
         clientID,
@@ -305,6 +333,13 @@ export function joinLobby(
         terrainMapFileLoader,
       )
         .then((r) => {
+          if (stopped) {
+            // Джойн перебит, пока матч собирался: графика уже создана —
+            // сносим её тем же stop() (он умеет работать до start()).
+            console.log("join superseded while building the game — dropping");
+            r.stop();
+            return;
+          }
           currentGameRunner = r;
           r.start();
         })
@@ -342,13 +377,29 @@ export function joinLobby(
             composed: true,
           }),
         );
-      } else if (message.error === "kick_reason.host_left") {
-        toast(translateText("kick_reason.host_left"));
+      } else if (EXPECTED_KICKS.has(message.error)) {
+        // terron 13.09: кик создателем лобби / админом / второй вкладкой — штатное
+        // событие, а не сбой. Раньше он падал в модалку ошибки «Connection error»
+        // со всем отчётом об устройстве (репорт в «тз карты»). Коротко называем
+        // причину и уводим в меню. too_much_data / invalid_message остаются в
+        // модалке: это наши баги, отчёт там нужен.
+        toast(translateText(message.error), "info");
         document.dispatchEvent(
           new CustomEvent("leave-lobby", {
-            detail: { lobby: lobbyConfig.gameID, cause: "host-left" },
+            detail: { lobby: lobbyConfig.gameID, cause: "kicked" },
             bubbles: true,
             composed: true,
+          }),
+        );
+      } else if (message.error.startsWith("start_refused.")) {
+        // terron 01.09: сервер отказал в старте лобби — называем причину
+        // игроку и кладём её в телеметрию. Раньше отказ был НЕМЫМ с обеих
+        // сторон: хост жал кнопку, и не происходило ровно ничего.
+        const why = message.error.slice("start_refused.".length);
+        toast(translateText(`lobby_start_refused.${why}`), "error");
+        void import("./Health").then(({ reportHealth }) =>
+          reportHealth("lobby_start_refused", why, {
+            gameID: lobbyConfig.gameID,
           }),
         );
       } else {
@@ -372,6 +423,7 @@ export function joinLobby(
         return false;
       }
       console.log("leaving game");
+      stopped = true;
       stopPresence(); // terron (друзья): снять пресенс лобби/игры
       if (currentGameRunner) {
         currentGameRunner.stop();
@@ -385,6 +437,16 @@ export function joinLobby(
     join: joinPromise,
   };
 }
+
+// terron 13.09: причины кика, которые означают штатный уход, а не сбой —
+// показываем тост и выводим в меню вместо модалки ошибки (см. обработку
+// message.type === "error"). Ключи — те же, что шлёт GameServer.kickClient.
+const EXPECTED_KICKS: ReadonlySet<string> = new Set([
+  "kick_reason.host_left",
+  "kick_reason.lobby_creator",
+  "kick_reason.admin",
+  "kick_reason.duplicate_session",
+]);
 
 // Build the WebGL view + its glCanvas. Must run before createRenderer so the
 // controllers can be wired directly to the view.
@@ -501,8 +563,11 @@ function createWebGLView(
     try {
       const cb = cachedWebGLFrameCallback.current;
       if (cb) cb(performance.now());
-      const sw = glCanvas.width;
-      const sh = glCanvas.height;
+      // terron 13.09: после потери графики карта может жить на НОВОМ холсте
+      // (FreshCanvas) — снимаем тот, на котором рисует рендер сейчас.
+      const cv = view.canvasElement;
+      const sw = cv.width;
+      const sh = cv.height;
       if (!sw || !sh) return null;
       const scale = Math.min(1, maxW / sw);
       const dw = Math.max(1, Math.round(sw * scale));
@@ -512,7 +577,7 @@ function createWebGLView(
       c.height = dh;
       const ctx = c.getContext("2d");
       if (!ctx) return null;
-      ctx.drawImage(glCanvas, 0, 0, dw, dh);
+      ctx.drawImage(cv, 0, 0, dw, dh);
       return { dataUrl: c.toDataURL("image/jpeg", 0.9), width: dw, height: dh };
     } catch {
       return null;
@@ -539,6 +604,20 @@ function createWebGLView(
  */
 const GL_RETRY_ATTEMPTS = 3;
 const GL_RETRY_DELAY_MS = 900;
+
+// terron 05.09: стадия на модалке загрузки (GameStartingModal.setStage) — чтобы
+// сборка графики на слабой видеокарте не выглядела зависанием.
+function setLoadingStage(text: string | null): void {
+  try {
+    (
+      document.querySelector("game-starting-modal") as
+        | (HTMLElement & { setStage?: (t: string | null) => void })
+        | null
+    )?.setStage?.(text);
+  } catch {
+    /* модалки нет (реплей/тест) */
+  }
+}
 
 async function createWebGLViewWithRetry(
   terrainMap: TerrainMapData,
@@ -671,17 +750,19 @@ function mountWebGLFrameLoop(
   }
   // terron: ДЕВ-ПЕСОЧНИЦА ЗАМКОВ — берём флаг из конфига ЭТОГО матча, чтобы
   // чузер не рисовал 🔒 на том, что сервер уже пускает. TZ-ult-unlocks.md
-  setDevUnlockAll(
-    gameView.config().gameConfig().devUnlockUlts === true,
-  );
+  setDevUnlockAll(gameView.config().gameConfig().devUnlockUlts === true);
   // Матчи, из которых уходят не досмотрев итоги, — как раз самые тяжёлые.
   // Терять их замер нельзя, поэтому досылаем сводку на закрытии вкладки.
   const onPageHidePerf = (): void => perfHud.report();
   window.addEventListener("pagehide", onPageHidePerf);
 
+  // Жетон датчика карты: брошенный (перебитый) вход, домонтировавшийся
+  // позже живого матча, не должен выключить датчик у живого.
+  let probeToken = 0;
   const stopFrameLoop = (): void => {
     frameLoopStopped = true;
     perfHud.stop();
+    territoryIntegrity.stop(probeToken);
     window.removeEventListener("pagehide", onPageHidePerf);
     resizeObs.disconnect();
     eventBus.off(MoveWarshipIntentEvent, onMoveWarship);
@@ -689,31 +770,56 @@ function mountWebGLFrameLoop(
 
   const builder = new WebGLFrameBuilder(view);
 
+  // terron 12.09: датчик целостности карты (TerritoryIntegrity.ts) — давний
+  // репорт «вернулся во вкладку, а своя территория не растёт». Ловим у всех:
+  // тайл, где копия рендера ≠ симуляции и его нет в очереди, — потерян.
+  if (!gameView.config().isReplay()) {
+    probeToken = territoryIntegrity.start({
+      gameID: gameView.gameID(),
+      mapW: mapWidth,
+      sim: () => gameView.tileStateBuffer(),
+      me: () => gameView.myPlayer(),
+      tick: () => gameView.ticks(),
+      snapshot: () => view.territoryIntegrity(),
+      readback: (x0, y0, w, h) => view.territoryReadback(x0, y0, w, h),
+      frameAgeMs: () =>
+        lastFrameDrawnAt === 0 ? -1 : performance.now() - lastFrameDrawnAt,
+      hud: (text, bad) => perfHud.setMapLine(text, bad),
+    });
+  }
+
   // When context is lost and restored, WebGL loses all textures and geometry.
   // Force a full re-upload of the simulation state.
   view.on("contextrestored", () => {
     builder.clearCaches();
 
-    // Full upload of terrain, territory & trail state
+    // Full upload of terrain, territory & trail state.
+    // ⚠️ terron 13.09: рельеф — ОДНИМ вызовом (uploadFullTerrain). Раньше тут шла
+    // applyTerrainDelta со всеми тайлами = миллионы texSubImage2D по пикселю:
+    // страница висела минутами, контекст умирал второй раз, а у владельца
+    // падала вся система. Сторож — tests/client/FreshCanvasRecovery.test.ts.
     const mapSize = mapWidth * mapHeight;
-    const allRefs = new Array(mapSize);
     const allTerrain = new Uint8Array(mapSize);
     for (let i = 0; i < mapSize; i++) {
-      allRefs[i] = i;
       allTerrain[i] = gameView.terrainByte(i);
     }
-    view.applyTerrainDelta(allRefs, allTerrain);
+    view.uploadFullTerrain(allTerrain);
 
     const frameData = gameView.frameData();
     view.uploadTileAndTrailState(frameData.tileState, frameData.trailState);
 
     // Structures and railroads normally skip GPU upload unless marked dirty, now force
+    // ⚠️ Юниты тоже: их инстанс-буфер сгорел вместе с контекстом, а точечное
+    // обновление залило бы только изменившихся — остальные исчезли бы с карты.
+    view.markUnitsDirty();
     view.updateStructures(frameData.units as Map<number, UnitState>);
     view.uploadRailroadState(frameData.railroadState);
     // terron: скины пепла — текстура «чей пепел» тоже сгорела с контекстом,
     // а грузится она только грязными строками → переливаем целиком.
     const fo = gameView.falloutOwnersFull();
-    if (fo !== null) view.uploadFalloutOwners(fo, 0, mapHeight - 1);
+    // ⚠️ null вместо карты грязных строк — это ЯВНОЕ «залей всё»: после потери
+    // GL-контекста текстура пустая, и частичная заливка оставила бы дыры.
+    if (fo !== null) view.uploadFalloutOwners(fo, 0, mapHeight - 1, null);
     // terron ПЕРФ (Р10.1): relations теперь грузятся только по dirty-флагу —
     // новая GPU-текстура отношений пуста, форсим пересборку на ближайший тик.
     gameView.markRelationsDirty();
@@ -758,9 +864,21 @@ async function createClientGame(
     );
   }
   traceMark("map_ready"); // бины скачаны и распарсены
+  setLoadingStage(
+    L(
+      "Карта загружена, запускаем симуляцию…",
+      "Map loaded, starting the simulation…",
+    ),
+  );
   const worker = new WorkerClient(lobbyConfig.gameStartInfo, clientID);
   await worker.initialize();
   traceMark("worker_ready");
+  setLoadingStage(
+    L(
+      "Собираем графику… (на слабых видеокартах до 10 секунд)",
+      "Building graphics… (up to 10 s on weak GPUs)",
+    ),
+  );
   traceWorkerInit(worker.initTimings);
   const gameView = new GameView(
     worker,
@@ -801,6 +919,13 @@ async function createClientGame(
     // датчик ловит машины, где правка не помогла (порог 2.5с). Паузы между
     // повторными попытками вычитаем — они не сборка, а ожидание браузера.
     const glBuildMs = Math.round(performance.now() - glBuildStart - waitedMs);
+    // terron 05.09: замер сборки рендера по пассам прямо в консоли/пейне:
+    // window.__terronBuildLaps → {totalMs, phases, laps}.
+    (window as unknown as { __terronBuildLaps?: unknown }).__terronBuildLaps = {
+      totalMs: glBuildMs,
+      phases: view.getBuildPhases(),
+      laps: view.getBuildLaps(),
+    };
     if (glBuildMs > 2500) {
       // terron ПЕРФ (08.08, A2): шлём не только ИТОГ, но и РАЗБИВКУ по фазам.
       // Само по себе «3.6с» не говорит, что чинить: текстуры, прогрев шейдеров,
@@ -832,6 +957,7 @@ async function createClientGame(
     // остаётся ТОЛЬКО ожидание первого хода. Замер разделяет «мы долго
     // собираем графику» и «мы долго ждём ход» — раньше это был один кусок.
     traceMark("renderer_ready");
+    setLoadingStage(L("Ждём первый ход…", "Waiting for the first turn…"));
     const graphicsListenerAbort = new AbortController();
 
     view.setShowPatterns(userSettings.territoryPatterns());
@@ -844,12 +970,35 @@ async function createClientGame(
     );
 
     const regenerateRenderSettings = (): void => {
+      // terron 14.09: пока графики нет (потеряна, ждём пересборку), рендера нет,
+      // и getSettings() отдаёт пустой объект — запись в settings.structure/name
+      // роняла страницу (js_error «setting 'borderDarken'», Mali-G72 14.09).
+      // Настройки применятся заново на contextrestored (ниже).
+      if (!view.rendererReady) return;
       const live = view.getSettings();
       deepAssign(live, createRenderSettings());
+      // terron (визуальные стили): стиль ложится ПЕРЕД оверрайдами игрока —
+      // явная настройка человека сильнее стиля (см. applyVisualStyle).
+      applyVisualStyle(live, currentVisualStyle());
       applyGraphicsOverrides(live, userSettings.graphicsOverrides());
       applyDarkModeOverride(live, userSettings.darkMode());
+      // terron 05.09 (ревью): щадящий режим/«Лёгкая графика» — последним словом,
+      // иначе пересчёт возвращал свет и блум (ContextLossPolicy).
+      view.applyGraphicsCaps();
     };
     regenerateRenderSettings();
+    // terron 14.09: пересборка рендера после потери контекста (restore или
+    // FreshCanvas) создаёт настройки с НУЛЯ (createRenderSettings в конструкторе
+    // GPURenderer) — без этого до конца матча слетали тёмный режим, размер и
+    // отсечка ников, классические иконки и твики стиля.
+    view.on("contextrestored", regenerateRenderSettings);
+    // GPU-часть стиля (палитра рельефа + пост-обработка земли) — отдельно:
+    // настройки живут в общем объекте, а LUT и пасс надо трогать руками.
+    view.setVisualStyle(currentVisualStyle());
+    onVisualStyleChange((style) => {
+      regenerateRenderSettings();
+      view.setVisualStyle(style);
+    }, graphicsListenerAbort.signal);
     globalThis.addEventListener(
       `${USER_SETTINGS_CHANGED_EVENT}:${GRAPHICS_KEY}`,
       regenerateRenderSettings,
@@ -971,6 +1120,9 @@ async function createClientGame(
   }
 }
 
+// Штамп сборки (подставляет vite) — едет в телеметрию ошибок и десинков.
+declare const __BUILD_TIME__: number;
+
 export class ClientGameRunner {
   private myPlayer: PlayerView | null = null;
   private isActive = false;
@@ -1007,6 +1159,9 @@ export class ClientGameRunner {
   private catchupEpStartMs = 0;
   private catchupEpStartTick = 0;
   private catchupTraceReported = false;
+  // terron 12.09: ингест хода упал — на первом удачном ходе льём территорию
+  // целиком (см. onIngestError).
+  private tileResyncNeeded = false;
   // terron 20.07: сторож класса in-game (см. start()) + флаг «уже отчитались».
   private inGameClassWatch: number | null = null;
   private inGameClassHealed = false;
@@ -1018,6 +1173,10 @@ export class ClientGameRunner {
   private lastMousePosition: { x: number; y: number } | null = null;
 
   private lastMessageTime: number = 0;
+  /** Сервер на паузе: последний toggle_pause в ходах был paused=true. Пока
+   *  пауза, сервер не шлёт НИЧЕГО — сторож связи не должен считать это обрывом. */
+  private serverPaused = false;
+  private static readonly PAUSED_SILENCE_MS = 60_000;
   private connectionCheckInterval: NodeJS.Timeout | null = null;
   /** Отложенный запуск сторожа связи — снимается в stop(), см. там же. */
   private connectionCheckStartTimer: NodeJS.Timeout | null = null;
@@ -1142,6 +1301,28 @@ export class ClientGameRunner {
         "catchup_trace",
         `${ticks} тиков за ${ms}мс (${msPerTick} мс/тик)`,
         { ticks, ms, msPerTick },
+      ),
+    );
+  }
+
+  /**
+   * terron 12.09: сбой ингеста хода. РАНЬШЕ считалось, что «следующий ход
+   * самолечится»: для имён и панелей это правда, а для территории — нет. Она
+   * уезжает в рендер только дельтой, и дельта упавшего хода терялась навсегда
+   * (дыры в карте, пока тайл не сменится снова). Теперь взводим полную
+   * перезаливку на первом удачном ходе и сообщаем датчику карты.
+   */
+  private onIngestError(stage: "view" | "render", err: unknown): void {
+    this.tileResyncNeeded = true;
+    const msg = err instanceof Error ? err.message : String(err);
+    territoryIntegrity.noteIngestError(`${stage}: ${msg}`);
+    console.error(`ingest ${stage} failed (territory resync queued):`, err);
+    void import("./Health").then(({ reportHealth }) =>
+      reportHealth(
+        "render_tick_error",
+        err instanceof Error
+          ? `${stage}: ${err.message} :: ${(err.stack ?? "").split("\n").slice(1, 3).join(" | ").replace(/\s+/g, " ").slice(0, 140)}`
+          : `${stage}: ${String(err)}`,
       ),
     );
   }
@@ -1415,8 +1596,14 @@ export class ClientGameRunner {
       gu.updates[GameUpdateType.Hash].forEach((hu: HashUpdate) => {
         this.eventBus.emit(new SendHashEvent(hu.tick, hu.hash));
       });
-      camDiag.step("ингест_состояния", () => this.gameView.update(gu));
+      // terron 12.09: сбой зеркала больше не рвёт ход целиком — см. onIngestError.
+      try {
+        camDiag.step("ингест_состояния", () => this.gameView.update(gu));
+      } catch (err) {
+        this.onIngestError("view", err);
+      }
       this.traceCatchupEpisode(gu);
+      territoryIntegrity.noteBacklog(gu.pendingTurns ?? 0);
       // дев-датчик + сбор сводки: тик/с и очередь воркера
       perfHud.simTick(gu.pendingTurns);
       if (!this.perfCtxSent) {
@@ -1433,8 +1620,9 @@ export class ClientGameRunner {
       // «small id undefined» на недоингещённом игроке) убивало WEBGL-обновления
       // НАВСЕГДА: CPU-стейт жил (имена/панели обновлялись), а территория/границы
       // замерзали + спавн-штриховка оставалась висеть (репорт 17.07 «границы не
-      // обновляются, артефакты на пустых землях»). Билдер на каждом тике
-      // пересинхронизируется от ПОЛНОГО стейта — пропущенный тик самолечится.
+      // обновляются, артефакты на пустых землях»). ⚠️ 12.09: «следующий тик
+      // самолечится» верно для имён и панелей, но НЕ для территории — она
+      // едет дельтой, поэтому после сбоя взводится полная перезаливка тайлов.
       try {
         // 🔴 terron 29.07 — ТРОТТЛИНГ ДОГОНА ОТКАЧЕН (репорт владельца: после
         // F5 в идущий матч и в архиве «карту рвёт», куски территорий не
@@ -1453,18 +1641,17 @@ export class ClientGameRunner {
         camDiag.step("ингест_графики", () =>
           this.webglBuilder?.update(this.gameView),
         );
+        // Первый удачный ход после сбоя — льём территорию целиком: дельта
+        // упавшего хода потеряна, других путей у тайлов в текстуру нет.
+        if (this.tileResyncNeeded && this.webglBuilder) {
+          this.tileResyncNeeded = false;
+          this.webglBuilder.resyncTiles(this.gameView);
+          territoryIntegrity.noteTileResync();
+        }
         camDiag.step("тик_рендера", () => this.renderer.tick());
         this.checkRenderFrozen();
       } catch (err) {
-        console.error("render ingest tick failed (self-heals next tick):", err);
-        void import("./Health").then(({ reportHealth }) =>
-          reportHealth(
-            "render_tick_error",
-            err instanceof Error
-              ? `${err.message} :: ${(err.stack ?? "").split("\n").slice(1, 3).join(" | ").replace(/\s+/g, " ").slice(0, 140)}`
-              : String(err),
-          ),
-        );
+        this.onIngestError("render", err);
       }
 
       // terron: первый тик отрисован — данные в GL-очереди, ждём кадр и
@@ -1515,6 +1702,7 @@ export class ClientGameRunner {
 
     const onconnect = () => {
       console.log("Connected to game server!");
+      territoryIntegrity.noteConnect();
       this.transport.rejoinGame(this.turnsSeen);
     };
 
@@ -1573,6 +1761,7 @@ export class ClientGameRunner {
             });
             this.turnsSeen++;
           }
+          this.notePause(turn);
           this.worker.sendTurn(turn);
           this.turnsSeen++;
         }
@@ -1615,7 +1804,9 @@ export class ClientGameRunner {
           this.clientID,
           true,
           false,
-          "error_modal.desync_notice",
+          coreMismatchNoticed()
+            ? "error_modal.desync_update_notice"
+            : "error_modal.desync_notice",
         );
       }
       if (message.type === "error") {
@@ -1790,6 +1981,7 @@ export class ClientGameRunner {
             }
             this.lastGapCatchupMs = Date.now();
             this.catchupPending = true;
+            territoryIntegrity.noteCatchup();
             this.catchupSentAt = Date.now();
             console.warn(
               `turn gap detected — requesting catch-up from turn ${this.turnsSeen}`,
@@ -1797,6 +1989,7 @@ export class ClientGameRunner {
             this.transport.rejoinGame(this.turnsSeen);
           }
         } else {
+          this.notePause(message.turn);
           this.worker.sendTurn(
             // Filter out pause intents in replays
             this.gameView.config().isReplay()
@@ -1839,11 +2032,19 @@ export class ClientGameRunner {
     }, delay);
   }
 
+  // terron 13.09: пауза приходит ходом (toggle_pause) — см. onConnectionCheck.
+  private notePause(turn: Turn): void {
+    for (const i of turn.intents) {
+      if (i.type === "toggle_pause") this.serverPaused = i.paused;
+    }
+  }
+
   // Применяет придержанные ходы, пока их номера идут подряд от turnsSeen.
   private drainPendingTurns(): void {
     while (this.pendingTurns.has(this.turnsSeen)) {
       const turn = this.pendingTurns.get(this.turnsSeen)!;
       this.pendingTurns.delete(this.turnsSeen);
+      this.notePause(turn);
       this.worker.sendTurn(turn);
       this.turnsSeen++;
     }
@@ -1979,7 +2180,9 @@ export class ClientGameRunner {
       this.canSpawnNow() &&
       !this.gameView.config().isRandomSpawn()
     ) {
-      this.eventBus.emit(new SendSpawnIntentEvent(tile));
+      // terron 29.09: не ближе TERRON_SPAWN_HUMAN_GAP к другому человеку.
+      if (checkSpawnSpacing(this.gameView, tile))
+        this.eventBus.emit(new SendSpawnIntentEvent(tile));
       return;
     }
     if (this.gameView.inSpawnPhase()) {
@@ -2336,7 +2539,13 @@ export class ClientGameRunner {
     }
     const now = Date.now();
     const timeSinceLastMessage = now - this.lastMessageTime;
-    if (timeSinceLastMessage > 5000) {
+    // terron 13.09: на паузе сервер молчит (endTurn пропускается), и сторож
+    // рвал связь каждые 5 с: переподключение → start → снова тишина → … В логе
+    // прода — сотни «rejoining game» у одного игрока за полтора часа, в архиве
+    // его матча сотни mark_disconnected. На паузе ждём минуту: мёртвый сокет
+    // всё равно заметим, но без петли.
+    const limit = this.serverPaused ? ClientGameRunner.PAUSED_SILENCE_MS : 5000;
+    if (timeSinceLastMessage > limit) {
       console.log(
         `No message from server for ${timeSinceLastMessage} ms, reconnecting`,
       );
@@ -2493,9 +2702,17 @@ function showErrorModal(
   // по которой разбирать было нечего. meta на сервере обрезается до 1000
   // символов, блок в него укладывается.
   const deviceLines = collectDeviceInfo();
+  // terron 31.08: ВЕРСИЯ БАНДЛА обязательна, и особенно у десинка. Без неё
+  // нельзя отличить «в матче встретились клиенты с РАЗНЫМИ сборками» (обычное
+  // дело в первые минуты после выката, лечится перезагрузкой вкладки) от
+  // «разошлись клиенты с ОДИНАКОВОЙ сборкой» — а это уже настоящий баг
+  // симуляции. Разбор 31.08: восемь десинков за день, и по базе понять, какой
+  // это случай, было НЕЧЕМ. fable/bugreports-2026-08-31.md
+  const build = typeof __BUILD_TIME__ === "number" ? __BUILD_TIME__ : null;
   void import("./Health").then(({ reportHealth }) =>
     reportHealth(kind, String(error).slice(0, 200), {
       gameID,
+      b: build,
       ...(isGpuClass ? { device: deviceLines.join(" ⏎ ").slice(0, 900) } : {}),
     }),
   );
@@ -2521,9 +2738,16 @@ function showErrorModal(
     banner.className = "error-modal-webgl2";
     banner.style.cssText =
       "margin:0 0 10px;padding:10px 12px;border:2px solid #b91c1c;border-radius:4px;background:#fef2f2;color:#111;font-weight:600;";
-    const before = isRu
-      ? "Похоже, сбоит графика (WebGL/драйвер). Часто лечится перезапуском браузера или обновлением драйвера видеокарты. Инструкция — "
-      : "Looks like a graphics (WebGL/driver) failure. Restarting the browser or updating the GPU driver usually fixes it. Guide — ";
+    // terron 05.09: Chrome заблокировал WebGL сайту после сбоев GPU — это до
+    // перезапуска браузера, перезагрузка страницы не поможет (ContextLossPolicy).
+    const blocked = WEBGL_BLOCKED_RE.test(blob);
+    const before = blocked
+      ? isRu
+        ? "Браузер заблокировал WebGL для сайта после нескольких сбоев видеодрайвера. Перезагрузка страницы НЕ поможет: закройте браузер полностью и откройте снова. Инструкция — "
+        : "The browser has blocked WebGL for this site after repeated GPU failures. Reloading will not help: close the browser completely and open it again. Guide — "
+      : isRu
+        ? "Похоже, сбоит графика (WebGL/драйвер). Часто лечится перезапуском браузера или обновлением драйвера видеокарты. Инструкция — "
+        : "Looks like a graphics (WebGL/driver) failure. Restarting the browser or updating the GPU driver usually fixes it. Guide — ";
     const linkText = isRu ? "открыть инструкцию" : "open the guide";
     const gLink = document.createElement("a");
     gLink.href = "/webgl2-not-supported";

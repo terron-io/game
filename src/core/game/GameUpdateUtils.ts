@@ -128,11 +128,26 @@ export function diffPlayerUpdate(
     prev.ultReligionTithe === next.ultReligionTithe,
   );
   setIfDifferent("ultWaterTiles", prev.ultWaterTiles === next.ultWaterTiles);
+  setIfDifferent("ultLandTiles", prev.ultLandTiles === next.ultLandTiles);
   // terron: РЕВАНШИЗМ — список обидчиков растёт редко (раз на нового агрессора),
   // поэтому сравниваем по длине: содержимое только ДОПОЛНЯЕТСЯ, не меняется.
   setIfDifferent(
     "aggressors",
     (prev.aggressors?.length ?? 0) === (next.aggressors?.length ?? 0),
+  );
+  // terron: РЕВАНШИЗМ — живые показания ховера/тултипа.
+
+  setIfDifferent(
+    "revanchismLevel",
+    prev.revanchismLevel === next.revanchismLevel,
+  );
+  setIfDifferent(
+    "revanchismSlowPct",
+    prev.revanchismSlowPct === next.revanchismSlowPct,
+  );
+  setIfDifferent(
+    "revanchismLostPct",
+    prev.revanchismLostPct === next.revanchismLostPct,
   );
   // terron: ультимейты — Раскол: маркер одной цифры-таймера спасения Т.
   setIfDifferent(
@@ -257,7 +272,17 @@ export function applyStateUpdate(target: PlayerState, pu: PlayerUpdate): void {
   if (pu.ultReligionTithe !== undefined)
     target.ultReligionTithe = pu.ultReligionTithe;
   if (pu.ultWaterTiles !== undefined) target.ultWaterTiles = pu.ultWaterTiles;
+  if (pu.ultLandTiles !== undefined) target.ultLandTiles = pu.ultLandTiles;
   if (pu.aggressors !== undefined) target.aggressors = pu.aggressors;
+  // terron: РЕВАНШИЗМ — живые показания. Гасший монумент приезжает НУЛЁМ, а не
+  // отсутствием поля (см. PlayerImpl.revanchismReadout), поэтому гард обычный:
+  // undefined здесь честно значит «за этот тик не менялось».
+  if (pu.revanchismLevel !== undefined)
+    target.revanchismLevel = pu.revanchismLevel;
+  if (pu.revanchismSlowPct !== undefined)
+    target.revanchismSlowPct = pu.revanchismSlowPct;
+  if (pu.revanchismLostPct !== undefined)
+    target.revanchismLostPct = pu.revanchismLostPct;
   // terron: ультимейты — Раскол: маркер цифры-таймера спасения Т (null = снять).
   if (pu.splitRescue !== undefined) target.splitRescue = pu.splitRescue;
 }

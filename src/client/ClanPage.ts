@@ -13,6 +13,8 @@ import {
 } from "./ClanApi";
 import { bracketPair, CT, localizeClanText } from "./ClanTerm";
 import { openReportDialog } from "./ReportDialog";
+import { siteChatAllowed } from "./SiteChatGate";
+import { siteChat } from "./SiteChatPanel";
 import { linkifySocials } from "./SocialLinks";
 import { softGo } from "./SoftNavigate";
 import { toast } from "./Toast";
@@ -120,25 +122,43 @@ export class ClanPage extends LitElement {
     }
   }
 
+  // terron 22.09: чат клана — только участникам (сервер проверяет членство).
+  private renderChatBtn(): TemplateResult {
+    if (!siteChatAllowed()) return html``;
+    return html`<button
+      class="t-btn ghost clan-chat-btn"
+      title=${L("Чат клана", "Clan chat")}
+      @click=${() => siteChat()?.openClanWith(this.clan.tag)}
+    >
+      💬 ${L("Чат", "Chat")}
+    </button>`;
+  }
+
   private renderAction(): TemplateResult {
     const role = this.clan.viewerRole;
     if (role === "leader") {
-      return html`<button
-        class="t-btn clan-view-manage"
-        @click=${() => softGo("/clan/" + encodeURIComponent(this.clan.slug))}
-      >
-        ${L("Управление", "Manage")}
-      </button>`;
+      return html`<div class="clan-view-manage clan-view-actions">
+        ${this.renderChatBtn()}
+        <button
+          class="t-btn"
+          @click=${() => softGo("/clan/" + encodeURIComponent(this.clan.slug))}
+        >
+          ${L("Управление", "Manage")}
+        </button>
+      </div>`;
     }
     if (role) {
       // обычный участник/офицер
-      return html`<button
-        class="t-btn ghost clan-view-manage"
-        ?disabled=${this.busy}
-        @click=${() => this.leave()}
-      >
-        ${L("Выйти", "Leave")}
-      </button>`;
+      return html`<div class="clan-view-manage clan-view-actions">
+        ${this.renderChatBtn()}
+        <button
+          class="t-btn ghost"
+          ?disabled=${this.busy}
+          @click=${() => this.leave()}
+        >
+          ${L("Выйти", "Leave")}
+        </button>
+      </div>`;
     }
     if (this.clan.viewerInvited && this.loggedIn) {
       return html`<div class="clan-view-manage clan-view-actions">

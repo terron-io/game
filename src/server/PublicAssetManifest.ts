@@ -34,6 +34,7 @@ const ROOT_PUBLIC_FILES = new Set([
   "sw.js", // terron: service worker офлайна — нужен стабильный root-URL /sw.js
   "terms-of-service.html",
   "webgl2-not-supported.html", // terron: гайд по ошибке WebGL2 (страница без WebGL)
+  "graphics-help.html", // terron 25.09: гайд «сбоит графика» (окно сбоя открывает его модалкой)
   "version.txt",
 ]);
 
@@ -369,10 +370,53 @@ export function createHashedPublicAssetFiles(
     );
     if (renderedAsset !== null) {
       fs.writeFileSync(outputPath, renderedAsset);
-      continue;
+    } else {
+      fs.copyFileSync(sourcePath, outputPath);
     }
+    linkLatestPublicAsset(outputPath, relativePath);
+  }
+}
 
-    fs.copyFileSync(sourcePath, outputPath);
+/** Имя «актуальной» копии без хэша рядом с хэшированным файлом:
+ *  `_assets/lang/ru.0f3d6c5eb913.json` → `_assets/lang/ru.json`. */
+export function latestPublicAssetPath(
+  hashedOutputPath: string,
+  relativePath: string,
+): string {
+  return path.join(path.dirname(hashedOutputPath), path.basename(relativePath));
+}
+
+// terron 09.09: АКТУАЛЬНЫЙ ФАЙЛ ДОСТУПЕН И ПОД СТАРЫМ ИМЕНЕМ.
+//
+// ⚠️ ЗАЧЕМ. Манифест ассетов ВШИТ в бандл, а сами ассеты платформенные сборки
+// (хостинг GamePush, черновик Яндекса, GameDistribution) тянут С ПРОДА. Значит
+// каждый выкат, меняющий хэш файла, ломает ВСЕ ранее залитые билды: старый
+// бандл просит `lang/ru.<старый хэш>.json`, прод отвечает 404 (ещё и без CORS
+// и SPA-оболочкой вместо тела), словарь не грузится, игрок видит сырые ключи и
+// плашку «не удалось загрузить». Поймано на черновике Яндекса 09.09: 32 отказа
+// на старый словарь и 505 на старую иконку за сутки.
+//
+// КАК. Рядом с каждым хэшированным файлом кладётся ссылка с ИМЕНЕМ БЕЗ ХЭША
+// на текущую версию; nginx при 404 по хэшированному имени переписывает запрос
+// на неё (см. nginx.conf, `@stale_asset`). Старый билд получает актуальный
+// файл вместо ошибки: у словаря ключи почти те же, у картинок содержимое то
+// же. Ссылка, а не копия: `_assets` весит ~400 МБ, копия удвоила бы образ.
+function linkLatestPublicAsset(
+  hashedOutputPath: string,
+  relativePath: string,
+): void {
+  const latestPath = latestPublicAssetPath(hashedOutputPath, relativePath);
+  if (latestPath === hashedOutputPath) return;
+  try {
+    fs.rmSync(latestPath, { force: true });
+  } catch {
+    /* нечего снимать */
+  }
+  try {
+    fs.symlinkSync(path.basename(hashedOutputPath), latestPath);
+  } catch {
+    // Файловая система без ссылок — копия дороже, но лучше, чем 404.
+    fs.copyFileSync(hashedOutputPath, latestPath);
   }
 }
 

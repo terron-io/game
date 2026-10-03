@@ -50,6 +50,53 @@ export class AttacksDisplay extends LitElement implements Controller {
     return this;
   }
 
+  // terron 08.09: ПАНЕЛЬ АТАК ДОЛЖНА ИСЧЕЗАТЬ ВМЕСТЕ С МАТЧЕМ.
+  //
+  // `tick()` ставит active/_isVisible и больше их не снимает, а после выхода из
+  // матча тики просто прекращаются — Lit продолжает рисовать ПОСЛЕДНЕЕ
+  // состояние. Итог виден на скриншоте владельца 08.09: на главной под витриной
+  // висит строка ушедшей атаки («265 ПУСТОШЬ» с крестиком отмены).
+  //
+  // ⚠️ Гейта в render() мало: смена класса у body сама по себе перерисовку не
+  // вызывает. Поэтому слушаем класс `in-game` — он и есть единственный признак
+  // «идёт матч» (на нём же держатся тема и остальной HUD) — и на выходе гасим
+  // состояние. Работает для ЛЮБОГО выхода: ливнул, победил, мягкий переход.
+  private inGameWatch: MutationObserver | null = null;
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    if (typeof MutationObserver === "undefined" || !document.body) return;
+    this.inGameWatch = new MutationObserver(() => {
+      if (document.body.classList.contains("in-game")) return;
+      this.resetForMenu();
+    });
+    this.inGameWatch.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  }
+
+  disconnectedCallback(): void {
+    this.inGameWatch?.disconnect();
+    this.inGameWatch = null;
+    super.disconnectedCallback();
+  }
+
+  /** Матч кончился — панель пуста и молчит до следующего tick(). */
+  private resetForMenu(): void {
+    if (!this.active && !this._isVisible) return;
+    this.active = false;
+    this._isVisible = false;
+    this.incomingAttacks = [];
+    this.outgoingAttacks = [];
+    this.outgoingLandAttacks = [];
+    this.outgoingBoats = [];
+    this.incomingBoats = [];
+    this.incomingBoatIDs.clear();
+    this.landingChecked.clear();
+    this.requestUpdate();
+  }
+
   init() {}
 
   // terron perf (Р1): панель атак — 4 обновления/с вместо 10 (числа войск
@@ -230,7 +277,11 @@ export class AttacksDisplay extends LitElement implements Controller {
     const playerView = this.game.playerBySmallID(attack.attackerID);
     if (playerView !== undefined) {
       if (playerView instanceof PlayerView) {
-        const attacks = await playerView.attackClusteredPositions(attack.id);
+        // terron 04.09: воркер в догоне отвечает дольше 5 с → таймаут летел
+        // необработанным (20 сессий/3 дня). Не ответил — просто едем к игроку.
+        const attacks = await playerView
+          .attackClusteredPositions(attack.id)
+          .catch(() => []);
         const pos = attacks[0]?.positions[0];
 
         if (!pos) {
@@ -495,6 +546,11 @@ export class AttacksDisplay extends LitElement implements Controller {
   }
 
   render() {
+    // Второй рубеж к наблюдателю выше: даже если состояние осталось от матча,
+    // вне матча панели быть не должно.
+    if (!document.body?.classList.contains("in-game")) {
+      return html``;
+    }
     if (!this.active || !this._isVisible) {
       return html``;
     }

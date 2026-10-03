@@ -1,0 +1,220 @@
+{
+  "name": "South America (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        404,
+        67
+      ],
+      "name": "Cuba",
+      "flag": "cu"
+    },
+    {
+      "coordinates": [
+        616,
+        154
+      ],
+      "name": "Dominican Republic",
+      "flag": "do"
+    },
+    {
+      "coordinates": [
+        543,
+        148
+      ],
+      "name": "Haiti",
+      "flag": "ht"
+    },
+    {
+      "coordinates": [
+        125,
+        166
+      ],
+      "name": "Belize",
+      "flag": "bz"
+    },
+    {
+      "coordinates": [
+        72,
+        300
+      ],
+      "name": "Guatemala",
+      "flag": "gt"
+    },
+    {
+      "coordinates": [
+        200,
+        290
+      ],
+      "name": "Honduras",
+      "flag": "hn"
+    },
+    {
+      "coordinates": [
+        219,
+        382
+      ],
+      "name": "Nicaragua",
+      "flag": "ni"
+    },
+    {
+      "coordinates": [
+        337,
+        513
+      ],
+      "name": "Panama",
+      "flag": "pa"
+    },
+    {
+      "coordinates": [
+        756,
+        1436
+      ],
+      "name": "Bolivia",
+      "flag": "bo"
+    },
+    {
+      "coordinates": [
+        769,
+        2157
+      ],
+      "name": "Argentina",
+      "flag": "ar"
+    },
+    {
+      "coordinates": [
+        1026,
+        1302
+      ],
+      "name": "Brazil",
+      "flag": "br"
+    },
+    {
+      "coordinates": [
+        624,
+        1890
+      ],
+      "name": "Chile",
+      "flag": "cl"
+    },
+    {
+      "coordinates": [
+        520,
+        641
+      ],
+      "name": "Colombia",
+      "flag": "co"
+    },
+    {
+      "coordinates": [
+        396,
+        889
+      ],
+      "name": "Ecuador",
+      "flag": "ec"
+    },
+    {
+      "coordinates": [
+        1074,
+        727
+      ],
+      "name": "French Guiana",
+      "flag": "gf"
+    },
+    {
+      "coordinates": [
+        875,
+        644
+      ],
+      "name": "Guyana",
+      "flag": "gy"
+    },
+    {
+      "coordinates": [
+        482,
+        1209
+      ],
+      "name": "Peru",
+      "flag": "pe"
+    },
+    {
+      "coordinates": [
+        912,
+        1663
+      ],
+      "name": "Paraguay",
+      "flag": "py"
+    },
+    {
+      "coordinates": [
+        979,
+        692
+      ],
+      "name": "Suriname",
+      "flag": "sr"
+    },
+    {
+      "coordinates": [
+        980,
+        1989
+      ],
+      "name": "Uruguay",
+      "flag": "uy"
+    },
+    {
+      "coordinates": [
+        687,
+        547
+      ],
+      "name": "Venezuela",
+      "flag": "ve"
+    },
+    {
+      "coordinates": [
+        709,
+        959
+      ],
+      "name": "Amazonas",
+      "flag": "amazonas"
+    },
+    {
+      "coordinates": [
+        1130,
+        942
+      ],
+      "name": "Pará",
+      "flag": "Para"
+    },
+    {
+      "coordinates": [
+        1376,
+        1268
+      ],
+      "name": "Bahia",
+      "flag": "bahia"
+    },
+    {
+      "coordinates": [
+        1208,
+        1663
+      ],
+      "name": "São Paulo",
+      "flag": "Sao Paulo"
+    }
+  ],
+  "map": {
+    "width": 1556,
+    "height": 2664,
+    "num_land_tiles": 1433774
+  },
+  "map4x": {
+    "width": 778,
+    "height": 1332,
+    "num_land_tiles": 352472
+  },
+  "map16x": {
+    "width": 389,
+    "height": 666,
+    "num_land_tiles": 85807
+  }
+}

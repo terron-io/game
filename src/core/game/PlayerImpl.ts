@@ -2,25 +2,29 @@ import { PseudoRandom } from "../PseudoRandom";
 import { ClientID } from "../Schemas";
 import { findClosestBy, minInt, simpleHash, toInt, within } from "../Util";
 import {
+  RevanchismLossCause,
   TERRON_BLOCKADE_PORT_RANGE,
   TERRON_CATASTROPHE_RECAST_COOLDOWN_TICKS,
   TERRON_GREENS_DEBUFF_MAX_STACKS,
-  TERRON_RAILGUN_SNAP,
-  TERRON_TRAINS_TARGET_SNAP,
   TERRON_GREENS_DEBUFF_STEP,
   TERRON_GREENS_DEBUFF_TICKS,
   TERRON_INDUSTRIAL_TICKS,
   TERRON_OILRIG_MAX_DIST_FROM_OWN,
   TERRON_PACT_RECAST_COOLDOWN_TICKS,
   TERRON_PIRACY_SHIP_COOLDOWN_TICKS,
-  TERRON_REVANCHISM_MAX_BUFF,
-  TERRON_REVANCHISM_SCALE,
-  TERRON_TRUCE_COOLDOWN_TICKS,
+  TERRON_RAILGUN_SNAP,
+  TERRON_REVANCHISM_BASE,
+  TERRON_REVANCHISM_LEVEL_PER_LOSS,
+  TERRON_REVANCHISM_MAX_EXTRA_LEVELS,
+  TERRON_REVANCHISM_PER_LEVEL,
   TERRON_SPACEPORT_SEA_COST_MULT,
+  TERRON_TRAINS_TARGET_SNAP,
+  TERRON_TRUCE_COOLDOWN_TICKS,
 } from "../configuration/TerronTuning";
 import { AttackImpl } from "./AttackImpl";
 import { economySnapshot } from "./EconomyLog";
 import {
+  actingAs,
   Alliance,
   AllianceInfo,
   AllianceRequest,
@@ -29,12 +33,12 @@ import {
   BuildableUnit,
   CAST_UNLOCKED_BY,
   Cell,
-  actingAs,
   ColoredTeams,
   Embargo,
   EmojiMessage,
   GameMode,
   Gold,
+  isBuildableType,
   MutableAlliance,
   Nukes,
   Player,
@@ -46,12 +50,13 @@ import {
   PlayerType,
   Relation,
   Structures,
-  ULTIMATE_REGISTRY,
   Team,
+  TerraNukes,
   TerraNullius,
   Tick,
   TradeHubs,
   ULT_MAX_COUNT,
+  ULTIMATE_REGISTRY,
   Ultimates,
   UltStats,
   Unit,
@@ -60,7 +65,6 @@ import {
 } from "./Game";
 import { GameImpl } from "./GameImpl";
 import { andFN, manhattanDistFN, TileRef } from "./GameMap";
-import { railTilesFrom } from "./RailReach";
 import { diffPlayerUpdate } from "./GameUpdateUtils";
 import {
   AllianceView,
@@ -68,6 +72,7 @@ import {
   GameUpdateType,
   PlayerUpdate,
 } from "./GameUpdates";
+import { railTilesFrom } from "./RailReach";
 import {
   bestShoreDeploymentSource,
   canBuildTransportShip,
@@ -86,6 +91,11 @@ class Donation {
   ) {}
 }
 
+// terron 04.09 ПЕРФ: см. PlayerImpl.indexUnitAdded — порядковый номер вставки
+// в список владельца (растёт на каждый push, значит монотонен вдоль `_units`).
+let listSeqCounter = 0;
+const EMPTY_UNITS: readonly Unit[] = Object.freeze([]) as readonly Unit[];
+
 export class PlayerImpl implements Player {
   public _lastTileChange: number = 0;
   public _pseudo_random: PseudoRandom;
@@ -101,10 +111,49 @@ export class PlayerImpl implements Player {
   public _borderTiles: Set<TileRef> = new Set();
 
   public _units: Unit[] = [];
+  // terron 04.09 ПЕРФ: ИНДЕКС ЮНИТОВ ПО ТИПУ. `units(тип)` раньше обходил ВСЕ
+  // юниты игрока (в поздней игре сотни торговых лодок), а зовут его каждый тик:
+  // лечение корабля (порты/вышки), поиск цели (порты), боты (транспорты) —
+  // в профиле боевого реплея 3.2 с из 59. Индекс держится в ТРЁХ местах, где
+  // меняется `_units` (buildUnit, UnitImpl.setOwner, UnitImpl.delete) через
+  // indexUnitAdded/indexUnitRemoved; порядок внутри типа = порядок `_units`
+  // (оба — порядок push), а порядок при слиянии нескольких типов восстанавливает
+  // `listSeq` юнита. Наружу всегда КОПИЯ — прежние вызовы тоже отдавали свежий
+  // массив, и удалять/захватывать в цикле по нему безопасно. Сторож —
+  // tests/UnitIndexByType.test.ts.
+  private _unitsByType = new Map<UnitType, Unit[]>();
+  indexUnitAdded(u: Unit): void {
+    (u as UnitImpl).listSeq = ++listSeqCounter;
+    const t = u.type();
+    const arr = this._unitsByType.get(t);
+    if (arr === undefined) this._unitsByType.set(t, [u]);
+    else arr.push(u);
+    this.mg.indexUnitAdded(u);
+  }
+  indexUnitRemoved(u: Unit): void {
+    const arr = this._unitsByType.get(u.type());
+    if (arr !== undefined) {
+      const i = arr.indexOf(u);
+      if (i >= 0) arr.splice(i, 1);
+    }
+    this.mg.indexUnitRemoved(u);
+  }
+  /** terron 04.09 ПЕРФ: порядок регистрации в GameImpl._players — им (а внутри
+   *  игрока — listSeq) задан порядок глобального `GameImpl.units(тип)`. */
+  playerOrder = 0;
+  private unitsOfType(t: UnitType): readonly Unit[] {
+    return this._unitsByType.get(t) ?? EMPTY_UNITS;
+  }
   public _tiles: Set<TileRef> = new Set();
   // terron: РЕВАНШИЗМ — исторический ПИК числа тайлов (обновляется в тике игрока).
-  // Оборона всей территории растёт при потере земель от пика. См. revanchismBuff().
+  // Захват моей земли замедляется тем сильнее, чем больше срезано от пика. См.
+  // revanchismBuff().
   public _maxTilesOwned = 0;
+  // terron: РЕВАНШИЗМ — очки уровня за ПОТЕРЯННЫЕ свои монументы, в ЦЕЛЫХ
+  // ПОЛОВИНКАХ (2 = один уровень): самоснос даёт 0.5 уровня, и дробям в
+  // состоянии симуляции делать нечего. Материализуются в уровень СЛЕДУЮЩЕЙ
+  // построенной статуи (nextRevanchismLevel), у самого игрока эффекта нет.
+  private _revanchismHalfPoints = 0;
   // terron: сколько тайлов этого игрока откусил каждый захватчик (smallID → кол-во).
   // Нужно, чтобы золото за завоевание делить пропорционально вкладу (см. GameImpl).
   public _tilesLostTo: Map<number, number> = new Map();
@@ -205,7 +254,9 @@ export class PlayerImpl implements Player {
     if (tick === undefined) return false;
     return (
       this.mg.ticks() <
-      tick + TERRON_GREENS_DEBUFF_TICKS + TERRON_CATASTROPHE_RECAST_COOLDOWN_TICKS
+      tick +
+        TERRON_GREENS_DEBUFF_TICKS +
+        TERRON_CATASTROPHE_RECAST_COOLDOWN_TICKS
     );
   }
 
@@ -278,6 +329,11 @@ export class PlayerImpl implements Player {
     return false;
   }
 
+  /** terron 04.09 ПЕРФ: есть ли у игрока хоть одно ульт-здание (своё или
+   *  захваченное) — гейт для обходов, которым нужны только ульты. */
+  hasUltBuildings(): boolean {
+    return this._ultBuildings.size > 0;
+  }
   trackUltBuilding(u: Unit): void {
     this._ultBuildings.add(u);
   }
@@ -330,6 +386,7 @@ export class PlayerImpl implements Player {
     religionTiles: 0,
     religionTithe: 0,
     waterTiles: 0,
+    landTiles: 0,
   };
 
   ultStats(): UltStats {
@@ -408,8 +465,39 @@ export class PlayerImpl implements Player {
    * `lastSentUpdate` is updated to the full snapshot on every call.
    */
   toUpdate(): PlayerUpdate | null {
-    const full = this.toFullUpdate();
     const prev = this.lastSentUpdate;
+    // terron 04.09 ПЕРФ: МЁРТВЫЕ ИГРОКИ — раз в секунду, а не каждый тик.
+    // toUpdate (сборка ~50 полей + диф) = 18 % времени симуляции на боевом
+    // реплее, а в поздней игре большинство из 60 игроков мертвы и у них не
+    // меняется ничего, кроме редкого isDisconnected. Смерть (isAlive true →
+    // false) уезжает СРАЗУ (prev ещё жив), дальше снимок раз в 10 тиков:
+    // бейдж отключения у мёртвого запаздывает не больше секунды. Хэш
+    // симуляции апдейтов не включает — детерминизм не задет.
+    if (
+      prev !== undefined &&
+      prev.isAlive === false &&
+      !this.isAlive() &&
+      this.mg.ticks() % 10 !== 0
+    ) {
+      return null;
+    }
+    // terron 11.09 ПЕРФ: ЖИВЫЕ НАЦИИ И БОТЫ — снимок раз в 5 тиков. После
+    // троттлинга мёртвых сборка+диф апдейтов всё ещё 3.8 с из 66 на боевом
+    // реплее (10 людей, сотни живых наций): у нации каждый тик меняются
+    // только войска/золото, а читает их клиент в лидерборде и ховере — задержка
+    // ≤0.5 с глазом не видна. Люди — как прежде, каждый тик. Смерть (isAlive
+    // true → false) уезжает сразу: гейт требует, чтобы нация была жива и СЕЙЧАС.
+    // Хэш симуляции апдейтов не включает — детерминизм не задет.
+    if (
+      prev !== undefined &&
+      prev.isAlive === true &&
+      this.isAlive() &&
+      this.type() !== PlayerType.Human &&
+      this.mg.ticks() % 5 !== 0
+    ) {
+      return null;
+    }
+    const full = this.toFullUpdate();
     this.lastSentUpdate = full;
     if (prev === undefined) return full;
     return diffPlayerUpdate(prev, full);
@@ -503,6 +591,10 @@ export class PlayerImpl implements Player {
       ultReligionTiles: this._ultStats.religionTiles || undefined,
       ultReligionTithe: this._ultStats.religionTithe || undefined,
       ultWaterTiles: this._ultStats.waterTiles || undefined,
+      ultLandTiles: this._ultStats.landTiles || undefined,
+      // terron 26.08: РЕВАНШИЗМ — живые показания ховера/тултипа. Считаем ТОЛЬКО
+      // пока монумент стоит: иначе три числа на каждого игрока каждый тик.
+      ...this.revanchismReadout(),
       // terron: РЕВАНШИЗМ — «на кого обиделись» (ховер статуи). Порядок = порядок
       // нападений (Set хранит вставку) → детерминирован.
       aggressors:
@@ -542,52 +634,24 @@ export class PlayerImpl implements Player {
     if (len === 0) {
       return this._units;
     }
-
-    // Fast paths for common small arity calls to avoid Set allocation.
     if (len === 1) {
-      const t0 = types[0]!;
-      const out: Unit[] = [];
-      for (const u of this._units) {
-        if (u.type() === t0) out.push(u);
-      }
-      return out;
+      return this.unitsOfType(types[0]!).slice();
     }
-
-    if (len === 2) {
-      const t0 = types[0]!;
-      const t1 = types[1]!;
-      if (t0 === t1) {
-        const out: Unit[] = [];
-        for (const u of this._units) {
-          if (u.type() === t0) out.push(u);
-        }
-        return out;
-      }
-      const out: Unit[] = [];
-      for (const u of this._units) {
-        const t = u.type();
-        if (t === t0 || t === t1) out.push(u);
-      }
-      return out;
+    if (len === 2 && types[0] === types[1]) {
+      return this.unitsOfType(types[0]!).slice();
     }
-
-    if (len === 3) {
-      const t0 = types[0]!;
-      const t1 = types[1]!;
-      const t2 = types[2]!;
-      // Keep semantics identical for duplicates in types by using direct comparisons.
-      const out: Unit[] = [];
-      for (const u of this._units) {
-        const t = u.type();
-        if (t === t0 || t === t1 || t === t2) out.push(u);
-      }
-      return out;
-    }
-
-    const ts = new Set(types);
+    // Несколько типов: склейка индексов + порядок `_units` через listSeq.
+    const seen = new Set<UnitType>();
     const out: Unit[] = [];
-    for (const u of this._units) {
-      if (ts.has(u.type())) out.push(u);
+    for (let i = 0; i < len; i++) {
+      const t = types[i]!;
+      if (seen.has(t)) continue;
+      seen.add(t);
+      const arr = this.unitsOfType(t);
+      for (let j = 0; j < arr.length; j++) out.push(arr[j]);
+    }
+    if (seen.size > 1 && out.length > 1) {
+      out.sort((x, y) => (x as UnitImpl).listSeq - (y as UnitImpl).listSeq);
     }
     return out;
   }
@@ -605,8 +669,7 @@ export class PlayerImpl implements Player {
   unitsConstructed(type: UnitType): number {
     const built = this.numUnitsConstructed[type] ?? 0;
     let constructing = 0;
-    for (const unit of this._units) {
-      if (unit.type() !== type) continue;
+    for (const unit of this.unitsOfType(type)) {
       if (!unit.isUnderConstruction()) continue;
       constructing++;
     }
@@ -615,14 +678,26 @@ export class PlayerImpl implements Player {
   }
 
   // Count of units owned by the player, not including construction
+  // terron 04.09 ПЕРФ: тот же кэш с точной инвалидацией, что у
+  // GameImpl.unitCount, только на игрока: shouldSpawnTrain у каждой станции
+  // каждый тик звал unitCount(Factory) + все «считаются за фабрику» (3.6 %
+  // тика). Сброс — на каждой мутации состава/уровня (см. invalidateUnitCounts:
+  // GameImpl.addUnit/removeUnit, UnitImpl level/setOwner).
+  private unitCountCache: Map<UnitType, number> | null = null;
+  invalidateUnitCounts(): void {
+    this.unitCountCache = null;
+  }
   unitCount(type: UnitType): number {
-    let total = 0;
-    for (const unit of this._units) {
-      if (unit.type() === type) {
-        total += unit.level();
+    let cache = this.unitCountCache;
+    if (cache === null) {
+      cache = new Map<UnitType, number>();
+      for (const unit of this._units) {
+        const t = unit.type();
+        cache.set(t, (cache.get(t) ?? 0) + unit.level());
       }
+      this.unitCountCache = cache;
     }
-    return total;
+    return cache.get(type) ?? 0;
   }
 
   // Count of units owned by the player, including construction
@@ -665,18 +740,97 @@ export class PlayerImpl implements Player {
     if (n > this._maxTilesOwned) this._maxTilesOwned = n;
   }
 
-  // terron: РЕВАНШИЗМ — множитель-БАФ к защите всей территории по потере земель от
-  // пика: (пик−сейчас)/пик × SCALE, кап MAX. 0 на пике/росте. Читает attackLogic
-  // (защита) и UI. Детерминированно (только целые тайлы + константы).
+  // terron: РЕВАНШИЗМ — насколько ЗАМЕДЛЯЕТСЯ захват моей земли: доля потерянного
+  // от пика × коэффициент уровня СТОЯЩЕГО монумента. 0 на пике, при росте и без
+  // монумента. Читает attackLogic (speed) и UI. Детерминированно: только целые
+  // тайлы, целый уровень и константы. TerronTuning §РЕВАНШИЗМ.
   revanchismBuff(): number {
+    const level = this.revanchismLevel();
+    if (level <= 0) return 0;
     const max = this._maxTilesOwned;
     if (max <= 0) return 0;
     const cur = this._tiles.size;
     if (cur >= max) return 0;
     const lostFraction = (max - cur) / max;
-    return Math.min(
-      TERRON_REVANCHISM_MAX_BUFF,
-      lostFraction * TERRON_REVANCHISM_SCALE,
+    // Капа нет намеренно: коэффициент уровня И ЕСТЬ значение на конце шкалы
+    // (lostFraction ≤ 1). Прежний min(MAX, …) при SCALE == MAX был недостижим.
+    return (
+      lostFraction *
+      (TERRON_REVANCHISM_BASE + (level - 1) * TERRON_REVANCHISM_PER_LEVEL)
+    );
+  }
+
+  // terron: РЕВАНШИЗМ — уровень стоящего монумента. ⚠️ Уровень живёт НА ЗДАНИИ
+  // («твой уровень лежит в твоём монументе»), а не на игроке: захваченная чужая
+  // статуя сброшена в 1-й уровень, и бейдж на карте (StructureLevelPass рисует
+  // unit.level()) показывает ровно то число, по которому считается баф.
+  // Берём МАКСИМУМ, а не первый попавшийся: копия у игрока одна, но при захвате
+  // своей же обратно на тик могут сосуществовать две.
+  revanchismLevel(): number {
+    let best = 0;
+    for (const b of this._ultBuildings) {
+      if (
+        b.type() === UnitType.Revanchism &&
+        b.owner() === this &&
+        b.isActive() &&
+        !b.isUnderConstruction() &&
+        b.level() > best
+      ) {
+        best = b.level();
+      }
+    }
+    return best;
+  }
+
+  // terron: РЕВАНШИЗМ — три числа для ховера/тултипа. Живут вместе, потому что
+  // считаются из одного состояния и гаснут одновременно (снесли монумент —
+  // показывать нечего).
+  private revanchismReadout(): {
+    revanchismLevel: number;
+    revanchismSlowPct: number;
+    revanchismLostPct: number;
+  } {
+    const level = this.revanchismLevel();
+    // ⚠️ НОЛЬ, А НЕ undefined («монумента нет»). Дельта-сжатие шлёт поле только
+    // когда оно изменилось, и «поля нет» на проводе означает «не менялось» —
+    // отличить от «погасло» нечем. С нулём гаснущее значение доезжает штатно, а
+    // у игрока без ульты поле не меняется НИКОГДА и после первого апдейта не
+    // едет вовсе. См. diffPlayerUpdate/applyStateUpdate.
+    if (level <= 0) {
+      return { revanchismLevel: 0, revanchismSlowPct: 0, revanchismLostPct: 0 };
+    }
+    const max = this._maxTilesOwned;
+    const cur = this._tiles.size;
+    const lost = max > 0 && cur < max ? (max - cur) / max : 0;
+    return {
+      revanchismLevel: level,
+      revanchismSlowPct: Math.round(this.revanchismBuff() * 100),
+      revanchismLostPct: Math.round(lost * 100),
+    };
+  }
+
+  // terron: РЕВАНШИЗМ — уровень СЛЕДУЮЩЕЙ построенной статуи. Очки за потерянные
+  // монументы копятся у игрока и материализуются только здесь.
+  nextRevanchismLevel(): number {
+    const extra = Math.min(
+      TERRON_REVANCHISM_MAX_EXTRA_LEVELS,
+      Math.floor(this._revanchismHalfPoints / 2),
+    );
+    return 1 + extra;
+  }
+
+  // terron: РЕВАНШИЗМ — мой монумент перестал быть моим. Очки по причине из
+  // TERRON_REVANCHISM_LEVEL_PER_LOSS (там же рубильник: selfDestruct: 0 —
+  // самоснос не считать вовсе). Накопитель монотонный: уровень, купленный
+  // кровью, назад не отбирается — иначе баф гаснет ровно в момент добивания.
+  registerRevanchismLoss(cause: RevanchismLossCause): void {
+    const half = Math.round(TERRON_REVANCHISM_LEVEL_PER_LOSS[cause] * 2);
+    if (half <= 0) return;
+    // Копим с запасом сверх потолка? Нет: сразу клампим — иначе выключенный
+    // потолком излишек «оживёт» при следующем повышении MAX_EXTRA_LEVELS.
+    this._revanchismHalfPoints = Math.min(
+      TERRON_REVANCHISM_MAX_EXTRA_LEVELS * 2,
+      this._revanchismHalfPoints + half,
     );
   }
 
@@ -711,7 +865,7 @@ export class PlayerImpl implements Player {
   // Samples every 10th border tile for shore tiles, checks the tile 5 steps
   // away in each cardinal direction that immediately enters water, to detect
   // players separated by a small river (up to 4 water tiles wide)
-  private shoreReachableNeighbors(): Set<Player | TerraNullius> {
+  shoreReachableNeighbors(): Set<Player | TerraNullius> {
     const ns: Set<Player | TerraNullius> = new Set();
     const map = this.mg.map();
     const shores = Array.from(this.borderTiles()).filter((t) => map.isShore(t));
@@ -815,7 +969,8 @@ export class PlayerImpl implements Player {
   }
   pauseClusterCalcUntil(tick: Tick): void {
     // Только продлеваем: два раскола подряд не должны укорачивать паузу.
-    if (tick > this._clusterCalcPausedUntil) this._clusterCalcPausedUntil = tick;
+    if (tick > this._clusterCalcPausedUntil)
+      this._clusterCalcPausedUntil = tick;
   }
 
   // Живые плацдармы: не истёкшие И всё ещё принадлежащие игроку. Попутно чистим карту.
@@ -832,6 +987,25 @@ export class PlayerImpl implements Player {
     for (const [tile, expiry] of this._silentImmuneTiles) {
       if (expiry <= currentTick || !this._tiles.has(tile)) {
         this._silentImmuneTiles.delete(tile);
+        continue;
+      }
+      active.add(tile);
+    }
+    return active;
+  }
+
+  // terron 30.08 (перф): метки, с которых снятие ВООБЩЕ ВОЗМОЖНО — только
+  // десантные плацдармы. «Тихие» иммунитеты Раскола живут в своём реестре и
+  // `clearAirborneBeachhead` их не трогает, поэтому гонять по ним проверку
+  // «регион вырвался к морю» — чистый холостой ход. А Раскол ставит иммунитет на
+  // КАЖДЫЙ тайл буквы Т: замер боевого матча vg8v5xLZ — 10 177 тайлов на один
+  // каст, 20 204 на два. Именно они превращали пересчёт схлопывания в 12-секундный
+  // тик. Судьбу Т решает SplitExecution.resolveT, а не эта проверка.
+  activeAirborneMarkers(currentTick: number): ReadonlySet<TileRef> {
+    const active = new Set<TileRef>();
+    for (const [tile, expiry] of this._airborneBeachheads) {
+      if (expiry <= currentTick || !this._tiles.has(tile)) {
+        this._airborneBeachheads.delete(tile);
         continue;
       }
       active.add(tile);
@@ -1512,14 +1686,7 @@ export class PlayerImpl implements Player {
       this.mg.stats().ultimateChosen(this, type);
     }
 
-    let cost = this.mg.unitInfo(type).cost(this.mg, this);
-    // terron 23.08 (решение владельца): КОСМОДРОМ в океане стоит ВДВОЕ дороже
-    // (10M против 5M на суше) и отдаёт вдвое чаще. Надбавка живёт ЗДЕСЬ, а не
-    // в Config.unitInfo, потому что цена там не знает тайла, а «дорого» —
-    // свойство МЕСТА, а не типа. SPACE.md
-    if (type === UnitType.Spaceport && this.mg.isOcean(spawnTile)) {
-      cost *= BigInt(TERRON_SPACEPORT_SEA_COST_MULT);
-    }
+    const cost = this.buildCostAt(type, spawnTile);
     const b = new UnitImpl(
       type,
       this.mg,
@@ -1534,6 +1701,7 @@ export class PlayerImpl implements Player {
       this.trackUltBuilding(b);
     }
     this._units.push(b);
+    this.indexUnitAdded(b);
     this.recordUnitConstructed(type);
     this.removeGold(cost);
     this.removeTroops("troops" in params ? (params.troops ?? 0) : 0);
@@ -1577,6 +1745,23 @@ export class PlayerImpl implements Player {
     return closest?.unit ?? false;
   }
 
+  /**
+   * Цена постройки НА КОНКРЕТНОМ ТАЙЛЕ. terron 23.08 (решение владельца):
+   * КОСМОДРОМ в океане стоит ВДВОЕ дороже (10M против 5M на суше). Надбавка — не
+   * в Config.unitInfo: цена там не знает тайла, а «дорого» — свойство МЕСТА.
+   * ⚠️ terron 26.09 (репорт boom871 в бете): надбавку знал только buildUnit, а
+   * проверка золота и цена на кнопке брали сухопутные 5M — при 5–10M на счету
+   * морская площадка строилась и списывала ВСЁ, что есть (removeGold режет по
+   * балансу). Теперь все три места спрашивают эту функцию. SPACE.md
+   */
+  private buildCostAt(type: UnitType, tile: TileRef, base?: Gold): Gold {
+    let cost = base ?? this.mg.unitInfo(type).cost(this.mg, this);
+    if (type === UnitType.Spaceport && this.mg.isOcean(tile)) {
+      cost *= BigInt(TERRON_SPACEPORT_SEA_COST_MULT);
+    }
+    return cost;
+  }
+
   private canBuildUnitType(
     unitType: UnitType,
     knownCost: Gold | null = null,
@@ -1587,6 +1772,15 @@ export class PlayerImpl implements Player {
     if (this.mg.config().isUnitDisabled(unitType)) {
       return false;
     }
+    // ⚠️ terron 01.09: АРХИВНЫЕ типы (ульта убрана из реестра, а enum жив ради
+    // валидации интентов и старых реплеев — Мин правды, старое «Мирное небо»)
+    // до сих пор доходили до `unitInfo`, а тот на неизвестном типе БРОСАЕТ. То
+    // есть подсунутый или устаревший интент ронял симуляцию, а значит матч у
+    // всех — тот же класс, что краш дробного радиуса. Отвечаем «нельзя» ДО
+    // обращения к цене.
+    if (!isBuildableType(unitType)) {
+      return false;
+    }
     // terron: ЗЕЛЁНЫЕ — ядерное оружие недоступно ВООБЩЕ, пока штаб стоит
     // (решение владельца 23.08: «пока я зелёный нельзя ничо»). Гейт по
     // hasUltimate, а не по ultimateChoice, — значит и ЗАХВАЧЕННЫЕ у врага шахты
@@ -1594,6 +1788,27 @@ export class PlayerImpl implements Player {
     // тик всё возвращается. Дрон-камикадзе НЕ ядерный и остаётся доступен.
     // new-units/GREEN.md
     if (Nukes.has(unitType) && this.hasUltimate(UnitType.Greens)) {
+      return false;
+    }
+    // terron 25.08: ТЕРРАФОРМИНГ — обе обычные ядерки (и МИРВ) ЗАМЕНЯЮТСЯ на
+    // три ракеты ульты, а не добавляются к ним (решение владельца). Гейт по
+    // hasUltimate, как у Зелёных: захваченная чужая шахта запрет не обходит.
+    //
+    // ⚠️ terron 01.09: гейт висит на ТЕРРАФОРМИНГЕ, а не на «Реках вспять».
+    // С 25.08 по 01.09 на деве было наоборот — следствие того, что ульту тогда
+    // просто переименовали. Владелец: «реки не запрещают обычные ядерки,
+    // терраформинг меняет все ядерки на модификационные к террейну».
+    //
+    // ⚠️ МИРВ сюда попадает намеренно: сам по себе он гейтится «своим выбором
+    // ульты» (Ядерный завод) и при выбранном Терраформинге недоступен, НО у
+    // МИРВа есть поблажка `skipGateWhenBuildingDisabled` — выключи Ядерный
+    // завод рубильником TERRON_DISABLED_ULTS, и он снова станет доступен всем
+    // из шахты. Эта строка закрывает и такую щель. new-units/TERRA.md
+    if (
+      Nukes.has(unitType) &&
+      !TerraNukes.has(unitType) &&
+      this.hasUltimate(UnitType.Terraforming)
+    ) {
       return false;
     }
     // terron: активки, разблокируемые зданием-ультой (Раскол←МЕДИА, МИРВ←Ядерный
@@ -1663,10 +1878,7 @@ export class PlayerImpl implements Player {
     }
     // terron: ТОПЛИВО — «Индустриальную революцию» нельзя стакать: пока у
     // владельца висит своя, новую он не запускает (решение владельца 23.08).
-    if (
-      unitType === UnitType.IndustrialRevolution &&
-      this.industrialActive()
-    ) {
+    if (unitType === UnitType.IndustrialRevolution && this.industrialActive()) {
       return false;
     }
     // terron: ОЛИМПИЙСКИЕ ИГРЫ — кулдаун и «уже мир».
@@ -1679,7 +1891,7 @@ export class PlayerImpl implements Player {
         return false;
       }
     }
-    // terron: «Сбить спутники» — одна ракета-носитель за раз (носитель
+    // terron: «Небо наше» (бывш. «Сбить спутники») — одна ракета-носитель за раз (носитель
     // расходуется запуском, потом можно собирать следующую). Каст не в
     // Ultimates, поэтому общая ветка лимита копий его не ловит. NEBO.md
     if (
@@ -1760,7 +1972,7 @@ export class PlayerImpl implements Player {
     for (let i = 0; i < len; i++) {
       const u = units[i];
 
-      const cost = config.unitInfo(u).cost(mg, this);
+      let cost = config.unitInfo(u).cost(mg, this);
       let canUpgrade: number | false = false;
       let canBuild: TileRef | false = false;
 
@@ -1778,6 +1990,14 @@ export class PlayerImpl implements Player {
         // Постройка НОВОГО — под своим гейтом (лимиты, выбор ульты, золото).
         if (this.canBuildUnitType(u, cost)) {
           canBuild = this.canSpawnUnitType(u, tile, validTiles);
+          // Цена места (морской космодром ×2): её и показываем, и проверяем.
+          if (canBuild !== false) {
+            const atTile = this.buildCostAt(u, canBuild, cost);
+            if (atTile !== cost) {
+              cost = atTile;
+              if (this._gold < cost) canBuild = false;
+            }
+          }
         }
       }
 
@@ -1809,7 +2029,13 @@ export class PlayerImpl implements Player {
       return false;
     }
 
-    return this.canSpawnUnitType(unitType, targetTile, validTiles);
+    const spawn = this.canSpawnUnitType(unitType, targetTile, validTiles);
+    // Цена места может быть выше базовой (морской космодром) — доплатить нечем,
+    // значит нельзя, а не «спишем сколько есть».
+    if (spawn !== false && this._gold < this.buildCostAt(unitType, spawn)) {
+      return false;
+    }
+    return spawn;
   }
 
   private canSpawnUnitType(
@@ -1889,11 +2115,20 @@ export class PlayerImpl implements Player {
           return false;
         }
         return targetTile;
-      // terron: «Сбить спутники» — каст-ракета Неба нашего: НЕ структура
+      // terron: «Небо наше» (бывш. «Сбить спутники») — каст-ракета Неба нашего: НЕ структура
       // (канон кастов), но ставится как сухопутное здание на своей земле —
       // носитель 60с собирается и сносибелен (телеграф). NEBO.md
       case UnitType.SatelliteStrike:
-        return this.landBasedStructureSpawn(targetTile, validTiles);
+        // ⚠️ 01.09 (репорт владельца «не ставится на моей территории»): раньше
+        // носитель шёл общим путём ЗДАНИЙ, а тот требует 15 тайлов чистоты от
+        // КАЖДОЙ своей постройки (structureMinDist) и ищет место лишь в 15
+        // тайлах вокруг клика. Для одноразовой ракеты это правило чужое: на
+        // небольшой стране свободного места не находилось вовсе, и каст молча
+        // не срабатывал. Носителю нужна только СВОЯ СУША — снести его враг и
+        // так может, в этом и есть телеграф.
+        return this.mg.owner(targetTile) === this && this.mg.isLand(targetTile)
+          ? targetTile
+          : false;
       // terron: «Передышка» (каст Гордости) — цели нет, любой валидный тайл;
       // юнит не строится. Truce (заготовка ООН) кастовать нельзя.
       case UnitType.Respite:
@@ -1922,7 +2157,7 @@ export class PlayerImpl implements Player {
       }
       // terron: «Это катастрофа!» (каст Зелёных) — цель: тайл ЛЮБОГО игрока,
       // включая нации и тех, кто не бомбил (решение владельца: «в любой стране
-      // найдётся хуёвое производство»). Нельзя по себе и по тому, кого только
+      // найдётся вредное производство»). Нельзя по себе и по тому, кого только
       // что травили. GREEN.md
       case UnitType.Catastrophe: {
         const owner = this.mg.owner(targetTile);
@@ -1954,7 +2189,10 @@ export class PlayerImpl implements Player {
           (u) =>
             u.isActive() &&
             !u.isUnderConstruction() &&
-            this.mg.railNetwork().overlappingRailroads(u.tile()).includes(u.tile()),
+            this.mg
+              .railNetwork()
+              .overlappingRailroads(u.tile())
+              .includes(u.tile()),
         );
         return gun === undefined ? false : targetTile;
       }
@@ -1962,7 +2200,7 @@ export class PlayerImpl implements Player {
       // доехать до неё состав может и не вплотную, он идёт к ближайшей точке
       // своих рельсов. Требуется живое депо. new-units/TRAINS.md
       // terron 24.08 (решение владельца «я указываю точку прибытия, и именно
-      // туда эта хуета приезжает»): цель ОБЯЗАНА лежать на достижимых своих
+      // туда эта штука приезжает»): цель ОБЯЗАНА лежать на достижимых своих
       // рельсах. Раньше принималась любая суша, а состав ехал к ближайшей к
       // ней точке путей и рвал ТАМ — выглядело как «поехал не туда».
       //
@@ -2033,6 +2271,13 @@ export class PlayerImpl implements Player {
       case UnitType.AtomBomb:
       case UnitType.HydrogenBomb:
       case UnitType.WaterNuke:
+      case UnitType.TerraFlood: // terron 01.09: затопление Терраформинга
+      // terron 25.08: ТЕРРАФОРМИНГ — «Насыпь» и «Ядерный удар» пускаются из
+      // той же шахты и с тем же кулдауном. ⚠️ Каст, не прописанный здесь,
+      // МОЛЧА не срабатывает (падает в default → false) — на этом уже
+      // ломались два каста, см. new-units/ULTIMATES.md.
+      case UnitType.LandNuke:
+      case UnitType.BlastNuke:
         return this.nukeSpawn(targetTile, unitType);
       case UnitType.MIRVWarhead:
         return targetTile;
@@ -2300,7 +2545,8 @@ export class PlayerImpl implements Player {
           this.mg.hasWaterComponent(t, tileComponent),
       )
       .sort(
-        (x, y) => this.mg.manhattanDist(x, tile) - this.mg.manhattanDist(y, tile),
+        (x, y) =>
+          this.mg.manhattanDist(x, tile) - this.mg.manhattanDist(y, tile),
       );
     return water[0] ?? bestPort.tile();
   }

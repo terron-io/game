@@ -25,6 +25,10 @@ declare module "*.txt" {
   export default txtContent;
 }
 
+declare module "*.svg?raw" {
+  const content: string;
+  export default content;
+}
 declare module "*.txt?raw" {
   const txtRawContent: string;
   export default txtRawContent;

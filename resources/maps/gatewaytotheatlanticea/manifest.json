@@ -1,0 +1,236 @@
+{
+  "name": "GatewayToTheAtlantic (Equal Area)",
+  "nations": [
+    {
+      "coordinates": [
+        1793,
+        453
+      ],
+      "name": "Swiss Confederation",
+      "flag": "ch"
+    },
+    {
+      "coordinates": [
+        1612,
+        301
+      ],
+      "name": "Duchy of Burgundy",
+      "flag": "burgundy"
+    },
+    {
+      "coordinates": [
+        1220,
+        563
+      ],
+      "name": "Duchy of Aquitaine",
+      "flag": "aquitaine"
+    },
+    {
+      "coordinates": [
+        1801,
+        686
+      ],
+      "name": "County of Provence",
+      "flag": "provence"
+    },
+    {
+      "coordinates": [
+        1133,
+        848
+      ],
+      "name": "Kingdom of Navarre",
+      "flag": "navarre"
+    },
+    {
+      "coordinates": [
+        1232,
+        1321
+      ],
+      "name": "Kingdom of Valencia",
+      "flag": "valencia"
+    },
+    {
+      "coordinates": [
+        1478,
+        953
+      ],
+      "name": "Catalonia",
+      "flag": "catalonia"
+    },
+    {
+      "coordinates": [
+        563,
+        899
+      ],
+      "name": "Kingdom of Galicia",
+      "flag": "es-ga"
+    },
+    {
+      "coordinates": [
+        1027,
+        1537
+      ],
+      "name": "Emirate of Granada",
+      "flag": "granada"
+    },
+    {
+      "coordinates": [
+        524,
+        1273
+      ],
+      "name": "Kingdom of Portugal",
+      "flag": "kingdom_of_portugal"
+    },
+    {
+      "coordinates": [
+        779,
+        1981
+      ],
+      "name": "Marinid Sultanate",
+      "flag": "marinid"
+    },
+    {
+      "coordinates": [
+        1291,
+        1894
+      ],
+      "name": "Zayyanid Sultanate",
+      "flag": "zayyanid"
+    },
+    {
+      "coordinates": [
+        1392,
+        724
+      ],
+      "name": "County of Armagnac",
+      "flag": "armagnac"
+    },
+    {
+      "coordinates": [
+        872,
+        1441
+      ],
+      "name": "City of Cordoba",
+      "flag": "cordoba"
+    },
+    {
+      "coordinates": [
+        709,
+        1137
+      ],
+      "name": "Kingdom of Leon",
+      "flag": "leon"
+    },
+    {
+      "coordinates": [
+        954,
+        1158
+      ],
+      "name": "Crown of Castile",
+      "flag": "castille"
+    },
+    {
+      "coordinates": [
+        804,
+        867
+      ],
+      "name": "Principality of Asturias",
+      "flag": "asturias"
+    },
+    {
+      "coordinates": [
+        1544,
+        1242
+      ],
+      "name": "Kingdom of Majorca",
+      "flag": "majorca"
+    },
+    {
+      "coordinates": [
+        1797,
+        1761
+      ],
+      "name": "Hafsid Sultanate",
+      "flag": "hafsid"
+    },
+    {
+      "coordinates": [
+        1223,
+        1037
+      ],
+      "name": "Crown of Aragon",
+      "flag": "catalonia"
+    },
+    {
+      "coordinates": [
+        1425,
+        161
+      ],
+      "name": "City of Paris",
+      "flag": "paris"
+    },
+    {
+      "coordinates": [
+        1019,
+        283
+      ],
+      "name": "Kingdom of Brittany",
+      "flag": "brittany"
+    },
+    {
+      "coordinates": [
+        1643,
+        677
+      ],
+      "name": "City of Avignon",
+      "flag": "avignon"
+    },
+    {
+      "coordinates": [
+        1241,
+        180
+      ],
+      "name": "Duchy of Normandy",
+      "flag": "normandy"
+    },
+    {
+      "coordinates": [
+        1407,
+        446
+      ],
+      "name": "Kingdom of France",
+      "flag": "Franks"
+    },
+    {
+      "coordinates": [
+        722,
+        1544
+      ],
+      "name": "City of Seville",
+      "flag": "seville"
+    },
+    {
+      "coordinates": [
+        1741,
+        102
+      ],
+      "name": "Holy Roman Empire",
+      "flag": "Holy Roman Empire"
+    }
+  ],
+  "map": {
+    "width": 2016,
+    "height": 2156,
+    "num_land_tiles": 2148885
+  },
+  "map4x": {
+    "width": 1008,
+    "height": 1078,
+    "num_land_tiles": 535337
+  },
+  "map16x": {
+    "width": 504,
+    "height": 539,
+    "num_land_tiles": 132970
+  }
+}

@@ -48,6 +48,31 @@ function isAbsoluteUrl(path: string): boolean {
   return /^https?:\/\//i.test(path);
 }
 
+declare const __PLATFORM_BUILD__: string | undefined;
+
+/**
+ * ⚠️ ОБХОД ЯДОВИТОГО КЭША для сборок под чужие площадки.
+ *
+ * Наши ассеты отдаются с `Cache-Control: immutable, max-age=1 год`, а заголовок
+ * `Access-Control-Allow-Origin` появился у них только 30.08. У любого, кто играл
+ * на terron.io раньше, в кэше браузера лежит ТОТ ЖЕ URL без этого заголовка — и
+ * на площадке браузер отдаст закэшированный ответ, а cross-origin без ACAO он
+ * блокирует. Игра встала бы на «Загрузка карты» ровно у самых лояльных игроков
+ * (поймано живой проверкой: с `cache: "no-store"` тот же файл отдаётся 200).
+ *
+ * Поэтому в платформенной сборке к каждому ассету добавляется метка — URL
+ * становится другим, кэш чистый, ответ приходит уже с заголовком. Обычный сайт
+ * и апки не затронуты: там метки нет и кэш работает как прежде.
+ */
+function platformCacheBust(url: string): string {
+  const tag =
+    typeof __PLATFORM_BUILD__ === "string" && __PLATFORM_BUILD__.length > 0
+      ? __PLATFORM_BUILD__
+      : "";
+  if (!tag) return url;
+  return url.includes("?") ? `${url}&pf=${tag}` : `${url}?pf=${tag}`;
+}
+
 export function buildAssetUrl(
   path: string,
   assetManifest: AssetManifest = {},
@@ -61,7 +86,9 @@ export function buildAssetUrl(
 
   const directUrl = assetManifest[normalizedPath];
   if (directUrl) {
-    return baseUrl ? `${baseUrl.replace(/\/+$/, "")}${directUrl}` : directUrl;
+    return platformCacheBust(
+      baseUrl ? `${baseUrl.replace(/\/+$/, "")}${directUrl}` : directUrl,
+    );
   }
 
   return `/${encodeAssetPath(normalizedPath)}`;

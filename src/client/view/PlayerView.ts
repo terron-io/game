@@ -29,6 +29,7 @@ import {
 } from "../../core/game/GameUpdates";
 import { UserSettings } from "../../core/game/UserSettings";
 import { localizeAIName } from "../LocalizeNames";
+import { UltStatSnapshot } from "../UnitCatalog";
 import { PlayerState, PlayerStatic, PlayerTypeEnum } from "../render/types";
 import { themeProvider } from "../theme/ThemeProvider";
 import { GameView } from "./GameView";
@@ -61,7 +62,10 @@ function staticFromUpdate(pu: PlayerUpdate): PlayerStatic {
   // terron: локализуем имена ИИ-игроков (племён/наций) на язык клиента.
   // Ники живых людей не трогаем. Делается на статике (один раз), т.к. map-рендер
   // читает static.displayName напрямую, а не через геттер.
-  const isAI = playerType !== PlayerTypeEnum.Human;
+  // terron 23.09: честный бот лобби /fair — тип Human (ресурсы как у людей),
+  // но клиента у него нет: имя тоже переводим (полководец из ростера).
+  const isAI =
+    playerType !== PlayerTypeEnum.Human || (pu.clientID ?? null) === null;
   return {
     smallID: pu.smallID!,
     id: pu.id,
@@ -114,7 +118,11 @@ function stateFromUpdate(pu: PlayerUpdate): PlayerState {
     ultReligionTiles: pu.ultReligionTiles,
     ultReligionTithe: pu.ultReligionTithe,
     ultWaterTiles: pu.ultWaterTiles,
+    ultLandTiles: pu.ultLandTiles,
     aggressors: pu.aggressors,
+    revanchismLevel: pu.revanchismLevel,
+    revanchismSlowPct: pu.revanchismSlowPct,
+    revanchismLostPct: pu.revanchismLostPct,
     // terron: ультимейты — Раскол: маркер одной цифры-таймера спасения Т.
     splitRescue: pu.splitRescue ?? null,
   };
@@ -439,18 +447,17 @@ export class PlayerView {
   }
 
   // terron: ультимейты — суммарные метрики за матч (тултип слота ульты).
-  ultStats(): {
-    stolen: number;
-    stolenGained: number;
-    mirvLaunches: number;
-    mirvTiles: number;
-    fortTiles: number;
-    splitTiles: number;
-    religionTiles: number;
-    religionTithe: number;
-    waterTiles: number;
-  } {
+  // terron 25.08: тип берём ИЗ ЯДРА (UltStats), а не переписываем полями —
+  // третья копия этого списка разъезжалась при каждом новом счётчике.
+  // terron 26.08: снимок = UltStats + живые показания Реваншизма (UltStatSnapshot).
+  ultStats(): UltStatSnapshot {
     return {
+      // terron 26.08: РЕВАНШИЗМ — живые показания едут в том же снимке, что и
+      // суммарные счётчики: тултипу удобнее один объект, а ядерный UltStats
+      // остаётся честным «итогами за матч».
+      revanchismSlowPct: this.state.revanchismSlowPct ?? 0,
+      revanchismLevel: this.state.revanchismLevel ?? 0,
+      revanchismLostPct: this.state.revanchismLostPct ?? 0,
       stolen: this.state.ultStolen ?? 0,
       stolenGained: this.state.ultStolenGained ?? 0,
       mirvLaunches: this.state.ultMirvLaunches ?? 0,
@@ -460,6 +467,7 @@ export class PlayerView {
       religionTiles: this.state.ultReligionTiles ?? 0,
       religionTithe: this.state.ultReligionTithe ?? 0,
       waterTiles: this.state.ultWaterTiles ?? 0,
+      landTiles: this.state.ultLandTiles ?? 0,
     };
   }
 
@@ -702,6 +710,10 @@ export class PlayerView {
 
   hasSpawned(): boolean {
     return this.state.hasSpawned;
+  }
+  /** terron 29.09: точка спавна (для запрета «прилипать», client/SpawnSpacingHint). */
+  spawnTile(): TileRef | undefined {
+    return this.state.spawnTile;
   }
   isDisconnected(): boolean {
     return this.state.isDisconnected;

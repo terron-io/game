@@ -2,6 +2,8 @@ import { html, TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import { BaseModal } from "./components/BaseModal";
 import { modalHeader } from "./components/ui/ModalHeader";
+import { platformContext } from "./PlatformContext";
+import { Host } from "./PlatformHost";
 import { L, translateText } from "./Utils";
 
 // terron: /glory (алиасы /слава, /fame, /hall-of-fame) — ЗАЛ СЛАВЫ. Почётный список
@@ -52,6 +54,28 @@ const CONTRIBUTORS = (): Honoree[] => [
   // { name: "Позывной", note: L("ловил баги спавна и авиации", "caught spawn and aviation bugs"), tag: L("тестер", "tester") },
 ];
 
+/** Площадки, где зала славы нет (модерация: ссылки на чужие проекты). */
+export const GLORY_HIDDEN_ON: ReadonlySet<string> = new Set([
+  "YANDEX",
+  "VK",
+  "OK",
+]);
+
+/**
+ * terron 28.09: веб-ВК снова отклонил за ссылки в зале славы (скрин модерации) —
+ * класс gp-platform-vk там не встал. Решение владельца: внутри ЛЮБОЙ площадки
+ * (каталоги, iframe, залитые к площадкам сборки, itch) раздела нет вовсе, а
+ * вернётся он позже версией без ссылок. Признак площадки — фасад Host, не тип.
+ */
+export function gloryHiddenHere(): boolean {
+  return Host.isPlatform() || GLORY_HIDDEN_ON.has(platformContext() ?? "");
+}
+
+/** Ссылки на людей и проекты — только на самом сайте. */
+export function gloryLinksAllowed(): boolean {
+  return !Host.isPlatform();
+}
+
 @customElement("hall-of-fame-page")
 export class HallOfFamePage extends BaseModal {
   protected routerName = "glory";
@@ -80,16 +104,17 @@ export class HallOfFamePage extends BaseModal {
   }
 
   private card(h: Honoree): TemplateResult {
-    const name = h.url
-      ? html`<a
-          href=${h.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="t-link"
-          style="font-weight:800"
-          >${h.name}</a
-        >`
-      : html`<span style="font-weight:800">${h.name}</span>`;
+    const name =
+      h.url && gloryLinksAllowed()
+        ? html`<a
+            href=${h.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="t-link"
+            style="font-weight:800"
+            >${h.name}</a
+          >`
+        : html`<span style="font-weight:800">${h.name}</span>`;
     return html`<div
       style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--t-sheet);border:1px solid var(--t-border,#0001)"
     >
@@ -131,6 +156,22 @@ export class HallOfFamePage extends BaseModal {
   }
 
   protected renderBody(): TemplateResult {
+    // terron 10.09: на Яндексе раздела нет (п. 8.4.2 — ссылки на чужие проекты);
+    // ссылку в футере и страницу прячет тема по классу gp-platform-yandex, это
+    // второй рубеж на прямой адрес /glory.
+    // terron 17.09: ВК отклонил за ссылки на сторонние ресурсы в этом разделе;
+    // ОК — то же приложение. Список площадок без раздела — GLORY_HIDDEN_ON.
+    if (gloryHiddenHere()) {
+      return html`<div
+        class="t-page t-muted"
+        style="max-width:640px;font-size:14px"
+      >
+        ${L(
+          "Раздел недоступен на этой площадке.",
+          "This section is not available on this platform.",
+        )}
+      </div>`;
+    }
     return html`<div
       class="t-page"
       style="max-width:640px;font-size:14px;line-height:1.65;color:var(--t-ink)"
@@ -152,7 +193,6 @@ export class HallOfFamePage extends BaseModal {
           "This section is forming — projects that helped TERRON grow will appear here.",
         ),
       )}
-
       ${this.section(L("Ютуберы и стримеры", "YouTubers & streamers"))}
       ${this.list(
         YOUTUBERS(),
@@ -161,7 +201,6 @@ export class HallOfFamePage extends BaseModal {
           "This section is forming — early creators who first featured TERRON will appear here.",
         ),
       )}
-
       ${this.section(L("Тестеры и контрибьюторы", "Testers & contributors"))}
       ${this.list(
         CONTRIBUTORS(),
@@ -171,7 +210,10 @@ export class HallOfFamePage extends BaseModal {
         ),
       )}
 
-      <div class="t-muted" style="font-size:12px;margin-top:20px;line-height:1.5">
+      <div
+        class="t-muted"
+        style="font-size:12px;margin-top:20px;line-height:1.5"
+      >
         ${L(
           "Хочешь сюда попасть? Помогай проекту — тестируй, репорти баги, рассказывай о TERRON.",
           "Want to be here? Help the project — test, report bugs, tell people about TERRON.",

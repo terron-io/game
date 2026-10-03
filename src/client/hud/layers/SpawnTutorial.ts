@@ -50,6 +50,13 @@ const INCOME_HL_CLASS = "tut-income"; // → подсветка фабрики/�
 // «localStorage не трогаем» — осознанное, см. проверку в tick().
 const TUTOR_GRADUATE_MS = 5 * 60 * 1000;
 const TUTOR_GRAD_KEY = "terron-tutor-graduated";
+export function graduateTutor(): void {
+  try {
+    localStorage.setItem(TUTOR_GRAD_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
 function isTutorGraduated(): boolean {
   try {
     return localStorage.getItem(TUTOR_GRAD_KEY) === "1";
@@ -211,11 +218,7 @@ export class SpawnTutorial extends LitElement implements Controller {
     if (me?.hasSpawned() === true && me.isAlive()) {
       if (this.aliveSinceMs === 0) this.aliveSinceMs = Date.now();
       else if (Date.now() - this.aliveSinceMs >= TUTOR_GRADUATE_MS) {
-        try {
-          localStorage.setItem(TUTOR_GRAD_KEY, "1");
-        } catch {
-          /* ignore */
-        }
+        graduateTutor();
         this.go("hidden");
         return;
       }
@@ -485,6 +488,13 @@ export class SpawnTutorial extends LitElement implements Controller {
     else this.dismissed = true;
   };
 
+  /** «Больше не показывать»: тот же флаг, что ставит выпуск после 5 минут. */
+  private neverShow = (e: Event) => {
+    e.stopPropagation();
+    graduateTutor();
+    this.go("hidden");
+  };
+
   // terron: на телефоне управление другое (тап вместо мыши) — подсказки иные.
   private get mobile(): boolean {
     return (
@@ -632,6 +642,16 @@ export class SpawnTutorial extends LitElement implements Controller {
         opacity: 0.4;
         cursor: pointer;
       }
+      .stut .never {
+        margin-top: 6px;
+        font-size: 10.5px;
+        opacity: 0.6;
+        text-decoration: underline dotted;
+        cursor: pointer;
+      }
+      .stut .never:hover {
+        opacity: 1;
+      }
       .stut .x:hover {
         opacity: 0.9;
       }
@@ -681,9 +701,18 @@ export class SpawnTutorial extends LitElement implements Controller {
     </style>`;
 
     const close = html`<div class="x" title=${L("закрыть", "close")}>✕</div>`;
+    // terron 30.09 (Prirexx: «есть вариант отключить обучение? постоянно
+    // появляется»): «выпуск» наступал только после 5 минут жизни в матче — кто
+    // гибнет раньше, видел подсказки в каждом матче. Теперь можно выключить
+    // вручную тем же флагом выпуска.
+    const never = html`<div class="never" @click=${this.neverShow}>
+      ${L("больше не показывать", "don't show again")}
+    </div>`;
     const card = (cls: string, body: unknown) =>
       html`${styles}
-        <div class="stut ${cls}" @click=${this.dismiss}>${close}${body}</div>`;
+        <div class="stut ${cls}" @click=${this.dismiss}>
+          ${close}${body}${never}
+        </div>`;
 
     // мышь: рисуем ОБЕ кнопки — активная ярко-оранжевая, вторая серая (видно сторону)
     const mouse = (left: boolean) =>

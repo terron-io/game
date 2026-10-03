@@ -3,7 +3,7 @@ import { customElement } from "lit/decorators.js";
 import { assetUrl } from "../core/AssetUrls";
 import { BaseModal } from "./components/BaseModal";
 import { modalHeader } from "./components/ui/ModalHeader";
-import { L, translateText } from "./Utils";
+import { brandName, L, translateText } from "./Utils";
 
 // terron: /currency — публичная лор-страница валют. Золото (слиток), ценные
 // бумаги (lts), кровавые алмазы (pts). Имена наружу — без кодов ЛТС/ПТС.
@@ -74,10 +74,10 @@ export class CurrencyPage extends BaseModal {
             золото. Оно не ржавеет, не гниёт и не врёт. Им платили легионам Рима и
             наёмникам Ренессанса, его взвешивали на весах фараонов и прятали в
             трюмах галеонов. Цари падали, валюты сгорали в кострах инфляции — а
-            слиток оставался слитком. В TERRON золото — кровь экономики: его
+            слиток оставался слитком. В ${brandName()} золото — кровь экономики: его
             добывают, копят и тратят прямо в бою.`
           : html`What is a person, an army, a nation worth? In every age the
-            answer was the same — gold. It does not rust, rot, or lie. In TERRON
+            answer was the same — gold. It does not rust, rot, or lie. In ${brandName()}
             gold is the blood of the economy: earned, hoarded and spent right in
             battle.`,
       )}
@@ -108,13 +108,13 @@ export class CurrencyPage extends BaseModal {
             Самый твёрдый и самый желанный камень на земле. Но у части из них
             дурная слава: «кровавыми» (конфликтными) алмазами называют камни,
             добытые в зонах войн, — ими полевые командиры платили за оружие.
-            Красивый блеск, тёмная цена. В TERRON кровавые алмазы — редкая твёрдая
+            Красивый блеск, тёмная цена. В ${brandName()} кровавые алмазы — редкая твёрдая
             валюта, за которую дают то, чего не купишь за бумагу.`
           : html`A diamond is coal that survived hell: millions of years of
             pressure and heat — the hardest, most coveted stone on earth. But
             "blood" (conflict) diamonds are those mined in war zones, used by
             warlords to pay for weapons. A beautiful shine, a dark price. In
-            TERRON blood diamonds are the rare hard currency that buys what paper
+            ${brandName()} blood diamonds are the rare hard currency that buys what paper
             cannot.`,
       )}
 

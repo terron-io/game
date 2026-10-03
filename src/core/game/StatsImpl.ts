@@ -50,6 +50,9 @@ const conquest_by_type: Record<PlayerType, number> = {
   [PlayerType.Bot]: PLAYER_INDEX_BOT,
 };
 
+// terron 04.09: порог «взлёта» для «Феникса» — 50 % карты (сотые процента).
+const PHOENIX_PEAK_PCT100 = 5000n;
+
 export class StatsImpl implements Stats {
   private readonly data: AllPlayersStats = {};
 
@@ -212,6 +215,16 @@ export class StatsImpl implements Stats {
     } else if (p.dipPct === undefined || v < p.dipPct) {
       p.dipPct = v;
     }
+    // terron 04.09 — ⚠️ «ФЕНИКС» БЫЛ НЕДОСТИЖИМ ПО ПОСТРОЕНИЮ: dipPct
+    // сбрасывается новым пиком, а победитель кончает матч НА пике (80 %), то
+    // есть у победителя dipPct == peakPct всегда — за 30 дней на проде 0
+    // побед с провалом ≤25 % при 1592 победах с пиком ≥50 %. Репорт из беты
+    // (ldjtxybr, 04.09). Отдельный стат: минимум доли за ВСЁ время ПОСЛЕ того,
+    // как игрок впервые взял ≥ PHOENIX_PEAK; новым пиком не стирается.
+    // API: pride_key = won && phoenixDip <= 10 %.
+    if ((p.peakPct ?? 0n) >= PHOENIX_PEAK_PCT100) {
+      if (p.phoenixDip === undefined || v < p.phoenixDip) p.phoenixDip = v;
+    }
   }
 
   // terron: ТОПЛИВО — пик одновременно стоявших нефтяных вышек за матч.
@@ -243,6 +256,12 @@ export class StatsImpl implements Stats {
     if (p === undefined) return;
     const v = BigInt(sum);
     if ((p.buildingLevelsPeak ?? 0n) < v) p.buildingLevelsPeak = v;
+  }
+
+  waterNukeLaunch(player: Player): void {
+    const p = this._makePlayerStats(player);
+    if (p === undefined) return;
+    p.waterNukesLaunched = (p.waterNukesLaunched ?? 0n) + 1n;
   }
 
   trainSent(player: Player): void {

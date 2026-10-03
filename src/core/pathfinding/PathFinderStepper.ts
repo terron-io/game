@@ -100,6 +100,25 @@ export class PathFinderStepper<T> implements SteppingPathFinder<T> {
     this.lastTo = null;
   }
 
+  /**
+   * terron 04.09 ПЕРФ: хвост УЖЕ посчитанного пути, начиная с `from` (узла,
+   * который только что отдал next()). Раньше торговая лодка после next()
+   * звала findPath(from, dst) ЕЩЁ РАЗ ради плана движения для клиента —
+   * второй полный A* по воде на каждый рейс и на каждую пересборку водного
+   * графа (1.3 с из 70 в профиле боевого реплея). Хвост кэша — это ровно те
+   * тайлы, по которым лодка и пойдёт, так что план из него точнее второго
+   * поиска. null, если кэша нет или `from` не на его текущей позиции.
+   */
+  remainingPath(from: T, to: T): T[] | null {
+    if (this.path === null || this.pathIndex === 0) return null;
+    // Хвост — только для ТОЙ ЖЕ цели, что считал next() (ревью 05.09).
+    if (this.lastTo === null || !this.config.equals(this.lastTo, to))
+      return null;
+    const at = this.path[this.pathIndex - 1];
+    if (at === undefined || !this.config.equals(at, from)) return null;
+    return this.path.slice(this.pathIndex - 1);
+  }
+
   findPath(from: T | T[], to: T): T[] | null {
     if (this.config.preCheck) {
       const fromArray = Array.isArray(from) ? from : [from];

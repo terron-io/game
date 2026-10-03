@@ -370,7 +370,6 @@ const WIKI_ULT_PAGES = [
   "olympics",
   "our_sky",
   "peace_palace",
-  "peaceful_sky",
   "piracy",
   "port",
   "pride",
@@ -380,6 +379,7 @@ const WIKI_ULT_PAGES = [
   "rivers_back",
   "sam_launcher",
   "spaceport",
+  "terraforming",
   "submarine_base",
   "tank_factory",
   "train_depot",
@@ -642,6 +642,7 @@ export function profileSlugFromPath(p: string): string | undefined {
 const SPA_SEGMENTS = new Set<string>([
   // ModalRouter-регистр + overrides(leaderboard→rating) + алиасы
   "prime",
+  "download",
   "history",
   "store",
   "settings",
